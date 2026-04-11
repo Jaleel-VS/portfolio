@@ -1,65 +1,91 @@
-import Image from "next/image";
+"use client"
 
-export default function Home() {
+import { useEffect, useState } from "react"
+import { AnimatePresence, motion } from "motion/react"
+import { config } from "@/lib/config"
+import { About } from "@/components/about"
+import { Experience } from "@/components/experience"
+import { Projects } from "@/components/projects"
+
+const tabs = ["about", "experience", "projects"] as const
+type Tab = (typeof tabs)[number]
+
+const content = { about: About, experience: Experience, projects: Projects } as const
+
+export default function Page() {
+  const [active, setActive] = useState<Tab>("about")
+  const ActiveTab = content[active]
+
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.target instanceof HTMLInputElement || e.target instanceof HTMLTextAreaElement) return
+      const i = Number(e.key) - 1
+      if (i >= 0 && i < tabs.length) setActive(tabs[i])
+    }
+    window.addEventListener("keydown", onKey)
+    return () => window.removeEventListener("keydown", onKey)
+  }, [])
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
+    <main className="mx-auto max-w-[640px] px-6 py-16">
+      {/* Header */}
+      <div className="mb-10">
+        <h1 className="text-xl font-medium tracking-tight">{config.name}</h1>
+        <p className="text-sm text-muted-foreground mt-1">
+          {config.title} · {config.location}
+        </p>
+        <div className="flex gap-4 mt-3">
+          {Object.entries(config.links).map(([label, href]) => (
             <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+              key={label}
+              href={label === "email" ? `mailto:${href}` : href}
+              target={label === "email" ? undefined : "_blank"}
+              rel="noopener noreferrer"
+              className="text-xs text-muted-foreground hover:text-foreground transition-colors"
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
+              {label}
+            </a>
+          ))}
         </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
+      </div>
+
+      {/* Tabs */}
+      <nav className="flex gap-6 border-b border-border mb-8 relative">
+        {tabs.map((tab, i) => (
+          <button
+            key={tab}
+            onClick={() => setActive(tab)}
+            className={`relative pb-2 text-sm transition-colors ${
+              active === tab
+                ? "text-foreground"
+                : "text-muted-foreground hover:text-foreground"
+            }`}
           >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
-  );
+            <span>{tab}</span>
+            <span className="ml-1.5 text-[10px] font-mono text-tertiary">{i + 1}</span>
+            {active === tab && (
+              <motion.div
+                layoutId="tab-underline"
+                className="absolute bottom-0 left-0 right-0 h-[2px] bg-foreground"
+                transition={{ type: "spring", stiffness: 500, damping: 35 }}
+              />
+            )}
+          </button>
+        ))}
+      </nav>
+
+      {/* Content */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={active}
+          initial={{ opacity: 0, y: 6 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -6 }}
+          transition={{ duration: 0.15 }}
+        >
+          <ActiveTab />
+        </motion.div>
+      </AnimatePresence>
+    </main>
+  )
 }
