@@ -59,7 +59,7 @@ export default function Page() {
           <button
             key={tab}
             onClick={() => setActive(tab)}
-            className={`relative pb-2 text-sm transition-colors ${
+            className={`relative pb-2 text-sm transition-colors cursor-pointer ${
               active === tab
                 ? "text-foreground"
                 : "text-muted-foreground hover:text-foreground"
@@ -79,12 +79,12 @@ export default function Page() {
       </nav>
 
       {/* Content */}
-      <AnimatePresence mode="wait">
+      <AnimatePresence mode="popLayout">
         <motion.div
           key={active}
-          initial={{ opacity: 0, y: 6 }}
-          animate={{ opacity: 1, y: 0 }}
-          exit={{ opacity: 0, y: -6 }}
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
           transition={{ duration: 0.15 }}
         >
           <ActiveTab />

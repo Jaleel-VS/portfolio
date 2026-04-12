@@ -23,7 +23,7 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="text-xs text-tertiary hover:text-foreground transition-colors"
+      className="text-xs text-tertiary hover:text-foreground transition-colors cursor-pointer"
       aria-label="Toggle theme"
     >
       {dark ? "light" : "dark"}
