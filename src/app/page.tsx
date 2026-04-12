@@ -6,6 +6,7 @@ import { config } from "@/lib/config"
 import { About } from "@/components/about"
 import { Experience } from "@/components/experience"
 import { Projects } from "@/components/projects"
+import { ThemeToggle } from "@/components/theme-toggle"
 
 const tabs = ["about", "experience", "projects"] as const
 type Tab = (typeof tabs)[number]
@@ -30,7 +31,10 @@ export default function Page() {
     <main className="mx-auto max-w-[640px] px-6 py-16">
       {/* Header */}
       <div className="mb-10">
-        <h1 className="text-xl font-medium tracking-tight">{config.name}</h1>
+        <div className="flex items-baseline justify-between">
+          <h1 className="text-xl font-medium tracking-tight">{config.name}</h1>
+          <ThemeToggle />
+        </div>
         <p className="text-sm text-muted-foreground mt-1">
           {config.title} · {config.location}
         </p>
