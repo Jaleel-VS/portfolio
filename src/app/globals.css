@@ -94,3 +94,324 @@
     @apply font-sans overflow-y-scroll;
   }
 }
+
+/* Prose styles for rendered markdown */
+.prose-custom {
+  font-size: 14px;
+  line-height: 1.75;
+  color: var(--muted-foreground);
+}
+
+.prose-custom h1 {
+  font-size: 20px;
+  font-weight: 500;
+  letter-spacing: -0.025em;
+  color: var(--foreground);
+  margin-top: 2.5rem;
+  margin-bottom: 1rem;
+}
+
+.prose-custom h2 {
+  font-size: 16px;
+  font-weight: 500;
+  color: var(--foreground);
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.prose-custom h3 {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--foreground);
+  margin-top: 1.5rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-custom h4 {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.prose-custom p {
+  margin-bottom: 0.75rem;
+}
+
+.prose-custom a {
+  color: var(--foreground);
+  text-decoration: none;
+}
+
+.prose-custom a:hover {
+  text-decoration: underline;
+}
+
+.prose-custom strong {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.prose-custom em {
+  font-style: italic;
+}
+
+.prose-custom ul {
+  list-style: disc;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-custom ol {
+  list-style: decimal;
+  padding-left: 1.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.prose-custom li {
+  margin-bottom: 0.25rem;
+}
+
+.prose-custom blockquote {
+  border-left: 2px solid var(--border);
+  padding-left: 1rem;
+  color: var(--muted-foreground);
+  font-style: italic;
+  margin-bottom: 0.75rem;
+}
+
+.prose-custom hr {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 2rem 0;
+}
+
+/* Inline code */
+.prose-custom code:not(pre code) {
+  font-family: var(--font-geist-mono);
+  font-size: 13px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15em 0.35em;
+  color: var(--foreground);
+}
+
+/* Code blocks */
+.prose-custom pre {
+  font-family: var(--font-geist-mono);
+  font-size: 13px;
+  line-height: 1.6;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 1rem;
+  overflow-x: auto;
+  margin-bottom: 1rem;
+  position: relative;
+}
+
+.prose-custom pre code {
+  font-family: inherit;
+  font-size: inherit;
+  background: none;
+  border: none;
+  padding: 0;
+}
+
+/* Copy button */
+.copy-btn {
+  position: absolute;
+  top: 0.5rem;
+  right: 0.5rem;
+  font-family: var(--font-geist-mono);
+  font-size: 11px;
+  color: var(--tertiary);
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: color 0.15s;
+}
+
+.copy-btn:hover {
+  color: var(--foreground);
+}
+
+/* Tables */
+.prose-custom table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+  margin-bottom: 1rem;
+}
+
+.prose-custom th {
+  text-align: left;
+  font-weight: 500;
+  color: var(--foreground);
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.prose-custom td {
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  color: var(--muted-foreground);
+}
+
+.prose-custom tr:last-child td {
+  border-bottom: none;
+}
+
+/* Obsidian callouts */
+.callout {
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1rem;
+  border: 1px solid var(--border);
+  background: var(--surface);
+}
+
+.callout .callout-title {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--foreground);
+  margin-bottom: 0.25rem;
+}
+
+.callout-tip {
+  border-left: 3px solid #2dd4bf;
+}
+
+.callout-note, .callout-info {
+  border-left: 3px solid #3b82f6;
+}
+
+.callout-warning, .callout-caution, .callout-important {
+  border-left: 3px solid #eab308;
+}
+
+.callout-danger, .callout-failure, .callout-bug {
+  border-left: 3px solid #ef4444;
+}
+
+.callout-check, .callout-success {
+  border-left: 3px solid #22c55e;
+}
+
+.callout-example {
+  border-left: 3px solid #a855f7;
+}
+
+.callout-quote, .callout-abstract {
+  border-left: 3px solid var(--muted-foreground);
+}
+
+.callout-question {
+  border-left: 3px solid #f97316;
+}
+
+/* Mermaid placeholder — render as code block */
+.prose-custom pre code.language-mermaid {
+  white-space: pre-wrap;
+  font-size: 12px;
+  color: var(--tertiary);
+}
+
+/* highlight.js theme — monochrome to match portfolio */
+.hljs {
+  color: var(--muted-foreground);
+}
+
+.hljs-keyword,
+.hljs-selector-tag,
+.hljs-type {
+  color: var(--foreground);
+  font-weight: 500;
+}
+
+.hljs-string,
+.hljs-attr,
+.hljs-template-variable {
+  color: #2dd4bf;
+}
+
+.dark .hljs-string,
+.dark .hljs-attr,
+.dark .hljs-template-variable {
+  color: #5eead4;
+}
+
+.hljs-comment,
+.hljs-quote {
+  color: var(--tertiary);
+  font-style: italic;
+}
+
+.hljs-number,
+.hljs-literal,
+.hljs-variable,
+.hljs-template-tag {
+  color: #f97316;
+}
+
+.dark .hljs-number,
+.dark .hljs-literal,
+.dark .hljs-variable,
+.dark .hljs-template-tag {
+  color: #fb923c;
+}
+
+.hljs-function,
+.hljs-title {
+  color: var(--foreground);
+}
+
+.hljs-built_in,
+.hljs-name {
+  color: #3b82f6;
+}
+
+.dark .hljs-built_in,
+.dark .hljs-name {
+  color: #60a5fa;
+}
+
+.hljs-meta {
+  color: var(--tertiary);
+}
+
+.hljs-attribute {
+  color: #a855f7;
+}
+
+.dark .hljs-attribute {
+  color: #c084fc;
+}
+
+/* Responsive prose */
+@media (max-width: 640px) {
+  .prose-custom {
+    font-size: 14px;
+  }
+
+  .prose-custom pre {
+    font-size: 12px;
+    border-radius: 6px;
+    padding: 0.75rem;
+  }
+
+  .prose-custom table {
+    font-size: 12px;
+    display: block;
+    overflow-x: auto;
+  }
+}
