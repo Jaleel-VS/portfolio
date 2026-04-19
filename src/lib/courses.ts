@@ -14,23 +14,24 @@ const COURSES_DIR = path.join(process.cwd(), "content/courses")
 export type CourseTheme = {
   color: string
   accent: string
+  tags: string[]
 }
 
 export const COURSE_THEMES: Record<string, CourseTheme> = {
-  cronica: { color: "purple", accent: "#a855f7" },
-  forja: { color: "orange", accent: "#f97316" },
-  ironvault: { color: "steel", accent: "#94a3b8" },
-  lexicon: { color: "teal", accent: "#2dd4bf" },
-  "marauders-map": { color: "gold", accent: "#eab308" },
-  runescript: { color: "green", accent: "#22c55e" },
-  shadowkeep: { color: "red", accent: "#dc2626" },
-  "the-chalice": { color: "crimson", accent: "#be123c" },
-  "wizard-duel": { color: "blue", accent: "#3b82f6" },
-  chronolock: { color: "amber", accent: "#d97706" },
-  cartografo: { color: "emerald", accent: "#059669" },
-  runa: { color: "violet", accent: "#7c3aed" },
-  piloto: { color: "rose", accent: "#e11d48" },
-  genesis: { color: "lime", accent: "#65a30d" },
+  cronica: { color: "purple", accent: "#a855f7", tags: ["game-engine", "ai", "discord", "async", "serde", "state-machines"] },
+  forja: { color: "orange", accent: "#f97316", tags: ["networking", "http", "tcp", "async", "from-scratch", "web"] },
+  ironvault: { color: "steel", accent: "#94a3b8", tags: ["cryptography", "security", "cli", "file-io", "encryption", "passwords"] },
+  lexicon: { color: "teal", accent: "#2dd4bf", tags: ["data-structures", "trie", "text-processing", "cli", "algorithms", "nlp"] },
+  "marauders-map": { color: "gold", accent: "#eab308", tags: ["pathfinding", "algorithms", "bfs", "dijkstra", "a-star", "tui"] },
+  runescript: { color: "green", accent: "#22c55e", tags: ["interpreter", "compiler", "parser", "lexer", "ast", "language-design"] },
+  shadowkeep: { color: "red", accent: "#dc2626", tags: ["networking", "async", "multiplayer", "tcp", "game-engine", "concurrency"] },
+  "the-chalice": { color: "crimson", accent: "#be123c", tags: ["roguelike", "procedural-gen", "tui", "game-engine", "bsp", "combat"] },
+  "wizard-duel": { color: "blue", accent: "#3b82f6", tags: ["game-ai", "tui", "turn-based", "game-engine", "strategy", "combat"] },
+  chronolock: { color: "amber", accent: "#d97706", tags: ["git", "version-control", "sha1", "data-structures", "from-scratch", "cli"] },
+  cartografo: { color: "emerald", accent: "#059669", tags: ["dns", "networking", "binary-protocols", "udp", "bytes", "from-scratch"] },
+  runa: { color: "violet", accent: "#7c3aed", tags: ["spaced-repetition", "tui", "algorithms", "fsrs", "serde", "productivity"] },
+  piloto: { color: "rose", accent: "#e11d48", tags: ["neural-networks", "genetic-algorithm", "ai", "simulation", "physics", "macroquad"] },
+  genesis: { color: "lime", accent: "#65a30d", tags: ["evolution", "physics", "genetic-algorithm", "ai", "simulation", "macroquad"] },
 }
 
 export type Act = {
@@ -46,6 +47,7 @@ export type Course = {
   description: string
   acts: Act[]
   theme: CourseTheme
+  tags: string[]
 }
 
 function slugifyAct(filename: string): string {
@@ -111,7 +113,8 @@ export function getCourses(): Course[] {
       title: extractTitle(indexContent),
       description: extractDescription(indexContent),
       acts,
-      theme: COURSE_THEMES[slug] || { color: "gray", accent: "#6b7280" },
+      theme: COURSE_THEMES[slug] || { color: "gray", accent: "#6b7280", tags: [] },
+      tags: COURSE_THEMES[slug]?.tags || [],
     }
   })
 }
