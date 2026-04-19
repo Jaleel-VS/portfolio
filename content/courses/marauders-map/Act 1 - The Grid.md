@@ -34,6 +34,8 @@ Let's begin.
 
 *Difficulty: Very Easy · Concepts: cargo, project structure, println!, main function*
 
+Before you can draw a single corridor or place a single tile, you need a working Rust project — a cauldron to brew in. This stage exists because every spell in our repertoire depends on `cargo` knowing where to find your code, how to compile it, and how to run the result. Without this foundation, nothing else in the Marauder's Map is possible.
+
 Every journey starts with a single spell. Ours starts with `cargo new`.
 
 ### Creating the project
@@ -140,6 +142,8 @@ You can also build without running: `cargo build`. Or check for errors without p
 
 ### Checkpoint: Stage 1
 
+Your project compiles and runs — but all it does is print text. The Map needs more than words; it needs a way to represent what each cell of Hogwarts *is*. That's exactly what Stage 2 gives us: a `Tile` type that the compiler can reason about.
+
 Your project should look like this:
 
 ```
@@ -172,9 +176,13 @@ Run `cargo run` and confirm the output. Stage 1 complete — you're a Rust wizar
 
 *Difficulty: Easy · Concepts: enums, match expressions, the Display trait, impl blocks*
 
+Hogwarts isn't just empty space — it's stone walls, open corridors, locked doors, and spiral staircases. Before we can draw a map, we need a way to tell the compiler "this cell is a wall, that cell is a floor." This stage introduces Rust's `enum` — the single most important tool for modeling distinct categories — and the `match` expression that makes working with them safe and exhaustive.
+
 Hogwarts is made of stone walls, corridors, doors, and staircases. Before we can draw a map, we need to represent what each cell on the map *is*. In programming terms, we need a **Tile** type.
 
 ### Enums: the perfect fit
+
+Right now we have a project that prints text, but we can't represent what a map cell *is*. We need a type where each value is one of a fixed set of possibilities — wall, floor, door, stairs — and nothing else. Strings would work, but a typo would silently break everything. We need something the compiler can check.
 
 In Python, you might represent tile types with strings: `"wall"`, `"floor"`, `"door"`. That works, but it's fragile — typo `"wal"` and your code silently breaks. In TypeScript, you might use a union type: `type Tile = "wall" | "floor" | "door"`.
 
@@ -332,6 +340,8 @@ cargo run
 
 ### Checkpoint: Stage 2
 
+We can represent a single tile and print it — but a single tile is just one brick. Hogwarts is built from *thousands* of them arranged in a grid. Next, we'll assemble tiles into a 2D structure and render an entire room.
+
 **`src/main.rs`:**
 ```rust
 use std::fmt;
@@ -383,9 +393,13 @@ Run `cargo run` and confirm the legend prints correctly. On to the grid!
 
 *Difficulty: Easy · Concepts: Vec, nested vectors, indexing, for loops, closures*
 
+A single tile is a single brick — useless on its own. Hogwarts is a *grid* of tiles: rows and columns forming corridors, rooms, and walls. This stage teaches you `Vec<Vec<T>>`, Rust's way of building 2D structures, and introduces the critical concept of *borrowing* — the first whisper of Rust's ownership system that will become your constant companion.
+
 A single tile is useless. We need a *grid* of tiles — a 2D array that represents a room in Hogwarts. Time to meet Rust's most important collection: `Vec`.
 
 ### Vec: Rust's dynamic array
+
+Right now we have individual `Tile` values but no way to arrange them into a map. We need a 2D collection — rows of tiles stacked into a grid — so we can index into any position and ask "what's at row 5, column 12?"
 
 In Python you have `list`. In TypeScript, `Array`. In Rust, it's `Vec<T>` (pronounced "vec of T"), where `T` is the type of element it holds.
 
@@ -522,6 +536,8 @@ You've got a room! It's not Hogwarts yet, but it's a start.
 
 ### Checkpoint: Stage 3
 
+We have a grid of tiles rendered to the terminal — a room with walls, a door, and stairs. But a bare grid is just data. A *floor* of Hogwarts has a name, rooms with labels, and metadata. Next, we'll wrap the grid in a `Floor` struct and learn how Rust bundles data with behavior.
+
 **`src/main.rs`:**
 ```rust
 use std::fmt;
@@ -596,9 +612,13 @@ fn main() {
 
 *Difficulty: Easy · Concepts: structs, methods, String vs &str, associated functions*
 
+A grid of tiles is raw data — it has no name, no rooms, no identity. But the Ground Floor of Hogwarts is more than pixels; it's the Great Hall, Filch's Office, the Courtyard. This stage introduces **structs** — Rust's way of bundling related data together — and **methods** that give that data behavior. You'll also meet the `String` vs `&str` distinction, one of Rust's most important (and initially confusing) concepts.
+
 A grid of tiles is fine, but a floor of Hogwarts is more than just tiles. It has a name ("Ground Floor"), rooms ("Great Hall", "Filch's Office"), and metadata. Time to learn **structs**.
 
 ### Structs: bundling data together
+
+Right now we have a `Vec<Vec<Tile>>` floating in a function, but we can't attach a name to it, track which rooms it contains, or pass it around as a meaningful unit. We need a way to bundle the grid with its metadata into a single, named type.
 
 In Python, you'd use a class or a dataclass. In TypeScript, an interface or class. In Rust, we use **structs**:
 
@@ -792,6 +812,8 @@ You should see a 40×20 map with rooms carved out, connected by corridors, with 
 
 ### Checkpoint: Stage 4
 
+We have a proper `Floor` struct with rooms, methods, and a name. But we're still printing to stdout with `println!` — scrolling text, no interactivity, no color. The Marauder's Map deserves a *real* terminal UI. Next, we bring in ratatui and crossterm to take over the entire terminal.
+
 **`src/main.rs`:**
 ```rust
 use std::fmt;
@@ -943,6 +965,8 @@ fn main() {
 
 *Difficulty: Medium · Concepts: external crates, terminal UI, event loops, closures, the Widget trait*
 
+Until now, our map has been `println!` output — text that scrolls off the screen, with no color, no interactivity, no sense of *place*. The Marauder's Map isn't a printout; it's a living parchment. This stage is the leap from "Rust exercise" to "real application." You'll learn how external crates work, how terminal UIs take over the screen, and how closures let you pass behavior as data.
+
 Printing to stdout is fine for debugging, but the Marauder's Map deserves a proper terminal UI. Time to bring in **ratatui** — Rust's premier TUI framework — and **crossterm** — the cross-platform terminal backend.
 
 ### Adding dependencies
@@ -988,7 +1012,9 @@ loop {
 }
 ```
 
-Let's build this. Replace your entire `src/main.rs`:
+Let's build this. Right now we have a `Floor` that can print itself, but we can't track a player position, respond to keypresses, or decide when to quit. We need a `Game` struct to hold the mutable state that changes each frame — and a loop that ties input, state, and rendering together.
+
+Replace your entire `src/main.rs`:
 
 ```rust
 use std::fmt;
@@ -1336,6 +1362,8 @@ You should see the map rendered in your terminal with a border, a green `@` for 
 
 ### Checkpoint: Stage 5
 
+The map is alive in the terminal — colored tiles, a green `@`, and arrow-key movement. But our map is only 40×20. Hogwarts is vast. Try resizing your terminal smaller than the map and watch things break. We need a *viewport* — a camera that follows the player and only shows what fits on screen.
+
 The full code is above. Key additions:
 - `Cargo.toml` now has `ratatui = "0.30"` and `crossterm = "0.29"`
 - `Game` struct holds player position and running state
@@ -1350,9 +1378,13 @@ The full code is above. Key additions:
 
 *Difficulty: Medium · Concepts: camera systems, clamping, usize arithmetic, saturating operations*
 
+Hogwarts doesn't fit on one screen. A real floor might be 200×100 tiles, but your terminal is maybe 80×24. Without a viewport, the map either gets clipped or you're stuck with tiny rooms. This stage solves the fundamental problem of *seeing* a world larger than your window — and introduces `saturating_sub`, a Rust pattern you'll use every time unsigned integers meet subtraction.
+
 Our map is 40×20 — small enough to fit on screen. But Hogwarts is vast. A real floor might be 200×100 tiles. We need a **viewport** — a camera that follows the player and only renders the visible portion of the map.
 
 ### The camera concept
+
+Right now we render every tile in the grid directly to the screen. But if the map is wider than the terminal, tiles overflow and the layout breaks. We need a sliding window — a rectangle that moves with the player and clips everything outside it.
 
 Imagine the map is a huge parchment and your terminal is a window placed on top of it. The viewport defines which rectangle of the parchment you can see. As the player moves, the window slides to keep them centered.
 
@@ -1539,6 +1571,8 @@ To see the viewport in action, make the map bigger than your terminal. Change `b
 
 ### Checkpoint: Stage 6
 
+The camera follows the player smoothly, and the map can now be any size. But we're still hardcoding the map in Rust — every wall, every door, every room is a line of `set_tile()`. Real games load maps from files. Next, we'll use serde to load our Hogwarts from JSON, making the map editable without recompiling.
+
 The changes from Stage 5:
 - Added `Camera` struct with `update()` method using `saturating_sub` and `min`
 - Added `camera` field to `Game`
@@ -1554,9 +1588,13 @@ The full code is the Stage 5 checkpoint with the `Camera` struct added and the `
 
 *Difficulty: Medium · Concepts: serde, Deserialize, file I/O, Result, error handling, the ? operator*
 
+Every time you want to change a room's shape or add a door, you have to edit Rust code and recompile. That's fine for learning, but terrible for building a real map. This stage separates *data* from *code* — the map lives in a JSON file that anyone can edit, and serde (Rust's serialization framework) bridges the gap. You'll also learn Rust's `Result` type and the `?` operator, which make error handling elegant instead of painful.
+
 Hardcoding the map in Rust is tedious. Real games load maps from files. We'll use **serde** (Rust's serialization framework) to load our map from JSON — the same format used by the `maps/ground_floor.json` file in our project.
 
 ### Adding serde dependencies
+
+Right now we have a `build_ground_floor()` function with dozens of `set_tile()` calls, but we can't change the map without recompiling. We need to load the grid, rooms, and stair connections from an external file — and we need Rust to parse that file into our existing structs automatically.
 
 Update `Cargo.toml`:
 
@@ -1848,6 +1886,8 @@ The map now loads from JSON! Edit the JSON file, re-run, and see your changes. T
 
 ### Checkpoint: Stage 7
 
+The map now lives in JSON — editable, shareable, and separate from your code. But we're only loading one floor. Hogwarts has seven floors plus dungeons, connected by staircases. Next, we'll load multiple floors and let the player climb between them.
+
 Key additions to `Cargo.toml`:
 ```toml
 serde = { version = "1", features = ["derive"] }
@@ -1867,9 +1907,13 @@ Key additions to code:
 
 *Difficulty: Medium · Concepts: Vec of structs, state machines, keyboard shortcuts, index management*
 
+Hogwarts isn't flat — it's a vertical labyrinth of seven floors, dungeons, and towers connected by staircases that like to move. A single-floor map is a corridor; a multi-floor map is a *castle*. This stage teaches you to manage a collection of complex structs, track which one is "active," and handle state transitions when the player steps on stairs. It's also your first taste of `Option` — Rust's elegant replacement for null.
+
 Hogwarts has seven floors (plus dungeons). Our JSON already supports multiple floors — now we need to navigate between them. When the player steps on a stair tile, they should transition to the connected floor. We'll also add `<` and `>` keys (like roguelikes) to go up and down stairs.
 
 ### Storing stair connections
+
+Right now we load one floor and ignore the rest. We have `Tile::Stairs` on the map, but stepping on them does nothing — there's no data connecting one floor's staircase to another floor's landing. We need a `StairConnection` that says "this tile on floor 0 leads to *that* tile on floor 1."
 
 First, we need to track where stairs lead. Add a `StairConnection` struct and store connections on each floor:
 
@@ -2171,6 +2215,8 @@ Navigate to the stairs tile (`S`) on the Ground Floor and press `<` or `>`. You'
 
 
 ### Checkpoint: Stage 8 — Full Code
+
+The parchment is drawn — multiple floors, stairs connecting them, a viewport that follows you through the castle. But the corridors are empty. In Act 2, we'll place a proper player on the map, add wall collision so Hogwarts feels solid, and build the status bar that makes the Map feel like a living artifact.
 
 **`Cargo.toml`:**
 ```toml

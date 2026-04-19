@@ -50,7 +50,9 @@ chrono = { version = "0.4", features = ["serde"] }
 
 > *"It does not do to dwell on dreams and forget to level up."*
 
-Every great RPG needs progression. Right now your wizard is static — same HP, same mana, same spells forever. We'll fix that with an XP system that rewards skillful play.
+Right now every duel is a one-off — win or lose, nothing changes. XP and levels give players a reason to keep dueling: each victory brings them closer to new spells, higher stats, and tougher opponents. This stage builds the progression backbone that makes the game feel like a journey from nervous first-year to master duelist. It also teaches you how to design a reward curve that feels satisfying without being trivial.
+
+### The Progression Table Right now your wizard is static — same HP, same mana, same spells forever. We'll fix that with an XP system that rewards skillful play.
 
 ### The Progression Table
 
@@ -85,6 +87,8 @@ Not all victories are equal:
 - **All levels**: unlock new spell tiers (Stage 24)
 
 ### Building the Progression System
+
+Right now our `Wizard` struct has no concept of growth — HP and mana are set at creation and never change. We need a separate `Progression` struct that tracks XP, level, and win streaks, then feeds level-up rewards back into the wizard's stats.
 
 ```rust
 /// The XP thresholds for each level. Index 0 = Level 1.
@@ -254,6 +258,8 @@ fn render_xp_bar(frame: &mut Frame, area: Rect, progression: &Progression) {
 }
 ```
 
+With XP flowing and levels climbing, the next question is: what do those levels *unlock*? Stage 24 gates spells behind level requirements, giving players a tangible reward for every level-up.
+
 ### Your Turn — Exercise 23
 
 > **Quest**: Integrate `Progression` into your game loop.
@@ -323,7 +329,9 @@ mod tests {
 
 > *"The wand chooses the wizard... but the wizard chooses the spells."*
 
-Now that wizards have levels, spells should have requirements. A first-year shouldn't be casting Avada Kedavra.
+Levels without rewards feel hollow. Spell unlocks give each level-up a concrete payoff — a new tool in your arsenal that changes how you fight. Gating powerful spells behind level requirements also creates natural difficulty scaling: early opponents only face your basic spells, while late-game fights become strategic showdowns with deep loadouts. This stage also introduces the equip screen, teaching you how to build interactive selection UIs with ratatui.
+
+### Adding Unlock Levels to Spells A first-year shouldn't be casting Avada Kedavra.
 
 ### Adding Unlock Levels to Spells
 
@@ -386,6 +394,8 @@ pub fn spells_for_level(level: u8) -> Vec<Spell> {
 ```
 
 ### The Spell Equip Screen
+
+Right now a wizard automatically gets all spells at their level, but players can't *choose* which ones to bring into a duel. With 15+ spells unlocked at high levels and only 6 slots, loadout selection becomes a strategic decision — do you bring healing or go all-offense?
 
 Players can't use every spell at once — they pick a loadout. This is where ratatui's `List` widget shines:
 
@@ -501,6 +511,8 @@ fn render_equip_screen(frame: &mut Frame, area: Rect, screen: &SpellEquipScreen)
 }
 ```
 
+Spells unlock and loadouts are customizable — but every wizard still feels the same. Stage 25 adds house selection, giving each playthrough a distinct identity and mechanical flavor.
+
 ### Your Turn — Exercise 24
 
 > **Quest**: Build the spell equip flow.
@@ -552,7 +564,7 @@ mod tests {
 
 > *"It is our choices, Harry, that show what we truly are."*
 
-This is the easiest stage in Act 4 — but it adds enormous personality to the game. At first launch, the player chooses a Hogwarts house, and that choice echoes through every mechanic.
+This is the easiest stage in Act 4 — but it adds enormous personality to the game. A house choice at the start of the game creates identity and replayability: a Gryffindor run feels completely different from a Slytherin run because the passive bonuses push you toward different strategies. It's also a chance to build a visually striking selection screen that sets the tone for the entire experience.
 
 ### House Bonuses
 
@@ -747,6 +759,8 @@ fn render_house_selection(frame: &mut Frame, area: Rect, selected: usize) {
 }
 ```
 
+Your wizard now has a house, a level, and a custom spell loadout — but it all vanishes when you close the terminal. Stage 26 adds persistence with serde, so your progress survives between sessions.
+
 ### Your Turn — Exercise 25
 
 > **Quest**: Add house selection to your game.
@@ -766,7 +780,7 @@ fn render_house_selection(frame: &mut Frame, area: Rect, selected: usize) {
 > *"The Ministry has fallen. Scrimgeour is dead. They are coming."*
 > But your save file? That endures.
 
-This is the most important stage in Act 4. Without persistence, every game session starts from scratch. We'll use **serde** — Rust's serialization framework — to save and load game state as JSON.
+Without persistence, every game session starts from scratch — all that XP, all those level-ups, gone. Save/load is what transforms a toy into a game. This stage teaches you **serde**, Rust's serialization framework, which converts your structs to JSON and back with compile-time type safety. You'll also learn idiomatic file I/O, `PathBuf` vs `&Path`, and how to handle corrupt data gracefully instead of crashing.
 
 ### What is serde?
 
@@ -870,6 +884,8 @@ enum SpellEffect {
 **Rule of thumb**: Use `#[serde(tag = "type", content = "value")]` for any enum that carries data. It makes the JSON human-readable and forward-compatible.
 
 ### The Save File
+
+Right now all game state lives in memory and disappears when the process exits. We need a single `SaveData` struct that bundles everything worth persisting — the wizard, their duel history, and their records — into one serializable value that maps cleanly to a JSON file.
 
 We'll save to `~/.wizard-duel/save.json`. The `dirs` crate gives us the home directory cross-platform:
 
@@ -1025,6 +1041,8 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+Your wizard's progress now survives between sessions. But you can't look back at past duels — Stage 27 adds a history log and stats screen so you can track your journey from first-year to master duelist.
+
 ### Your Turn — Exercise 26
 
 > **Quest**: Add persistence to your game.
@@ -1085,9 +1103,13 @@ mod tests {
 
 > *"I solemnly swear that I am up to tracking my stats."*
 
+Players love seeing their progress over time — win rates, damage totals, and the arc of their improvement. A duel history screen transforms isolated fights into a narrative of growth. This stage teaches you ratatui's `Table` widget for rendering structured data, and `chrono` for timestamping records. It's also a natural extension of the save system from Stage 26.
+
 Every duel should leave a mark. We'll log results and display them in a stats screen using ratatui's `Table` widget.
 
 ### The Duel Record
+
+Right now duels affect XP and level but leave no trace of *what happened* — who you fought, how long it took, how much damage you dealt. We need a record struct that captures the full story of each duel for the history screen and aggregate stats.
 
 ```rust
 use chrono::{DateTime, Local};
@@ -1255,6 +1277,8 @@ fn render_stats_summary(frame: &mut Frame, area: Rect, history: &[DuelRecord]) {
 }
 ```
 
+You can now track and review your entire dueling career. But quick duels against random opponents lack structure — Stage 28 builds a tournament bracket with eight opponents of increasing difficulty, culminating in a showdown with Voldemort himself.
+
 ### Your Turn — Exercise 27
 
 > **Quest**: Add duel history tracking.
@@ -1272,6 +1296,8 @@ fn render_stats_summary(frame: &mut Frame, area: Rect, history: &[DuelRecord]) {
 ## Stage 28 — Tournament Mode
 
 > *"The Triwizard Tournament! Well... more like the Octo-wizard Tournament."*
+
+Quick duels are fun, but a tournament gives the game *stakes*. Eight opponents of escalating difficulty, each with a personality and a quote, building toward a final boss — this is the structure that turns a combat engine into a complete game. It's also the hardest stage in Act 4 because you're orchestrating multiple systems: bracket tracking, opponent creation, the duel loop, XP awards, and save persistence, all working together.
 
 This is the hardest stage in Act 4. You're building a structured bracket tournament with 8 opponents of increasing difficulty, bracket visualization, and a victory screen.
 
@@ -1300,6 +1326,8 @@ graph TD
 ```
 
 ### Tournament Data Model
+
+Right now we can run individual duels, but there's no concept of a sequence — no bracket, no progression through opponents, no "you were eliminated in round 3." We need a `Tournament` struct that tracks which round you're on, what happened in each round, and whether you've claimed the cup.
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1586,6 +1614,8 @@ fn show_victory_screen() -> Result<(), Box<dyn std::error::Error>> {
 }
 ```
 
+The tournament gives your game structure and a climax. Stage 29 adds the sensory polish — sound cues, dramatic pauses, and screen shake — that makes every spell cast *feel* powerful.
+
 ### Your Turn — Exercise 28
 
 > **Quest**: Build the full tournament mode.
@@ -1607,6 +1637,8 @@ fn show_victory_screen() -> Result<(), Box<dyn std::error::Error>> {
 ## Stage 29 — Sound & Polish
 
 > *"Honestly, am I the only one who's ever bothered to read Hogwarts: A History of Terminal Effects?"*
+
+A game can be mechanically complete and still feel flat. Polish is what separates "it works" from "it feels good" — a terminal beep on a critical hit, a dramatic pause before Avada Kedavra lands, colored spell names that pop off the screen. These small touches compound into an experience that feels crafted rather than coded. This stage is deliberately easy because the hard work is behind you; now you get to have fun.
 
 This is a fun, easy stage. We're adding sensory feedback that makes the game *feel* alive — without any external audio libraries.
 
@@ -1815,6 +1847,8 @@ fn render_opponent_intro(frame: &mut Frame, area: Rect, entry: &BracketEntry) {
 }
 ```
 
+Your game now *feels* alive. The final stage adds the cherry on top: a leaderboard that tracks your greatest achievements across all sessions, giving you records to chase long after you've beaten Voldemort.
+
 ### Your Turn — Exercise 29
 
 > **Quest**: Add polish to your game.
@@ -1833,9 +1867,13 @@ fn render_opponent_intro(frame: &mut Frame, area: Rect, entry: &BracketEntry) {
 
 > *"One can never have enough records."*
 
+A leaderboard gives players goals beyond "beat the next opponent." Longest win streak, most damage in a single spell, fastest win — these are challenges that keep players coming back even after they've completed the tournament. Breaking a personal record triggers a dopamine hit that no amount of XP can match. This is also a clean capstone for the course: it ties together persistence, stats tracking, and TUI rendering into one final feature.
+
 The final stage. A local leaderboard that tracks your greatest achievements across all play sessions.
 
 ### Leaderboard Categories
+
+Right now we track duel history, but we don't surface the *highlights* — the player's best moments. A leaderboard struct distills hundreds of duels into a handful of records that are easy to display and satisfying to break.
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -2123,6 +2161,8 @@ fn post_duel(save: &mut SaveData, tracker: &DuelTracker, won: bool, opponent: &B
     save_game(save).ok();
 }
 ```
+
+This is the final exercise of the course. Once the leaderboard is in place, you'll have a complete game — from `cargo new` to a polished, persistent, tournament-ready Wizard Duel Engine.
 
 ### Your Turn — Exercise 30
 

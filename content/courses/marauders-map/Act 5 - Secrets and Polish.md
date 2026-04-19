@@ -12,7 +12,11 @@
 
 **Difficulty:** Medium · **New concepts:** Enum variants with data, conditional tile mutation, discovery state
 
+Hogwarts without secret passages is just a building. The passages are what make it *magical* — walls that aren't walls, shortcuts that reward the curious, teleportation that changes the tactical landscape. This stage teaches mutable pattern matching (destructuring *and* modifying in a single match arm), one of Rust's most elegant features, and introduces the discovery mechanic that gives exploration a tangible reward.
+
 ### The Idea
+
+Right now every wall on the map is just a wall — solid, immovable, boring. But the `SecretPassage` tile variant has been sitting in our enum since Act 1, waiting to be activated. We need to detect when the player walks into a specific wall, check if it's secretly a passage, reveal it, and teleport the player to the destination.
 
 In the books, Hogwarts is riddled with secret passages — the one-eyed witch passage to Honeydukes, the tunnel behind the mirror on the fourth floor, the passage from the Room of Requirement. Our map already has a `SecretPassage` tile variant. Now we make it *work*.
 
@@ -170,7 +174,8 @@ frame.render_widget(discovery_list, discovery_area);
 
 ### Checkpoint
 
-After this stage, you should be able to:
+After this stage, you should be able to walk into specific walls and get teleported, see discovered passages rendered as `◊`, and watch the discovery log update. The castle has secrets now — but a true Marauder needs *tools*. Stage 32 adds the Invisibility Cloak, Dungbombs, and other items that give you tactical options against Filch and Snape.
+
 - Walk into specific walls and get teleported
 - See discovered passages rendered as `◊`
 - See a discovery log updating in real-time
@@ -182,7 +187,11 @@ After this stage, you should be able to:
 
 **Difficulty:** Medium · **New concepts:** Enums with behavior, inventory management, game effect system
 
+Without items, the player's only option when Filch rounds the corner is "run." Items add tactical depth — the Invisibility Cloak freezes detection, Dungbombs redirect NPC pathfinding, Decoy Detonators create phantom targets. The elegant design insight: each item modifies *existing* systems (detection, NPC AI, line-of-sight) rather than creating new ones. This stage also introduces the timed-effect pattern — items create effects that tick down and expire, a pattern used in virtually every game with buffs or power-ups.
+
 ### The Idea
+
+Right now the player has no tools — no way to hide, distract, or outmaneuver NPCs beyond raw movement. We need an inventory system and items that interact with the detection, pathfinding, and NPC AI systems we've already built.
 
 Fred and George didn't just make the Map — they left behind a whole arsenal. Items give the player tactical options: sneak past Filch with the Invisibility Cloak, distract Snape with a Dungbomb, or send Mrs. Norris chasing phantom footsteps with a Decoy Detonator.
 
@@ -441,7 +450,8 @@ if let Some(pickup) = game.item_spawns.remove(&(game.current_floor, new_x, new_y
 
 ### Checkpoint
 
-After this stage:
+After this stage, you have tactical depth — items that interact with every system you've built. But free roam with items is still aimless. Stage 33 adds *missions* — objectives that give the player purpose and test their mastery of movement, items, and NPC avoidance.
+
 - Player can pick up items from the map
 - `[i]` opens inventory, Enter uses selected item
 - Invisibility Cloak freezes detection at 0
@@ -455,7 +465,11 @@ After this stage:
 
 **Difficulty:** Medium · **New concepts:** State machines for objectives, trigger zones, completion tracking
 
+Free roam is fun, but *missions* give purpose. Without objectives, the player wanders aimlessly — with them, every corridor becomes a route to plan, every NPC a threat to account for, every item a tactical choice. This stage introduces position-based trigger conditions and a mission state machine (Locked → Available → Active → Completed/Failed) that drives progressive gameplay. The missions are simple by design — no complex scripting, just "get from A to B without being caught" — because the *systems* you've already built provide all the complexity needed.
+
 ### The Idea
+
+Right now the player can explore, sneak, use items, and avoid NPCs — but there's no *goal*. We need missions with objectives that check conditions each tick: "has the player entered this room?", "has the player discovered this passage?", "has the detection meter stayed below 100?"
 
 Free roam is fun, but *missions* give purpose. Each mission is a simple objective: get from A to B without being caught, find a specific room, or discover a passage. They're position-based triggers — no complex quest scripting needed.
 
@@ -750,7 +764,8 @@ fn on_player_caught(game: &mut GameState) {
 
 ### Checkpoint
 
-After this stage:
+After this stage, the game has purpose — missions that test your mastery of every system. But close the game and all progress vanishes. Stage 34 adds save/load so discovered passages, inventory, score, and mission progress persist between sessions.
+
 - `[m]` opens mission panel with status icons
 - Missions unlock progressively
 - Objectives auto-complete when conditions are met
@@ -763,7 +778,11 @@ After this stage:
 
 **Difficulty:** Easy · **New concepts:** serde serialization, file I/O, JSON persistence
 
+A game that forgets everything when you close it disrespects the player's time. This is the reward stage — everything you've built (discovered passages, inventory, score, mission progress) now persists between sessions. Rust's `serde` ecosystem makes this almost trivially easy: if your structs derive `Serialize` and `Deserialize`, the hard work is already done. The design lesson: save only what *changes* (player state), not what's *fixed* (map layout).
+
 ### The Idea
+
+Right now, closing the game means losing all progress — discovered passages reset, inventory empties, missions restart. We need to serialize the player-specific state to a JSON file and restore it on startup.
 
 This is the reward stage. Everything you've built — discovered passages, inventory, score, mission progress — now persists between sessions. Close the game, come back tomorrow, and your Marauder's Map remembers.
 
@@ -993,7 +1012,8 @@ Human-readable, editable, debuggable. That's the beauty of JSON.
 
 ### Checkpoint
 
-After this stage:
+After this stage, your progress persists — close the game, come back tomorrow, and your Marauder's Map remembers. The mechanics are complete. Stage 35 adds the atmospheric polish that makes Hogwarts *feel* alive: time-of-day color shifts, curfew warnings, detection meter urgency, and the small details that transform a tech demo into an experience.
+
 - `Ctrl+S` saves the game
 - Game auto-saves every ~1 minute
 - On startup, the game loads the save file if it exists
@@ -1005,6 +1025,8 @@ After this stage:
 ## Stage 35: Sound & Polish — *'The Castle Breathes'*
 
 **Difficulty:** Easy · **New concepts:** Terminal escape codes, atmospheric UI, timing-based events
+
+A game isn't just mechanics — it's *atmosphere*. The difference between "a grid with NPCs" and "sneaking through Hogwarts at midnight" is polish: color shifts as night deepens, curfew warnings that build dread, a detection meter that pulses red as Filch closes in. This stage adds no new systems — it layers atmosphere on top of everything you've built, proving that small details compound into an experience that feels magical.
 
 ### The Idea
 
@@ -1211,7 +1233,8 @@ fn render_status_bar(frame: &mut Frame, game: &GameState, area: ratatui::layout:
 
 ### Checkpoint
 
-After this stage:
+After this stage, Hogwarts *breathes* — colors shift with the hour, curfew warnings build dread, and the detection meter pulses with urgency. The game is complete. But the ultimate gift to your players is letting them build their *own* Hogwarts. Stage 36 documents the JSON map format so anyone can create custom maps without touching Rust code.
+
 - Terminal bell sounds on key events
 - Curfew warnings appear at appropriate times
 - Map colors shift with time of day
@@ -1225,7 +1248,11 @@ After this stage:
 
 **Difficulty:** Medium · **New concepts:** JSON schema documentation, data-driven design, modding support
 
+The ultimate test of good architecture: can someone else build on it without reading your source code? This stage documents the JSON map format so thoroughly that anyone can design custom floors, place NPCs, hide secret passages, and create missions — all without touching Rust. It's also a capstone lesson in *data-driven design*: the game engine is generic, the content is data. Everything specific to Hogwarts lives in JSON; everything generic lives in Rust.
+
 ### The Idea
+
+Right now the game loads a single hardcoded map path. We need to document the complete JSON format, add command-line map selection, and validate map files so custom content creators get helpful error messages instead of panics.
 
 The ultimate gift to your players: let them create their own Hogwarts. By documenting the JSON map format thoroughly, anyone can design custom floors, place NPCs, hide secret passages, and create missions — without touching Rust code.
 
@@ -1512,7 +1539,8 @@ cargo run -- maps/my_custom_castle.json
 
 ### Checkpoint
 
-After this stage:
+After this stage, the Marauder's Map is complete — and extensible. Anyone can create their own Hogwarts without touching Rust code. The game engine is generic; the magic is in the data.
+
 - Maps load from JSON files
 - Custom maps can be passed via command line
 - Map format is fully documented (this stage *is* the documentation)

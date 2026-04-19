@@ -42,7 +42,11 @@ The Check Pipeline (what we're building toward):
 
 ## Stage 8 — Bit Array
 
+Every bloom filter rests on a foundation of raw bits. Before we can hash words or test membership, we need a way to flip individual bits on and off inside a compact block of memory. This stage teaches you the bitwise operations — shift, AND, OR, NOT — that underpin not just bloom filters but hash tables, compression, and cryptography. Master them here and they'll serve you everywhere.
+
 **Difficulty: Easy** · **Lines of code: ~50** · **Concepts: bitwise ops, Vec\<u64\>, indexing**
+
+Right now we have a trie that can check words, but every lookup walks the tree node by node. We can't pre-screen words cheaply — there's no "fast reject" path. We need a compact bit-level structure that can answer "is this bit set?" in O(1) time, which the bloom filter will build on.
 
 A bloom filter is, at its core, a giant array of bits. Not bytes — *bits*. Each bit is either 0 or 1. We need millions of them (we'll calculate exactly how many in Stage 12), so we need to pack them efficiently.
 
@@ -310,6 +314,8 @@ cargo test bit_array
 
 You should see all 7 tests pass. The bit array is the foundation — everything in the bloom filter sits on top of it.
 
+The storage layer is ready, but bits without addresses are meaningless. We need a way to convert words into bit positions — to map the string "olá" to a specific index in our array. That's what hash functions do, and Stage 9 introduces the first of two.
+
 ### What You Built
 
 ```
@@ -327,6 +333,8 @@ Next up: we need a way to convert words into bit positions. That's what hash fun
 ---
 
 ## Stage 9 — FNV-1a
+
+A bit array without a hash function is just a row of switches with no labels. We need a deterministic way to convert any word — "olá", "recibir", "café" — into a number that selects a bit position. FNV-1a is the simplest hash function worth using: ten lines of code, zero dependencies, and good enough distribution to serve as one half of our double-hashing scheme.
 
 **Difficulty: Easy** · **Lines of code: ~10** · **Concepts: byte iteration, wrapping arithmetic, XOR**
 
@@ -523,6 +531,8 @@ fnv1a("olá") = 0x7c2d0e4517e6f1b5
 
 Completely different hashes from a single accent mark. The bloom filter will map these to different bit positions, so "ola" and "olá" can coexist in the dictionary without interfering.
 
+FNV-1a gives us one hash function, but a bloom filter needs *k* independent hashes to minimize false positives. We could call FNV-1a with different seeds, but a second hash function with better avalanche properties will produce more independent bit positions. Stage 10 builds that second function.
+
 ### What You Built
 
 ```
@@ -540,6 +550,8 @@ FNV-1a is fast and simple, but it has a weakness: its bit mixing isn't great. Ch
 ---
 
 ## Stage 10 — MurmurHash3
+
+FNV-1a is fast and simple, but it processes one byte at a time and its mixing is modest — changing one input byte only ripples through nearby output bits. For a bloom filter, we want a second hash function where changing a single input bit flips roughly *half* the output bits (the "avalanche effect"). MurmurHash3 delivers exactly that, and building it by hand teaches you block processing, bit rotation, and the finalization step that separates toy hashes from production ones.
 
 **Difficulty: Medium** · **Lines of code: ~40** · **Concepts: bit rotation, avalanche effect, block processing**
 
@@ -849,6 +861,8 @@ Every arithmetic operation in MurmurHash3 must use `.wrapping_mul()` and `.wrapp
 
 > **TypeScript comparison:** JavaScript numbers are 64-bit floats, so you can't do proper 32-bit wrapping arithmetic without `Math.imul()` and manual masking with `>>> 0`. This is one area where Rust's explicit integer types are a real advantage.
 
+With two hash functions in hand — FNV-1a for breadth and MurmurHash3 for depth of mixing — we have everything we need to build the bloom filter itself. Stage 11 combines the bit array and both hashes into a single probabilistic data structure.
+
 ### What You Built
 
 ```
@@ -865,6 +879,8 @@ Now we have two hash functions: `fnv1a_64` (64-bit) and `murmur3_32` (32-bit). T
 ---
 
 ## Stage 11 — The Bloom Filter
+
+This is the stage where the pieces snap together. The bit array stores the state, the hash functions generate positions, and the bloom filter orchestrates them into a probabilistic membership test. The key insight — double hashing to derive *k* hash functions from just two — is an elegant trick from information theory that you'll see again in distributed systems and database indexing.
 
 **Difficulty: Medium** · **Lines of code: ~40** · **Concepts: double hashing, probabilistic data structures, false positives**
 
@@ -1133,11 +1149,13 @@ Uses double hashing:
   h_i(x) = fnv1a(x) + i * murmur3(x)  mod m
 ```
 
-But we've been picking `num_bits` and `num_hashes` by hand. How do you choose the right values? That's the math in Stage 12.
+But we've been picking `num_bits` and `num_hashes` by hand. How do you choose the right values? A filter that's too small drowns in false positives; one that's too large wastes memory. Stage 12 derives the exact formulas — from first principles, not from a textbook table.
 
 ---
 
 ## Stage 12 — Optimal Sizing
+
+The bloom filter works, but we've been guessing at its parameters. This stage replaces guesswork with mathematics. You'll derive — not memorize — the formulas for optimal bit count and hash count, and understand *why* the filter is exactly 50% full at the sweet spot. This is the kind of principled engineering that separates a toy implementation from a production one.
 
 **Difficulty: Medium** · **Lines of code: ~30** · **Concepts: probability, calculus (minimization), natural logarithms**
 
@@ -1426,6 +1444,8 @@ Memory ≈ (number of words × 10) / 8 bytes
 
 Each additional order of magnitude in false positive rate (1% → 0.1% → 0.01%) adds about 4.8 bits per word. So 0.1% needs ~14.4 bits/word, and 0.01% needs ~19.2 bits/word.
 
+The math says our bloom filter should have a 1% false positive rate. But theory and practice don't always agree — rounding, hash quality, and real-world data can shift the numbers. Stage 13 puts the formulas to the test empirically.
+
 ### What You Built
 
 ```
@@ -1442,6 +1462,8 @@ The math says our bloom filter should have a 1% false positive rate. But does it
 ---
 
 ## Stage 13 — False Positive Testing
+
+Theory without measurement is faith. This stage closes the loop: you'll insert thousands of words, query thousands of non-words, and compare the actual false positive rate against the theoretical prediction. If the numbers match, the math is validated. If they don't, something is wrong with the implementation. This empirical discipline — derive, implement, measure, compare — is the engineering method at its core.
 
 **Difficulty: Medium** · **Lines of code: ~60** · **Concepts: empirical testing, statistical validation, ASCII visualization**
 
@@ -1740,6 +1762,8 @@ fn check_word(word: &str, bloom: &BloomFilter, trie: &Trie) -> bool {
 ```
 
 For a correctly spelled word, both the bloom filter and trie say "yes" — two checks. For a misspelled word, the bloom filter usually says "no" — one check. Since most words in a typical document are spelled correctly, the bloom filter doesn't help much there. But when checking *suggestions* (Act 3), you'll test many candidate words against the dictionary, and most of them won't match. That's where the bloom filter shines — rejecting non-words in microseconds instead of traversing the trie.
+
+The gatekeeper is complete. It can say "definitely not a word" with certainty and "maybe a word" with controlled uncertainty. But when a word *is* misspelled, Lexicon still has nothing to offer — no corrections, no "did you mean…?" Act 3 gives it that voice.
 
 ### What You Built in Act 2
 

@@ -25,9 +25,13 @@ Let's get moving.
 
 *"Mr. Moony presents his compliments to the user and begs them to keep their nose out of other people's business."*
 
+The map exists, but it's a ghost town — no one walks these corridors. Every adventure needs a protagonist, and every game needs a way to represent "where the player is" as data the compiler can reason about. This stage introduces the `Player` struct and teaches you how to render an entity *on top of* the existing map — the layered rendering pattern that every 2D game uses.
+
 Every adventure needs a protagonist. Right now your map is a ghost town — corridors stretch out in silence, rooms sit empty. Time to put someone on the map. Literally.
 
 ### The Player Struct
+
+Right now we have a beautiful map with tiles, rooms, and a viewport — but no concept of "someone standing here." We need a struct that tracks position and floor, and we need to draw it as a `@` symbol on top of the existing tiles without destroying the map underneath.
 
 We need to track where the player is: their `x` and `y` position on the grid, and which floor they're on. In Python, you might write:
 
@@ -196,7 +200,7 @@ src/
 └── render.rs        // TUI rendering with viewport
 ```
 
-The player exists, has a position, renders as `@`, and the viewport centers on them. But they can't move yet — that's next.
+The player exists, has a position, renders as `@`, and the viewport centers on them. But they can't move yet — that's next. In Stage 10, we build the game loop that reads keypresses and translates them into movement, bringing the `@` to life.
 
 **Common mistake:** Trying to store a reference to the map inside `Player`:
 ```rust
@@ -214,6 +218,8 @@ This introduces **lifetimes** — Rust's way of tracking how long references are
 ## Stage 10: Arrow Keys — The Game Loop (Medium)
 
 *"The castle seemed to have been built by someone who was slightly mad."*
+
+A player that can't move is a portrait, not a person. This stage is the beating heart of the entire game — the **game loop** that continuously reads input, updates state, and redraws the screen. Every real-time application, from Pong to Elden Ring, runs this same fundamental pattern. You'll also confront `&mut` for the first time in a meaningful way, learning why Rust makes you declare "I will modify this" at every level.
 
 Your player exists but is frozen in place — a statue in the corridors of Hogwarts. To bring them to life, we need two things: a **game loop** that continuously updates the screen, and **input handling** that reads keypresses. This is the beating heart of any real-time application.
 
@@ -426,7 +432,7 @@ You now have:
 - `q` or `Esc` to quit cleanly
 - The viewport following the player
 
-Try it: `cargo run`. You should see your `@` symbol moving around the map. It walks through walls, off the edge of the map, into the void — we'll fix that next.
+Try it: `cargo run`. You should see your `@` symbol moving around the map. It walks through walls, off the edge of the map, into the void — we'll fix that next. Stage 11 adds collision detection so the castle's walls actually *stop* you.
 
 **Common mistake:** Forgetting `KeyEventKind::Press` filtering:
 ```rust
@@ -442,6 +448,8 @@ Always check `key.kind == KeyEventKind::Press`.
 ## Stage 11: Wall Collision (Easy)
 
 *"Hogwarts is full of surprises... but walking through solid stone isn't one of them."*
+
+A game where you can walk through walls isn't a game — it's a screensaver. Collision detection is what makes the map *real*: walls block you, doors let you through (if unlocked), and the castle becomes a maze to navigate rather than empty space to drift across. This stage also introduces the `i32`/`usize` dance — a pattern you'll repeat every time movement deltas meet grid coordinates in Rust.
 
 Right now your player is a ghost — phasing through walls, drifting off the map edge, ignoring every physical law of the castle. Time to make the walls mean something.
 
@@ -608,7 +616,7 @@ let mut map = HogwartsMap::load("hogwarts.json")?;
 
 ### Checkpoint: Stage 11 Complete
 
-Run the game. Try walking into walls — you bounce off. Try walking through corridors — smooth. The castle has substance now. Hogwarts feels *solid*.
+Run the game. Try walking into walls — you bounce off. Try walking through corridors — smooth. The castle has substance now. Hogwarts feels *solid*. But every corridor looks the same — an anonymous maze. Next, we'll label the rooms so you know whether you're in the Great Hall or Filch's Office.
 
 **Common mistake:** Forgetting to update `map` from `&HogwartsMap` to `&mut HogwartsMap` in the `run()` signature when you add door interaction. The compiler error will say something like:
 
@@ -623,6 +631,8 @@ This means: "you're trying to modify something through an immutable reference." 
 ## Stage 12: Rooms & Labels (Medium)
 
 *"The Room of Requirement only appears when a person has real need of it."*
+
+Walking through Hogwarts should feel like walking through *Hogwarts* — not an anonymous grid of dots and hashes. Room labels transform the map from abstract geometry into a place with identity. This stage also introduces `Option<&Room>`, Rust's elegant replacement for null, and the layered rendering pattern where you draw tiles first, then labels, then the player — each layer building on the last.
 
 Your player can walk through Hogwarts, but every corridor looks the same — an anonymous maze of walls and floors. The Marauder's Map labels every room. Let's do the same.
 
@@ -825,7 +835,7 @@ pub fn draw_map(
 
 ### Checkpoint: Stage 12 Complete
 
-Room names now float inside their boundaries on the map. Walk into the Great Hall and see its name. Step into a corridor and it disappears. The map is starting to feel like a real place.
+Room names now float inside their boundaries on the map. Walk into the Great Hall and see its name. Step into a corridor and it disappears. The map is starting to feel like a real place. But you're still trapped on one floor — time to connect the staircases and let you climb through the castle.
 
 **Common mistake:** Rendering labels *after* the player, which makes the label text overwrite the `@` symbol when the player stands in a room. Always render the player last.
 
@@ -835,9 +845,13 @@ Room names now float inside their boundaries on the map. Walk into the Great Hal
 
 *"The staircases at Hogwarts were fond of changing."*
 
+Hogwarts is a vertical castle — dungeons below, towers above, seven floors of corridors and classrooms between. A single-floor map is a hallway; connecting floors with stairs makes it a *castle*. This stage introduces `MoveResult`, an enum with data — your first taste of algebraic data types that carry payloads, not just labels. The compiler will ensure you handle every possible outcome of a move.
+
 Hogwarts has seven floors, from the Dungeons to the Seventh Floor. Your player is trapped on one. Time to connect them with stairs.
 
 ### How Stairs Work
+
+Right now we have multiple floors loaded from JSON and stair tiles rendered on the map, but stepping on a stair tile does nothing — the `try_move` function treats it like any other walkable tile. We need to detect when the player lands on stairs and teleport them to the destination floor and position.
 
 From the design spec, the `Stairs` tile variant carries its destination:
 
@@ -1046,7 +1060,7 @@ The `≡` character (triple horizontal bar) suggests "stairs" visually. Cyan mak
 
 ### Checkpoint: Stage 13 Complete
 
-Walk to a staircase, step onto it, and — whoosh — you're on a different floor. The floor name flashes briefly, then you're exploring new corridors. Try finding the stairs from the Ground Floor up to the First Floor, then keep climbing.
+Walk to a staircase, step onto it, and — whoosh — you're on a different floor. The floor name flashes briefly, then you're exploring new corridors. Try finding the stairs from the Ground Floor up to the First Floor, then keep climbing. The castle is now fully navigable vertically. One thing is missing: a status bar that tells you where you are, what time it is, and how close you are to getting caught.
 
 Your project structure:
 
@@ -1073,9 +1087,13 @@ This actually works because `floor` borrows from `map` and we're modifying `self
 
 *"The Map never lies."*
 
+A game without a HUD is like a map without a legend — you're wandering blind. The status bar transforms raw game state into information the player can *act on*: which floor am I on? What room is this? How close am I to getting caught? This stage teaches ratatui's `Span` and `Line` types for building rich, multi-styled text — the same pattern used in every professional TUI application.
+
 Every good game has a HUD — a heads-up display showing vital information. The Marauder's Map needs a status bar at the bottom of the screen showing the current floor, position, time, score, and detection meter. We already reserved space for it in Stage 12's layout. Now let's fill it in.
 
 ### Game State
+
+Right now we track the player's position and the map, but we have no concept of score, detection level, or elapsed time. We need a `GameState` struct to hold the mutable game-wide data that the status bar will display — and that future systems (NPCs, missions) will modify.
 
 First, we need somewhere to track score, time, and detection. Let's create a `GameState` struct:
 
@@ -1334,7 +1352,7 @@ The bottom of your screen now shows:
  Ground Floor  (23,15) │ Great Hall │ ⏰ 23:07 │ ★ 30 │ Detection ████░░░░░░░░░░░░░░░░
 ```
 
-Floor name in a cyan badge. Coordinates in gray. Current room in white. Game time ticking. Score accumulating. Detection meter pulsing green-to-red as you move.
+Floor name in a cyan badge. Coordinates in gray. Current room in white. Game time ticking. Score accumulating. Detection meter pulsing green-to-red as you move. Act 2 is complete — you have a fully interactive Hogwarts explorer. In Act 3, the corridors won't be empty much longer: pathfinding algorithms will give NPCs the intelligence to patrol, scout, and chase you through the castle.
 
 ### Final Project Structure
 

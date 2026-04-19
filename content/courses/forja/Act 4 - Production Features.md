@@ -25,6 +25,8 @@ This act closes the gap between "works on localhost" and "serves real traffic." 
 
 ## Stage 23 — Keep-Alive: Persistent Connections
 
+Your server opens a fresh TCP connection for every single request, then throws it away. That means every image, stylesheet, and API call pays the full cost of a three-way handshake — SYN, SYN-ACK, ACK — before a single byte of useful data flows. This stage eliminates that waste by keeping connections open across multiple requests, the single biggest performance improvement in HTTP/1.1.
+
 ### Why this matters
 
 Open your browser's dev tools, load a page with 20 images, and watch the "Connection" column. Without keep-alive, every single resource requires a full TCP handshake — that's 20 round trips of SYN/SYN-ACK/ACK *before any data flows*. On a 100ms link, that's 2 seconds of pure handshake overhead.
@@ -118,7 +120,7 @@ The client can opt out of keep-alive by sending `Connection: close`. You must ho
 
 **3. Content-Length is now mandatory**
 
-When you had one-request-per-connection, the client knew the response was done when the socket closed. With keep-alive, the socket stays open — so how does the client know where one response ends and the next begins? `Content-Length`. Every response must include it (or use chunked transfer — Stage 24).
+When you had one-request-per-connection, the client knew the response was done when the socket closed. With keep-alive, the socket stays open — so how does the client know where one response ends and the next begins? This is why `Content-Length` exists: it's the framing mechanism that lets HTTP multiplex multiple request-response pairs over a single TCP connection. Without it (or chunked encoding), the client has no way to separate consecutive responses.
 
 ```rust
 // In your response builder, always set Content-Length
@@ -160,6 +162,8 @@ nc localhost 7878
 
 ### Checkpoint
 
+Connections now persist across multiple requests — no more handshake tax on every resource. But keep-alive introduces a new question: how does the client know where one response ends and the next begins? `Content-Length` works when you know the size upfront, but what about streaming data? That's what chunked transfer encoding solves, and it's next.
+
 Your `handle_connection` now:
 - Loops, reading multiple requests per connection
 - Times out idle connections after 30 seconds
@@ -169,6 +173,8 @@ Your `handle_connection` now:
 ---
 
 ## Stage 24 — Chunked Transfer Encoding
+
+With keep-alive connections, `Content-Length` tells the client where one response ends. But what if you don't know the response size before you start sending — a database query streaming rows, a log file being tailed, or a large file you don't want to buffer entirely in memory? This stage adds chunked transfer encoding: the ability to stream response data in pieces without knowing the total size upfront.
 
 ### Why this matters
 
@@ -270,6 +276,8 @@ curl -v http://localhost:7878/stream http://localhost:7878/api/hello
 
 ### Checkpoint
 
+Your server now has two ways to deliver response bodies — fixed-length and chunked streaming. But both modes send every byte as-is over the wire. A typical JSON response is 70-80% redundant whitespace and repeated keys. Next, we'll compress responses with gzip to slash bandwidth usage.
+
 Your server now supports two response modes:
 - **Fixed-length**: `Content-Length` header, body sent all at once
 - **Chunked**: `Transfer-Encoding: chunked`, body sent in pieces
@@ -279,6 +287,8 @@ Both work with keep-alive connections.
 ---
 
 ## Stage 25 — Compression: gzip Response Bodies
+
+Your server sends every response byte-for-byte as it exists in memory. A 50KB JSON payload full of repeated keys and whitespace travels as 50KB over the wire — wasteful on bandwidth, slow on mobile connections, and expensive at scale. This stage adds gzip compression, shrinking responses by 70-80% and making your server behave like every production HTTP server and CDN.
 
 ### Why this matters
 
@@ -401,6 +411,8 @@ curl -s --compressed http://localhost:7878/api/hello
 
 ### Checkpoint
 
+Responses are now compressed on the wire — less bandwidth, faster page loads. But your API is still locked to same-origin requests: any frontend on a different domain gets blocked by the browser's CORS policy. Next, we'll add the headers that let browsers call your API from anywhere.
+
 Your server now:
 - Checks `Accept-Encoding` for gzip support
 - Compresses response bodies with flate2
@@ -410,6 +422,8 @@ Your server now:
 ---
 
 ## Stage 26 — CORS: Cross-Origin Resource Sharing
+
+Your API works perfectly from curl and server-side code, but the moment a frontend on a different domain tries to call it, the browser blocks the request. This isn't a bug in your server — it's the browser's same-origin security policy. This stage adds the CORS headers that tell browsers "yes, this API is meant to be called from other origins," the same configuration that API Gateway and CloudFront handle for you.
 
 ### Why this matters
 
@@ -439,6 +453,8 @@ Server → Browser: 204 No Content
 ```
 
 ### Build CORS middleware
+
+Right now we have no way to tell browsers which origins, methods, and headers are allowed. We need a configuration struct that defines the CORS policy, and middleware that applies it to every response.
 
 This is one of the simpler stages — it's just headers. But getting the details right matters.
 
@@ -555,6 +571,8 @@ With CORS headers: you see the response body.
 
 ### Checkpoint
 
+Browsers can now call your API from any origin — the CORS wall is down. But with the door open to the world, you need a bouncer. Without rate limiting, a single client can flood your server with thousands of requests per second and starve everyone else. That's next.
+
 Your server now:
 - Responds to OPTIONS preflight requests with proper CORS headers
 - Adds `Access-Control-Allow-Origin` to all responses when `Origin` is present
@@ -563,6 +581,8 @@ Your server now:
 ---
 
 ## Stage 27 — Rate Limiting: Token Bucket per IP
+
+Your server is open to the world — any client can send as many requests as they want, as fast as they want. A buggy client in a retry loop, a bot scraping your API, or a deliberate denial-of-service attack can monopolize your server and starve legitimate users. This stage adds the first line of defense: a token bucket rate limiter that caps requests per client IP, the same mechanism behind AWS WAF's rate-based rules.
 
 ### Why this matters
 
@@ -585,6 +605,8 @@ There are several rate limiting algorithms. Token bucket is the most common beca
 In Python you'd use a dict of `{ip: (tokens, last_refill_time)}`. In Rust, same idea — but you need to handle concurrent access.
 
 ### The data structure
+
+Right now we have no way to track how many requests each client has made or when they last hit the server. We need a per-IP data structure that tracks token count and refill timing — the core of the token bucket algorithm.
 
 ```rust
 use std::collections::HashMap;
@@ -715,6 +737,8 @@ curl -v http://localhost:7878/api/hello  # (after exhausting tokens)
 
 ### Checkpoint
 
+Your server now defends itself against abusive clients. But there's one glaring vulnerability left: everything travels in plaintext. Passwords, API keys, user data — all visible to anyone on the network path. Next, we add TLS encryption so your server speaks HTTPS, the same encryption that ALB and CloudFront terminate for you.
+
 Your server now:
 - Tracks request rates per client IP using token bucket
 - Returns 429 Too Many Requests with `Retry-After` when rate exceeded
@@ -724,6 +748,8 @@ Your server now:
 ---
 
 ## Stage 28 — TLS: HTTPS with rustls
+
+Every byte your server has sent so far is plaintext — visible to anyone on the network path. Coffee shop WiFi, compromised routers, curious ISPs — they can all read your users' passwords, API keys, and data. This stage adds the encryption layer that makes HTTP into HTTPS, using rustls — a pure-Rust TLS implementation. You're building what ALB and CloudFront do when they "terminate TLS" for you.
 
 ### Why this matters
 
@@ -902,6 +928,8 @@ echo | openssl s_client -connect localhost:7878 2>/dev/null | openssl x509 -text
 
 ### Checkpoint
 
+Your server now encrypts every byte on the wire — passwords, tokens, and data are safe from eavesdroppers. You've added keep-alive, chunked streaming, compression, CORS, rate limiting, and TLS. But are these features actually helping? How many requests per second can your server handle? Where's the bottleneck? Next, we measure before we optimize.
+
 Your server now:
 - Generates a self-signed TLS certificate at startup
 - Accepts HTTPS connections using rustls (pure Rust, no OpenSSL)
@@ -911,6 +939,8 @@ Your server now:
 ---
 
 ## Stage 29 — Benchmarking: Measure Before You Optimize
+
+You've added six production features across this act, but you have no idea if they're helping or hurting. Is keep-alive actually faster? How much does TLS cost? Where's the bottleneck — CPU, memory, lock contention? Without numbers, you're guessing, and guessing about performance is almost always wrong. This stage gives you the tools and methodology to measure your server's actual behavior under load.
 
 ### Why this matters
 
@@ -1045,6 +1075,8 @@ Localhost benchmarks measure your server's raw throughput without network latenc
 
 ### Checkpoint
 
+You now have hard numbers — not guesses — about your server's performance. But these are localhost benchmarks: no real network latency, no real clients, no real traffic. The final stage puts your server on the internet, where you'll see how all these features perform over a real network with real TLS handshakes and real round trips.
+
 You now have:
 - Baseline performance numbers for your server
 - A benchmark matrix comparing features (keep-alive, TLS, compression)
@@ -1056,6 +1088,8 @@ You now have:
 ## Stage 30 — Deploy to EC2: Serve Real Traffic
 
 ### This is graduation
+
+Everything you've built has run on localhost — a controlled environment with zero network latency and no real clients. This final stage takes your hand-forged server and puts it on the internet. You'll cross-compile for Linux, launch an EC2 instance, configure security groups, set up TLS, and serve real traffic from a real data center. This is the moment the metal you've been forging meets the real world.
 
 You've built an HTTP server from scratch. It handles persistent connections, streams responses, compresses data, enforces CORS, rate-limits abusers, and encrypts traffic with TLS. Now you're going to put it on the internet.
 
@@ -1267,6 +1301,8 @@ aws ec2 terminate-instances --instance-ids <instance-id>
 ```
 
 ### Checkpoint
+
+The metal has been forged, tempered, and tested in the real world. Your server is no longer a localhost experiment — it's serving encrypted, compressed, rate-limited responses from an AWS data center to real clients on the internet.
 
 Your server is deployed and serving real traffic from the internet. You have:
 - A release binary running on EC2

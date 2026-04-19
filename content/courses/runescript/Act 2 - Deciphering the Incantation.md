@@ -115,6 +115,8 @@ pub enum BinOp {
 
 Nothing new here — these are plain enums like `TokenKind` but smaller. Each variant carries no data.
 
+Right now we have a flat stream of tokens, but no way to represent *structure* — which operands belong to which operator, what nests inside what. We need types that can hold a tree of expressions, where each node may contain child expressions.
+
 Now the expression enum — this is where `Box` enters:
 
 ```rust
@@ -283,6 +285,8 @@ Spell tree: Binary(
 
 The tree correctly nests `Mul` inside `Add`, showing that `2 * 3` is computed first, then added to `1`.
 
+The spell tree's shape is defined — every possible node the parser can produce has a home. Now we need the parser itself: a struct that walks the token stream and assembles these nodes into a tree, starting with the simplest expressions.
+
 ### Checkpoint
 
 **`src/ast.rs`** (complete):
@@ -417,6 +421,8 @@ use crate::ast::{Expr, Stmt, BinOp, UnaryOp};
 ```
 
 The parser struct:
+
+Right now we have AST types but no machinery to *build* them from tokens. We need a struct that mirrors the lexer's architecture — a cursor over a sequence, with peek and advance — but operating on tokens instead of characters.
 
 ```rust
 /// The decipherer. Holds the token stream and a cursor position.
@@ -671,6 +677,8 @@ Parsed: IntLit(
     42,
 )
 ```
+
+The parser can read atoms — the simplest building blocks of any expression. But `42` alone isn't very useful. Next comes the hard part: teaching the parser that `*` binds tighter than `+`, so `1 + 2 * 3` builds the right tree.
 
 ### Checkpoint
 
@@ -1259,6 +1267,8 @@ cargo run
 
 You should see the correctly nested tree with `Mul` inside `Add`.
 
+Binary operators obey the precedence table now — the Pratt algorithm handles the binding power dance. But expressions also have prefix operators (`-x`, `!flag`), postfix operators (`print(args)`, `arr[0]`), and grouping (`(1 + 2) * 3`). Next, we complete the expression parser with all of these.
+
 ### Checkpoint
 
 Changes to `src/parser.rs`:
@@ -1689,6 +1699,8 @@ cargo test
 
 Expected: all previous tests pass, plus 13 new tests for unary, grouping, arrays, calls, fields, and indexing.
 
+Every expression the language can produce is now parseable. But expressions alone don't make a program — we need statements: `let` declarations, `fn` definitions, and the glue that sequences them. Next, we add statement-level parsing.
+
 ### Checkpoint
 
 The expression parser is now complete. It handles:
@@ -2047,6 +2059,8 @@ cargo run
 ```
 
 You should see three statements: two `Let` nodes and one `ExprStmt` with a `Call` inside.
+
+Declarations and expression statements parse cleanly, but the language is still a straight line — no branching, no loops. Next, we add `if`/`else`, `while`, `for-in`, and `return` to give the incantation its power to choose and repeat.
 
 ### Checkpoint
 
@@ -2424,6 +2438,8 @@ cargo run
 ```
 
 Try the spec example from §10.2 as the source string. You should see a clean AST with `Let`, `ExprStmt(Assign(...))`, and `If` nodes.
+
+The parser handles every construct in the Runescript grammar — but it stops at the first error. A single misplaced rune and the entire deciphering halts. Next, we add panic-mode error recovery so the parser reports *all* the errors it finds, not just the first.
 
 ### Checkpoint
 

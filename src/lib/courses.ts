@@ -26,6 +26,10 @@ export const COURSE_THEMES: Record<string, CourseTheme> = {
   shadowkeep: { color: "red", accent: "#dc2626" },
   "the-chalice": { color: "crimson", accent: "#be123c" },
   "wizard-duel": { color: "blue", accent: "#3b82f6" },
+  chronolock: { color: "amber", accent: "#d97706" },
+  cartografo: { color: "emerald", accent: "#059669" },
+  runa: { color: "violet", accent: "#7c3aed" },
+  piloto: { color: "rose", accent: "#e11d48" },
 }
 
 export type Act = {

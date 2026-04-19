@@ -31,6 +31,8 @@ This is the act where Lexicon becomes a *tool*. The kind of thing you'd actually
 
 ## Stage 21 — The Tokenizer
 
+Raw text is messy — punctuation clings to words, accents decompose into invisible combining characters, and "don't" is one word or two depending on who you ask. The tokenizer is the front door of the entire check pipeline: every word that enters Lexicon passes through it. Getting tokenization wrong means every downstream component — bloom filter, trie, BK-tree — operates on garbage. This stage teaches you Unicode normalization (NFC), grapheme clusters, and the UAX#29 word boundary algorithm that handles the edge cases you'd never think of.
+
 *Difficulty: Medium* | *New concepts: Unicode word segmentation, NFC normalization, grapheme clusters, the `unicode-segmentation` crate*
 
 ### The Problem
@@ -365,6 +367,8 @@ mod tests {
 
 **Confusing byte offsets with character offsets.** In UTF-8, `"é"` is 2 bytes but 1 character. `"¡"` is 2 bytes. If you use byte offsets as column numbers, your error positions will be wrong for any non-ASCII text. Always convert to character counts for display.
 
+With clean, normalized tokens flowing out of the tokenizer, we're ready to wire them into the check pipeline. Stage 22 orchestrates the bloom filter, trie, and BK-tree behind a single `Checker` facade.
+
 ### What Changed
 
 You now have a tokenizer that handles real-world multilingual text. It normalizes Unicode, strips punctuation, preserves contractions, and tracks positions. This is the front door of the check pipeline — every word that enters Lexicon comes through here.
@@ -372,6 +376,8 @@ You now have a tokenizer that handles real-world multilingual text. It normalize
 ---
 
 ## Stage 22 — The Check Pipeline
+
+You've built three data structures that each do one thing well. Separately, they're components; together, they're a spell checker. This stage applies the facade pattern — wrapping the bloom filter, trie, and BK-tree behind a single `Checker` struct with a clean API. The orchestration logic (bloom rejects → trie confirms → BK-tree suggests) is where the architectural decisions from Acts 1-3 finally pay off as a coherent system.
 
 *Difficulty: Hard* | *New concepts: orchestrating multiple data structures, the facade pattern, `struct` composition, result aggregation*
 
@@ -686,6 +692,8 @@ mod tests {
 
 **Not normalizing before checking.** The checker receives tokens from the tokenizer (already normalized), but if someone calls `check_word()` directly with un-normalized input, it won't match the dictionary. Consider normalizing inside `check_word()` as a safety net.
 
+The engine is assembled. Feed it text, get back errors with positions and suggestions. But a library without a command-line interface is invisible to users. Stage 23 gives Lexicon a proper CLI with clap's derive API.
+
 ### What Changed
 
 You now have a `Checker` that orchestrates the full pipeline. Feed it text, get back a list of errors with positions and suggestions. The bloom filter handles the fast path (most words are correct), the trie confirms, and the BK-tree suggests. Three data structures, one clean API.
@@ -693,6 +701,8 @@ You now have a `Checker` that orchestrates the full pipeline. Feed it text, get 
 ---
 
 ## Stage 23 — CLI with clap
+
+A library is code for other code. A CLI is code for humans. This stage transforms Lexicon from something you `use` in tests into something you *run* from a terminal. clap's derive API lets you define your entire command structure — subcommands, flags, defaults, help text — as Rust types, and the compiler generates the parsing logic. It's the difference between a project and a product.
 
 *Difficulty: Medium* | *New concepts: clap derive API, `#[derive(Parser)]`, subcommands, `ValueEnum`, global arguments*
 
@@ -1050,6 +1060,8 @@ mod tests {
 
 **Not making flags `global = true`.** Without `global`, `--lang` only works before the subcommand: `lexicon --lang en check file.txt`. With `global`, it works anywhere: `lexicon check --lang en file.txt`. Users expect the latter.
 
+The CLI skeleton is wired up, but `lexicon check test.txt` doesn't actually read files yet. Stage 24 connects the CLI to the filesystem — reading files, formatting output, and returning proper exit codes for CI integration.
+
 ### What Changed
 
 Lexicon is now a real CLI tool. `cargo run -- check test.txt` checks a file. `cargo run -- suggest recieve` gets suggestions. The clap derive API gave us argument parsing, help text, version info, and error messages — all generated from struct definitions.
@@ -1057,6 +1069,8 @@ Lexicon is now a real CLI tool. `cargo run -- check test.txt` checks a file. `ca
 ---
 
 ## Stage 24 — File Checking
+
+A CLI that parses arguments but can't read files is a facade with nothing behind it. This stage completes the end-to-end flow: read a file from disk, tokenize it, check every word, and report errors with precise line:column positions in both human-readable text and machine-readable JSON. The JSON output makes Lexicon composable — other tools, editors, and CI pipelines can consume its results programmatically.
 
 *Difficulty: Medium* | *New concepts: `std::fs`, `BufReader`, streaming vs. loading, `serde::Serialize` for JSON output*
 
@@ -1293,6 +1307,8 @@ mod tests {
 
 **Hardcoding the file path in JSON output.** Use the path the user provided, not the canonicalized path. If they said `lexicon check ../README.md`, the JSON should say `"file": "../README.md"`, not `"file": "/home/user/project/README.md"`.
 
+File checking works, but every technical document is full of words that are correct in context but absent from standard dictionaries — "kubernetes", "async", "mutex". Without a custom dictionary, Lexicon would drown in false positives. Stage 25 adds the escape valve.
+
 ### What Changed
 
 `lexicon check test.txt` now works end-to-end. It reads a file, tokenizes it, checks every word, and reports errors with line:column positions in either text or JSON format. The exit code tells CI whether the file passed.
@@ -1300,6 +1316,8 @@ mod tests {
 ---
 
 ## Stage 25 — Custom Dictionary
+
+No standard dictionary contains every word a user needs. Technical jargon, proper nouns, project-specific terms — they're all "misspellings" to a dictionary that only knows natural language. A custom dictionary is the pressure valve that makes a spell checker livable. This stage introduces layered configuration (global + per-project), file I/O for persistence, and the `HashSet` as a zero-false-positive lookup that sits in front of the probabilistic pipeline.
 
 *Difficulty: Easy* | *New concepts: `dirs` crate for home directory, file I/O, `HashSet` persistence, layered configuration*
 
@@ -1566,6 +1584,8 @@ mod tests {
 
 **Reading the custom dictionary on every word check.** Load it once when building the `Checker`, not on every call to `check_word()`. File I/O per word would destroy performance.
 
+Custom dictionaries tame false positives, but the workflow is still batch-oriented: run the checker, read the output, fix the file, run again. Stage 26 collapses that loop into a single interactive session where you navigate errors, accept suggestions, and save corrections — all without leaving the terminal.
+
 ### What Changed
 
 Lexicon now has a two-layer custom dictionary system. `lexicon dict add kubernetes` adds a word globally. A `.lexicon` file in the project root adds project-specific terms. The checker consults custom words before the standard pipeline, so custom words are O(1) lookups with zero false positives.
@@ -1573,6 +1593,8 @@ Lexicon now has a two-layer custom dictionary system. `lexicon dict add kubernet
 ---
 
 ## Stage 26 — Interactive Mode
+
+Batch checking is useful for CI; interactive checking is useful for humans. This stage builds a terminal UI where you navigate misspelled words, see suggestions in context, accept corrections with a keypress, and add words to your custom dictionary — all in a single session. It introduces raw mode, the alternate screen, and the event-loop pattern that underpins every terminal application from `vim` to `htop`.
 
 *Difficulty: Hard* | *New concepts: raw mode, alternate screen, crossterm event loop, terminal UI state machine*
 
@@ -1952,6 +1974,8 @@ mod tests {
 
 **Byte offset vs character offset in replacement.** When replacing a word in a line, the column from `SpellingError` is in characters, but `String::replace_range` uses byte indices. Convert: `line.char_indices().nth(col - 1).map(|(i, _)| i)`.
 
+Interactive mode makes Lexicon a pleasure to use, but "it feels fast" isn't the same as "it meets spec." Stage 27 puts numbers on every component — throughput, latency, memory — and compares them against the targets from the design document.
+
 ### What Changed
 
 Lexicon now has a full interactive mode. You can navigate misspelled words, see suggestions, accept corrections, add words to your custom dictionary, and save the corrected file. The crossterm event loop handles keyboard input in raw mode, and the alternate screen keeps your shell history clean.
@@ -1959,6 +1983,8 @@ Lexicon now has a full interactive mode. You can navigate misspelled words, see 
 ---
 
 ## Stage 27 — Performance Checkpoint
+
+"It works" is necessary but not sufficient. A spell checker that takes 5 seconds to check a README will be abandoned after the first use. This stage establishes the discipline of measurement: you'll benchmark every component against concrete targets, profile with flamegraphs to find bottlenecks, and learn the optimization checklist that turns a slow prototype into a responsive tool. The numbers you collect here become the baseline for every future change.
 
 *Difficulty: Medium* | *New concepts: `std::time::Instant`, criterion benchmarks, flamegraph profiling, the `lexicon bench` command*
 
@@ -2232,6 +2258,8 @@ mod tests {
 **Including dictionary load time in check throughput.** The "10k words < 1 second" target is for checking only — dictionary loading is measured separately. Build the checker once, then time the check loop.
 
 **Not using `black_box()` in criterion benchmarks.** Without `black_box()`, the compiler might optimize away the computation entirely (it can prove the result is unused). `black_box()` prevents this.
+
+With performance validated and a complete single-language tool in hand, Act 4 is done. Lexicon works — but it only speaks one language at a time. Act 5 teaches it to detect, load, and check English, Spanish, and Portuguese simultaneously.
 
 ### What Changed
 

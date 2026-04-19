@@ -10,6 +10,8 @@ Act 1 forged your data structures. Act 2 gave them a voice through Bedrock. Act 
 
 > **Difficulty: Medium**
 
+Our CLI adventure works, but it's trapped in a terminal — one player, one session, no way to share the experience. Discord is where the players are, and a bot is how we reach them. This stage connects Crónica to Discord's gateway, teaches you the poise framework, and gets your first slash command responding. Everything in Acts 3-5 builds on this foundation.
+
 > [!info] What You'll Learn
 > - How Discord bots connect via a WebSocket "gateway"
 > - The poise framework and how it wraps serenity
@@ -233,6 +235,8 @@ You should see the bot come online in your Discord server. Type `/ping` and it s
 > ```
 > Guild registration is instant. Switch back to global before deploying.
 
+The bot awakens and responds to `/ping`, but it has no memory — no characters, no quests, no identity. Next stage, we'll build the character creation wizard with Discord buttons and shared state.
+
 ### Checkpoint
 
 - [ ] Bot connects and shows as online in Discord
@@ -245,6 +249,8 @@ You should see the bot come online in your Discord server. Type `/ping` and it s
 ## Stage 16 — Character Creation
 
 > **Difficulty: Hard**
+
+A bot that pongs is a parlor trick. Players need to create characters — pick a realm, choose a language, allocate stats — all through Discord's visual interface. This is the hardest stage in Act 3 because it introduces multi-step interactive flows: buttons, collectors, shared mutable state, and Discord's unforgiving 3-second interaction deadline. Master this pattern and every future command becomes a variation on the same theme.
 
 > [!info] What You'll Learn
 > - Multi-step interactive flows with Discord buttons
@@ -274,6 +280,8 @@ In Rust/poise, we don't have a `View` class. Instead we:
 3. Respond to that click with the next step
 
 ### Shared State: Storing Characters
+
+Right now our `Data` struct is empty — the bot has no memory of any player or character. We need a thread-safe map that multiple concurrent commands can read and write without data races. We need `Arc<RwLock<...>>`.
 
 First, update `Data` to hold characters in memory. We need `Arc<RwLock<...>>` because multiple commands might access the map concurrently:
 
@@ -611,6 +619,8 @@ Discord requires you to respond to an interaction within **3 seconds**. If your 
 | Two users' buttons interfere | Always filter the collector by `author_id` |
 | Stats go above 4 or below 0 | Check bounds before incrementing/decrementing |
 
+Characters can be forged through Discord's interface now, but they have nowhere to go — no quest, no AI narrator, no adventure. Next stage, we'll wire the AI from Act 2 into Discord and build the `/play` command.
+
 ### Checkpoint
 
 - [ ] `/create` shows a realm selection embed with 4 buttons
@@ -625,6 +635,8 @@ Discord requires you to respond to an interaction within **3 seconds**. If your 
 ## Stage 17 — The Play Command
 
 > **Difficulty: Hard**
+
+Characters exist in Discord, but they're static — portraits hanging on a wall with no story to tell. We need the `/play` command that sends character context to the AI, waits for a narrated scene, and presents it as a rich embed with choice buttons. The catch: AI calls take seconds, and Discord demands a response in three. This stage teaches the defer-then-edit pattern that every bot with external API calls must master.
 
 > [!info] What You'll Learn
 > - Deferring interactions for slow operations (AI calls)
@@ -835,6 +847,8 @@ Key points:
 | AI response isn't valid JSON | Add error handling: try parsing, fall back to a default scene |
 | `drop(chars)` — why? | Holding a `RwLock` read guard across an `.await` blocks all writers. Drop it before the AI call |
 
+Scenes appear and choices beckon, but the buttons are decorative — clicking them does nothing yet. Next stage, we'll wire up button interactions, modals for custom actions, and the Fortune spend menu.
+
 ### Checkpoint
 
 - [ ] `/play` shows "Bot is thinking..." then displays a scene embed
@@ -848,6 +862,8 @@ Key points:
 ## Stage 18 — Button Interactions
 
 > **Difficulty: Medium**
+
+The scene is set and the buttons glow, but clicking them yields silence — the bot doesn't know how to handle interactions that arrive minutes after the command returned. We need a persistent event handler that catches every button click and modal submission across the entire bot's lifetime, routing them by ID to the right logic. This is the nervous system that makes the bot feel alive.
 
 > [!info] What You'll Learn
 > - The `event_handler` field on `FrameworkOptions` for catching all Discord events
@@ -1171,6 +1187,8 @@ async fn handle_fortune_spend(
 | "Interaction already acknowledged" | You responded twice to the same interaction. Each `ComponentInteraction` gets exactly one response |
 | Fortune buttons affect wrong user | Always key session lookups by `mci.user.id`, not a global variable |
 
+Choices flow, modals open, and Fortune tokens spend — but combat is still missing from Discord. The CLI combat engine from Act 2 needs a visual face: HP bars, stat-based action buttons, and exchange-by-exchange updates. Next stage, we'll build the combat UI.
+
 ### Checkpoint
 
 - [ ] Clicking a choice button triggers the AI and updates the scene
@@ -1185,6 +1203,8 @@ async fn handle_fortune_spend(
 ## Stage 19 — Combat UI
 
 > **Difficulty: Hard**
+
+Exploration works in Discord, but when combat erupts, there's no visual representation — no HP bars, no tactical choices, no sense of danger. The CLI combat engine from Act 2 needs a Discord face: embeds that show both combatants' health at a glance, stat-based action buttons that make the player *think* about their approach, and exchange-by-exchange updates that build tension with every click.
 
 > [!info] What You'll Learn
 > - Building HP bar visualizations in embed fields
@@ -1464,6 +1484,8 @@ async fn handle_combat_utility(
 | Buttons overflow (more than 5 per row) | Split into multiple `CreateActionRow`s — max 5 buttons each |
 | Combat state lost between exchanges | Store enemy HP and combat state in `GameSession`, not local variables |
 
+Combat blazes through Discord with HP bars and margin bands, but players can't inspect their character or manage their gear between fights. Next stage, we'll build the `/stats` and `/inventory` commands.
+
 ### Checkpoint
 
 - [ ] Combat embed shows both HP bars with block visualization
@@ -1479,6 +1501,8 @@ async fn handle_combat_utility(
 ## Stage 20 — Stats and Inventory
 
 > **Difficulty: Medium**
+
+Players can fight and explore, but they're flying blind — no way to check their character sheet between encounters, no way to see what they're carrying or use an item outside of combat. We need read-only commands that display character state as rich embeds and an inventory system with select menus for item management. These utility commands round out the player experience.
 
 > [!info] What You'll Learn
 > - Rich embeds with multiple fields for character sheets
@@ -1637,6 +1661,8 @@ commands: vec![ping(), create(), play(), stats(), inventory()],
 | Lock held across await | Clone the data you need, then `drop(lock)` before any `.await` |
 | Ephemeral message visible to others | Double-check `.ephemeral(true)` is set on the reply |
 
+Players can inspect their heroes and manage their gear now, but completed quests vanish into the void — no permanent record, no shared legend. Next stage, we'll build the chronicle channel where finished adventures are published for all to read.
+
 ### Checkpoint
 
 - [ ] `/stats` shows a formatted character sheet (ephemeral)
@@ -1651,6 +1677,8 @@ commands: vec![ping(), create(), play(), stats(), inventory()],
 
 > **Difficulty: Medium**
 
+Quests end, but their stories die with the session — no permanent record, no shared legend, no way for other players to read about your triumphs. We need a chronicle system that publishes completed adventures to a dedicated Discord channel, transforming ephemeral gameplay into a permanent, shared narrative. This stage teaches cross-channel posting and multi-embed messages.
+
 > [!info] What You'll Learn
 > - Posting messages to a specific channel by ID (`ChannelId::send_message`)
 > - Building multi-embed chronicle entries per spec §9.2
@@ -1659,7 +1687,7 @@ commands: vec![ping(), create(), play(), stats(), inventory()],
 
 ### The Chronicle Concept
 
-When a player completes a quest, their story gets published to `#the-chronicle` — a read-only channel where everyone can see completed adventures. Each chronicle entry is a formatted embed with the quest narrative, character stats at completion, and key moments.
+When a player completes a quest, their story gets published to `#the-chronicle` — a read-only channel where everyone can see completed adventures. This exists because shared stories create community: players read each other's chronicles, recognize rival characters, and feel part of a living world. Each chronicle entry is a formatted embed with the quest narrative, character stats at completion, and key moments.
 
 **Python comparison:**
 ```python
@@ -1803,6 +1831,8 @@ commands: vec![ping(), create(), play(), stats(), inventory(), chronicle()],
 | Too many embeds | Discord allows max 10 embeds per message — truncate long stories |
 | `guild_only` not set | Without it, `ctx.guild_id()` returns `None` in DMs and the command panics |
 
+Chronicles are published and legends are shared, but there's no competition — no way to see who the mightiest adventurer is. Next stage, we'll build the leaderboard and complete Act 3's command roster.
+
 ### Checkpoint
 
 - [ ] `/chronicle` publishes the quest story to `#the-chronicle`
@@ -1817,6 +1847,8 @@ commands: vec![ping(), create(), play(), stats(), inventory(), chronicle()],
 ## Stage 22 — Leaderboard
 
 > **Difficulty: Easy**
+
+Players create characters, fight monsters, and publish chronicles — but there's no sense of competition or community ranking. Who's the mightiest hero? Who's explored the most? We need a leaderboard that reads from shared state, sorts characters by power, and displays the results in a clean table-style embed. This is also the final command in Act 3, completing the bot's feature set before we add persistence.
 
 > [!info] What You'll Learn
 > - Sorting and ranking data from shared state
@@ -1928,6 +1960,8 @@ With all commands complete, your `FrameworkOptions` should look like this:
 | Monospace formatting breaks | Use backtick code blocks (` ``` `) and fixed-width padding |
 | Names overflow columns | Use the `truncate()` helper from Stage 17 |
 | Lock held across await | Clone into a Vec and `drop(chars)` before any `.await` calls |
+
+The leaderboard crowns champions and the command roster is complete — but restart the bot and every hero vanishes, every chronicle forgotten. In Act 4, we'll give Crónica a memory with SQLite persistence, proper error handling, and a full progression system.
 
 ### Checkpoint
 

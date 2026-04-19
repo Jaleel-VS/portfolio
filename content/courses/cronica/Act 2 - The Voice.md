@@ -10,6 +10,8 @@ Act 1 gave you structs, enums, dice, serialization, and a quest engine — all s
 
 > **Difficulty: Medium**
 
+Our quest engine ticks and our characters have stats, but the narrator's throne is empty — every scene description is hardcoded, every outcome predetermined. We need to reach across the network to an AI that can improvise, react, and weave stories we didn't write. This stage cracks open async programming and makes your first call to the voice that will narrate every adventure from here on.
+
 > [!info] What You'll Learn
 > - What async programming is and why network code needs it
 > - The `tokio` runtime and `#[tokio::main]`
@@ -216,6 +218,8 @@ If your AWS credentials are configured, you'll see the AI narrate a tavern scene
 >
 > **Missing `#[tokio::main]`** — Without it, `async fn main()` won't compile. The error says "main function is not allowed to be async" — the macro is what makes it work.
 
+The voice speaks — but it speaks freely, without structure or constraint. We can hear the AI, but we can't control *what* it says or *how* it formats its response. Next stage, we'll craft the prompt that shapes the narrator's every word.
+
 ### Checkpoint
 
 - [ ] `cargo run` compiles without errors
@@ -228,6 +232,8 @@ If your AWS credentials are configured, you'll see the AI narrate a tavern scene
 
 > **Difficulty: Medium**
 
+We can call the AI, but right now it's a wild oracle — it doesn't know our character's name, their realm, or what kind of quest they're on. Without structured instructions, the narrator rambles aimlessly. We need a prompt architecture that injects game state into every AI call, demands structured JSON responses, and shapes the narrator's voice to match Crónica's dark fantasy tone.
+
 > [!info] What You'll Learn
 > - How system prompts shape AI behavior
 > - Building a `PromptBuilder` struct that assembles context from game state
@@ -236,7 +242,7 @@ If your AWS credentials are configured, you'll see the AI narrate a tavern scene
 
 ### The Prompt Architecture
 
-The spec (§12) defines what the AI needs to know to narrate well:
+The spec (§12) defines what the AI needs to know to narrate well. Each context element exists for a specific reason — without the realm, the AI can't set the scene; without stats, it can't propose mechanically meaningful choices; without the current beat and tension, it can't pace the story:
 
 | Context | Example | Why |
 |---------|---------|-----|
@@ -427,6 +433,8 @@ One gotcha: literal curly braces in the JSON schema must be **doubled** — `{{`
 >
 > **Forgetting to update the prompt when stats change** — The prompt is built fresh each turn, so it always reflects current HP, tension, etc. Don't cache it across turns.
 
+We can instruct the narrator now, but the JSON it returns is still just a raw string — we can't access the choices, the tension level, or the narration as typed Rust data. Next stage, we'll parse that JSON into structs the compiler can check.
+
 ### Checkpoint
 
 - [ ] `PromptBuilder::build_system_prompt()` returns a string containing character stats
@@ -439,6 +447,8 @@ One gotcha: literal curly braces in the JSON schema must be **doubled** — `{{`
 
 > **Difficulty: Medium**
 
+The AI speaks, but its words arrive as a raw string — we can print them, but we can't extract the three choices, read the tension level, or check the quest beat without manual string parsing. We need typed Rust structs that mirror the AI's JSON output so the compiler catches mismatches before the player ever sees a broken scene. This is where serde earns its keep.
+
 > [!info] What You'll Learn
 > - Defining Rust structs that mirror the AI's JSON output
 > - `serde_json::from_str` for parsing JSON into typed structs
@@ -446,6 +456,8 @@ One gotcha: literal curly braces in the JSON schema must be **doubled** — `{{`
 > - The `Option<T>` type for fields that may be absent
 
 ### The Response Structs
+
+Right now we have a raw text string from the AI, but no way to access individual fields like `narration` or `choices` without fragile string manipulation. We need Rust structs that serde can deserialize the JSON into directly.
 
 The AI returns JSON matching the schema we defined in Stage 10. Now we build Rust types to receive it:
 
@@ -614,6 +626,8 @@ pub async fn call_ai_with_retry(
 >
 > **Not handling code fences** — Claude often wraps JSON in ` ```json ... ``` ` blocks. The `strip_code_fences` function handles this, but forgetting it means `serde_json::from_str` fails on the backticks.
 
+We can parse the AI's words into typed data now, but there's no loop — no way for the player to choose, roll dice, and hear what happens next. Next stage, we'll wire everything into a playable game loop.
+
 ### Checkpoint
 
 - [ ] `parse_ai_response` successfully parses a sample JSON string into `AiResponse`
@@ -626,6 +640,8 @@ pub async fn call_ai_with_retry(
 ## Stage 12 — The Game Loop: A Playable CLI Adventure
 
 > **Difficulty: Hard**
+
+We have all the ingredients — AI calls, structured responses, dice rolls, stat checks — but they're scattered across separate functions with no orchestration. There's no way for a player to sit down and *play*. We need the game loop: the heartbeat of every game ever made, from Pong to Elden Ring. This stage wires everything together into a real, playable CLI adventure.
 
 > [!info] What You'll Learn
 > - Reading user input with `tokio::io` (async stdin)
@@ -954,6 +970,8 @@ let system_prompt = self.prompt_builder.build_system_prompt(&self.character);
 >
 > **Parsing "1" vs "01"** — `input.parse::<usize>()` handles both. But empty input or letters return `Err`, which our match catches gracefully.
 
+We have a playable adventure now — but combat is still just a stat check with a single outcome. Real combat needs multiple exchanges, a margin band system, and the tension of not knowing whether your next swing will be a crushing blow or a catastrophic fumble. Next stage, we'll forge the combat system.
+
 ### Checkpoint
 
 - [ ] `cargo run` starts an interactive game session
@@ -968,6 +986,8 @@ let system_prompt = self.prompt_builder.build_system_prompt(&self.character);
 
 > **Difficulty: Hard**
 
+Our game loop handles exploration and choices, but combat is a gaping hole — a single stat check that either succeeds or fails, with no drama, no back-and-forth, no sense of danger. Real combat needs multiple exchanges where the tide can turn, where a desperate defend might save your life, and where the margin between triumph and catastrophe is measured in a single die roll. This stage builds the combat engine.
+
 > [!info] What You'll Learn
 > - The 4-tier margin band system from spec §6
 > - Modeling combat state with `CombatState` and `Enemy`
@@ -977,9 +997,9 @@ let system_prompt = self.prompt_builder.build_system_prompt(&self.character);
 
 ### Combat Philosophy
 
-Crónica doesn't use traditional turn-based RPG combat with initiative rolls and attack bonuses. Instead, combat is a series of **narrative exchanges** — each one a dramatic moment where the player acts and the outcome is determined by a single roll against the enemy's **threat DC**.
+Crónica doesn't use traditional turn-based RPG combat with initiative rolls and attack bonuses. Instead, combat is a series of **narrative exchanges** — each one a dramatic moment where the player acts and the outcome is determined by a single roll against the enemy's **threat DC**. This design exists because traditional RPG combat (roll to hit, roll damage, next turn) is tedious in a text-based game — it generates dozens of mechanical steps with no narrative payoff. Exchange-based combat compresses each round into a single dramatic moment with a clear outcome.
 
-The result falls on a **4-tier margin band**:
+The result falls on a **4-tier margin band** that maps the gap between your roll and the DC to narrative intensity — the wider the margin, the more dramatic the outcome:
 
 | Tier | Margin | Name | Effect |
 |------|--------|------|--------|
@@ -989,6 +1009,8 @@ The result falls on a **4-tier margin band**:
 | 4 | <= -5 | Failure | No damage dealt, full damage taken |
 
 ### The Enemy
+
+Right now we have a margin band system on paper, but no data type to represent the creatures our heroes will face. We need an enemy struct — deliberately simple, because complexity in the enemy model would slow down the narrative pace.
 
 Enemies are simple — a single threat DC, HP, and damage die:
 
@@ -1397,6 +1419,8 @@ if ai_response.quest_beat == "combat" {
 >
 > **Forgetting the exchange limit** — Without `max_exchanges`, combat could loop forever if neither side dies. Always cap at 3-5 exchanges.
 
+Combat sings with steel and consequence now — but when the quest ends, the story evaporates. No record, no legend, no proof the adventure happened. Next stage, we'll build the chronicle compiler that transforms raw session logs into literary prose.
+
 ### Checkpoint
 
 - [ ] Combat runs as a sub-loop within the game
@@ -1410,6 +1434,8 @@ if ai_response.quest_beat == "combat" {
 ## Stage 14 — The Chronicle Compiler: Writing Your Story
 
 > **Difficulty: Medium**
+
+The quest ends, the hero survives (or doesn't), and then... nothing. The raw session log reads like a spreadsheet: "Turn 3: Kick down the door — success (margin +7)." That's not a legend — that's bookkeeping. We need a compiler that takes those mechanical summaries and transforms them into a literary short story worthy of the chronicle. This stage also introduces the multi-model strategy: fast and cheap for gameplay, slow and beautiful for the final record.
 
 > [!info] What You'll Learn
 > - Calling a different Bedrock model (Sonnet for quality writing)
@@ -1496,7 +1522,7 @@ Transform mechanical outcomes into narrative moments."#,
 
 ### The Chronicle Entry Format
 
-Per spec §9.2, the chronicle is formatted as a dated entry:
+Per spec §9.2, the chronicle is formatted as a dated entry. The box-drawing border and formal structure exist because chronicles are meant to be *shared* — posted in Discord's `#the-chronicle` channel (Act 3) where other players can read them. A plain text dump wouldn't feel like a legend worth reading:
 
 ```rust
 use chrono::Local; // or just use a simple date string
@@ -1605,6 +1631,8 @@ Game Start
 > **Sending raw game mechanics to the chronicler** — The prompt explicitly says "Do NOT include dice rolls, DCs, stats." But if your turn summaries contain "DC 14 STR check margin +3", the AI might echo them. Keep summaries narrative: "Kicked down the door — success" not "STR check DC 14 roll 17 margin +3".
 >
 > **Not handling empty sessions** — If the player quits immediately, `turn_summaries` is empty. The early return handles this gracefully.
+
+The voice has spoken and the chronicle is written — but only you can hear it, alone in a terminal. In Act 3, we'll give Crónica a gateway to the world: a Discord bot where players summon heroes with slash commands and write legends that echo across channels.
 
 ### Checkpoint
 

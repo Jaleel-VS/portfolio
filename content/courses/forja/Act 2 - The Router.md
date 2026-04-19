@@ -30,6 +30,8 @@ In this act you'll build a **router** — the core of every web framework. By th
 
 **Goal:** Register handler functions for specific method+path combinations, and dispatch incoming requests to the right handler.
 
+Every web framework begins here. Right now your server handles all requests in one monolithic function with a growing chain of `if/else` branches. Two routes is manageable; ten is chaos. This stage solves the dispatch problem: mapping incoming requests to the right handler function, so adding a new endpoint is one line of code instead of another branch in a tangled conditional.
+
 ### The Problem
 
 Right now your `handle_connection` probably looks something like this:
@@ -126,6 +128,8 @@ There are three `Fn` traits:
 We use `Fn` because a route handler should be callable for every matching request, not just once.
 
 ### The Route Struct
+
+Right now we have handler closures but no way to associate them with a specific method and path. We need a container that binds these three things together — the method to match, the path to match, and the function to call.
 
 ```rust
 struct Route {
@@ -470,6 +474,8 @@ In JavaScript, closures capture by reference and the garbage collector handles c
 
 ### Checkpoint — Stage 9
 
+You've forged the routing table — the backbone of every web framework. But real APIs don't have static paths like `/users`. They have dynamic segments like `/users/42`. Next, we'll teach the router to extract parameters from the URL.
+
 You now have:
 - A `Router` struct with a `Vec<Route>`
 - `get()`, `post()`, `delete()` convenience methods
@@ -484,6 +490,8 @@ This is the skeleton of every web framework. Express, Flask, Actix-web, Axum —
 ## Stage 10 — Path Parameters
 
 **Goal:** Extract dynamic segments from URLs like `/users/:id` and make them available to handlers.
+
+Your router can match exact paths, but real APIs are built on dynamic URLs. You can't register a separate route for every user ID, every product, every post. This stage solves the extraction problem: teaching your router to recognize patterns like `/users/:id`, pull out the dynamic value, and hand it to the handler — the same mechanism that powers API Gateway's `{proxy+}` and every web framework's route parameters.
 
 ### The Problem
 
@@ -522,6 +530,8 @@ We'll split both the route pattern and the request path into segments, then comp
 A segment starting with `:` is a parameter. Everything else must match exactly.
 
 ### Adding Params to Request
+
+Right now our `Request` struct has method, path, headers, and body — but nowhere to store the dynamic values extracted from the URL. We need a place for the router to deposit extracted parameters so handlers can read them.
 
 First, let's give `Request` a place to store extracted parameters:
 
@@ -739,6 +749,8 @@ router.get("/users/:id", |req| { /* ... */ });
 This is the same issue in Express.js and Flask. API Gateway avoids it by using a tree structure instead of linear search — but linear search is simpler and fine for learning.
 
 ### Checkpoint — Stage 10
+
+Your router now extracts dynamic values from URLs — the same pattern-matching engine inside API Gateway and every web framework. But URLs carry more than just the path: query strings like `?page=2&limit=10` are how clients pass optional parameters. That's next.
 
 Full `main.rs` at this point:
 
@@ -981,6 +993,8 @@ fn main() {
 
 **Goal:** Parse `?key=value&other=thing` from the URL and make it available to handlers.
 
+Path parameters identify *which* resource you want. But what about optional modifiers — pagination, sorting, filtering, search terms? You can't encode every option in the URL path. Query strings solve this: they carry optional key-value pairs after the `?` in the URL, and every search engine, API, and web app depends on them.
+
 ### The Problem
 
 Query strings are how clients pass optional parameters without changing the URL path:
@@ -1006,6 +1020,8 @@ The query string starts after `?` in the URL and consists of `key=value` pairs s
 Special characters are percent-encoded: spaces become `+` or `%20`, `&` becomes `%26`, etc. We'll handle basic decoding.
 
 ### Splitting Path and Query
+
+Right now, `request.path` contains the full URL including the query string — so `/search?q=rust` is treated as a single path that won't match any route. We need to split the path from the query string before routing, and store the parsed key-value pairs for handlers to access.
 
 Right now, `request.path` contains the full URL including the query string. We need to split it. Add a `query` field to `Request`:
 
@@ -1208,6 +1224,8 @@ This matches how every framework works: Express, Flask, API Gateway — they all
 
 ### Checkpoint — Stage 11
 
+Your server now handles the full URL — path, parameters, and query strings. But so far, all data flows from client to server through the URL. POST requests carry data in the *body*, and that's how forms submit and APIs receive JSON payloads. Time to read the other half of HTTP.
+
 You now have:
 - Query string parsing with percent-decoding
 - `request.query` HashMap for raw access
@@ -1220,6 +1238,8 @@ You now have:
 ## Stage 12 — POST Bodies
 
 **Goal:** Read request bodies, parse form data and JSON. Introduce your first external crate: serde.
+
+Right now your server can only receive data through the URL — path parameters and query strings. But creating a user, submitting a form, or sending a JSON payload all require data in the request *body*. This stage opens the forge to incoming material: parsing form submissions and JSON payloads, and introducing serde — the serialization framework that every Rust web application depends on.
 
 ### The Problem
 
@@ -1345,6 +1365,8 @@ impl Request {
 **`DeserializeOwned`** means "can deserialize into an owned value (no borrowed data)." For most cases, this is what you want.
 
 ### Define a Data Struct
+
+Right now we can parse arbitrary JSON with `serde_json::Value`, but we have no way to enforce that incoming data has the fields we expect. A missing `email` field would silently become `null`. We need typed structs that serde validates against — catching malformed input at the boundary.
 
 ```rust
 #[derive(Debug, Serialize, Deserialize)]
@@ -1525,6 +1547,8 @@ The `json!` macro is usually cleaner for building JSON responses. It accepts any
 
 ### Checkpoint — Stage 12
 
+Your server can now receive data in every way HTTP allows — URL paths, query strings, form bodies, and JSON payloads. You have all the pieces to build a real API. Next, we'll assemble them into a complete REST API for a todo list, which will also force you to solve the shared mutable state problem.
+
 Full `main.rs` at this point — I'll show just the new/changed parts since the checkpoint code is getting long. The full structure is:
 
 ```rust
@@ -1588,6 +1612,8 @@ This is a real web framework. Small, but real.
 ## Stage 13 — The JSON API
 
 **Goal:** Build a complete REST API for a todo list — GET, POST, DELETE — with JSON throughout. This is where everything comes together.
+
+You've built routing, parameter extraction, query parsing, and body parsing as separate pieces. But a real API needs all of them working together — and it needs *shared state* that persists across requests. This stage is the crucible where every piece you've forged gets combined into a working REST API, and where you'll face Rust's most important concurrency pattern: `Arc<Mutex<T>>`.
 
 ### REST Conventions
 
@@ -1871,6 +1897,8 @@ let todos = todos.lock().unwrap();  // DEADLOCK if Handler A holds todos
 
 ### Checkpoint — Stage 13
 
+You've forged a complete REST API with shared state — the same architecture behind every Lambda + DynamoDB service. But right now, every request is a black box: you can't see what's happening, how long it takes, or what went wrong. Next, we add visibility with logging middleware.
+
 You now have a working REST API with:
 - CRUD operations (Create, Read, Delete)
 - Shared mutable state via `Arc<Mutex<T>>`
@@ -1883,6 +1911,8 @@ You now have a working REST API with:
 ## Stage 14 — Middleware
 
 **Goal:** Add a logging middleware that prints method, path, status code, and duration for every request.
+
+Your API works, but you're flying blind. When a request is slow, you don't know. When an error occurs, you don't see it. When traffic patterns change, you can't tell. This stage adds the observability layer — middleware that wraps every request with timing and logging, giving you the same visibility that CloudWatch Logs provides for API Gateway.
 
 ### What Is Middleware?
 
@@ -2024,6 +2054,8 @@ Every request logged with method, path, status, and timing. This is what you see
 
 ### Checkpoint — Stage 14
 
+Every request now leaves a trace — method, path, status, and timing. You've built the same logging pipeline that CloudWatch captures for API Gateway. One more piece remains for Act 2: serving static files from a directory, so your server can host a complete website alongside the API.
+
 You now have:
 - Request logging with method, path, status code, and duration
 - Understanding of the middleware pattern
@@ -2034,6 +2066,8 @@ You now have:
 ## Stage 15 — Static File Server
 
 **Goal:** Serve an entire directory of files, with directory listing, `index.html` fallback, and proper MIME types.
+
+Your API routes return JSON, but a real web application also needs HTML pages, CSS stylesheets, JavaScript bundles, and images. Right now there's no way to serve a directory of files — you'd have to register a route for every single file. This stage turns your server into a complete static file host, the same thing S3 static website hosting and `python -m http.server` provide.
 
 ### The Problem
 
@@ -2332,6 +2366,8 @@ The `safe_path` function is critical. Without it, a request for `/../../../etc/p
 This is the same protection S3 has — you can't access objects outside your bucket, no matter what key you request. CloudFront adds another layer by only forwarding requests that match your origin path pattern.
 
 ### Checkpoint — Stage 15
+
+Your server is now a complete web platform — API routes for dynamic data, static file serving for the frontend. You've built the equivalent of API Gateway + S3 static hosting in a single binary. But there's a fundamental limitation: everything runs on a single thread. In Act 3, you'll feel that pain and fix it with concurrency.
 
 You now have a complete static file server with:
 - File serving with MIME type detection

@@ -12,6 +12,8 @@
 
 *Difficulty: Very Easy*
 
+Every forge starts cold. Before you can shape metal, you need to light the fire and lay out your tools. This stage solves the most fundamental problem: getting a Rust project running on your machine so you have a working anvil to hammer on for the rest of the course.
+
 Before we touch networking, let's make sure Rust is working and understand the project structure. If you've used `npm init` or `pip init`, Cargo is Rust's equivalent — it's the build tool, package manager, and test runner all in one.
 
 ### 1.1 — Create the project
@@ -154,6 +156,8 @@ The fix: `let mut port = 7878;` — but we don't need mutation here.
 
 ### Stage 1 checkpoint
 
+Your tools are laid out and the forge is lit. But a forge that only prints text is a forge with no metal — next, we feed it a TCP socket and start listening for connections from the outside world.
+
 Your `src/main.rs` should be:
 
 ```rust
@@ -179,6 +183,8 @@ Run `cargo run` and confirm you see: `Forja server will listen on port 7878`
 ## Stage 2 — The Listener
 
 *Difficulty: Easy*
+
+Right now we have a Rust project that compiles and prints text, but it can't talk to the outside world. A web server that can't accept connections is no server at all. This stage solves the foundational problem: opening a port and listening for incoming TCP connections — the raw plumbing that every web server, load balancer, and proxy is built on.
 
 Time to open a socket and listen for connections. This is the foundation of every web server, load balancer, and proxy you've ever used.
 
@@ -423,6 +429,8 @@ Again, the compiler tells you the fix. This is Rust's philosophy: the compiler i
 
 ### Stage 2 checkpoint
 
+You've opened the forge door and raw bytes are flowing in. But those bytes are just a wall of text — you can't tell a GET from a POST, a path from a header. Next, we'll parse that raw stream into something meaningful.
+
 Your `src/main.rs`:
 
 ```rust
@@ -460,6 +468,8 @@ You should see the raw HTTP request printed in the server terminal.
 ## Stage 3 — What the Browser Sent
 
 *Difficulty: Easy*
+
+We can receive raw bytes from a client, but right now they're an undifferentiated blob of text. We can't tell what the client wants — which page, which action, which protocol version. This stage solves the parsing problem: extracting structured meaning from the raw HTTP request line so we know what to do with each connection.
 
 We can see the raw HTTP request. Now let's parse it — extract the method, path, and HTTP version from the request line.
 
@@ -625,6 +635,8 @@ let parts = request_line.split_whitespace().collect::<Vec<&str>>();
 
 ### Stage 3 checkpoint
 
+You can now read the client's intent — method, path, version. But a forge that only listens and never speaks back is useless. Next, we'll send our first HTTP response and close the loop.
+
 Your `src/main.rs`:
 
 ```rust
@@ -673,6 +685,8 @@ curl http://localhost:7878/hello
 ## Stage 4 — Your First Response
 
 *Difficulty: Easy*
+
+Right now we have a server that listens and parses, but the client gets nothing back — curl hangs, the browser shows an error. A conversation requires two sides. This stage completes the HTTP request-response cycle: your server will speak back for the first time, and you'll see HTML rendered in a real browser from bytes you forged yourself.
 
 We can read requests. Now let's send something back. Time to learn the HTTP response format.
 
@@ -872,6 +886,8 @@ Open each URL in your browser to see them rendered.
 
 ### Stage 4 checkpoint
 
+The forge now speaks — you've completed the full HTTP request-response cycle. But we've been ignoring half the request: the headers. They carry critical metadata like authentication tokens, content types, and the client's identity. Next, we'll parse them.
+
 Your `src/main.rs`:
 
 ```rust
@@ -933,6 +949,8 @@ curl -v http://localhost:7878/about
 ## Stage 5 — The Headers
 
 *Difficulty: Medium*
+
+We can parse the request line and send responses, but we're throwing away everything between the first line and the body — the headers. Headers are the control plane of HTTP: they tell you who the client is, what format they expect, whether they're authenticated, and how to cache the response. Without parsing them, your server is flying blind.
 
 We've been ignoring the request headers. Time to parse them — they contain critical information like the hostname, content type, and authentication tokens.
 
@@ -1052,7 +1070,7 @@ New concepts:
   - `split_once(':')` — splits the string at the first `:`, returning `Option<(&str, &str)>`. Like Python's `line.split(':', 1)`, but returns an `Option` instead of a list.
   - `if let` — pattern matching in an `if` statement. If `split_once` returns `Some((key, value))`, we enter the block with `key` and `value` bound. If it returns `None` (no `:` found), we skip the line. This is more concise than a full `match`.
 
-- **`key.trim().to_lowercase()`** — HTTP headers are case-insensitive (`Content-Type` = `content-type`). We normalize to lowercase for consistent lookups.
+- **`key.trim().to_lowercase()`** — HTTP headers are case-insensitive (`Content-Type` = `content-type`). We normalize to lowercase for consistent lookups. This is a deliberate design choice in the HTTP specification: header names are case-insensitive so that servers and proxies written by different teams can interoperate without worrying about capitalization conventions.
 
 - **`{headers:#?}`** — the `#?` format specifier uses "pretty debug" formatting — it prints the HashMap with nice indentation. `?` is compact debug, `#?` is pretty debug.
 
@@ -1106,6 +1124,8 @@ let mut lines = request_str.lines();
 `from_utf8_lossy` returns a `Cow<str>` (Copy-on-Write) — a type that's *either* a borrowed `&str` or an owned `String`. If you don't call `.to_string()`, the borrow checker might complain when you try to use `lines` after `request_str` is dropped. Converting to `String` makes ownership clear.
 
 ### Stage 5 checkpoint
+
+Your server now understands the full anatomy of an HTTP request — method, path, and every header. But we're still building HTML strings by hand inside Rust code. Real web servers serve files from disk — HTML, CSS, JavaScript. That's next.
 
 Your `src/main.rs`:
 
@@ -1192,6 +1212,8 @@ curl http://localhost:7878/headers
 ## Stage 6 — Serving Files
 
 *Difficulty: Medium*
+
+Right now we have hardcoded HTML strings embedded in Rust code. Every time you want to change a page, you recompile the server. That's not how the web works — real servers read files from disk and send them to the browser. This stage bridges the gap between your server and the filesystem, turning Forja into something that can serve a real website with HTML, CSS, and JavaScript.
 
 Hardcoded HTML strings won't scale. Let's serve actual files from disk — HTML, CSS, JavaScript — like a real web server.
 
@@ -1415,6 +1437,8 @@ This is how every static file server works — nginx, Apache, S3 static hosting,
 
 ### Stage 6 checkpoint
 
+Your server now reads from the filesystem and serves real web pages with CSS and JavaScript. But there's a gaping hole: no error handling. A missing file returns nothing useful, and a malicious path like `/../../../etc/passwd` could expose your entire system. Time to harden the forge.
+
 Your `src/main.rs`:
 
 ```rust
@@ -1518,6 +1542,8 @@ cargo run
 ## Stage 7 — 404 Not Found
 
 *Difficulty: Easy*
+
+Right now we have a file server, but it's fragile and dangerous. Missing files produce cryptic errors, unsupported methods silently succeed, and path traversal attacks can read any file on your system. This stage tempers the raw metal — adding proper HTTP status codes, security protections, and user-friendly error pages that tell clients exactly what went wrong.
 
 We have a basic 404, but a real server needs proper error handling — different status codes, path traversal protection, and user-friendly error pages.
 
@@ -1741,6 +1767,8 @@ Open `http://localhost:7878/nonexistent` in your browser — you'll see a styled
 
 ### Stage 7 checkpoint
 
+Your server now handles errors gracefully and blocks path traversal attacks. But look at `handle_connection` — it's a sprawling function with parsing, routing, file serving, and error handling all tangled together. Time to forge proper structure with Rust structs and give your code the shape of a real framework.
+
 Your `src/main.rs` is the full listing above. Make sure your `public/` directory still has `index.html`, `style.css`, and `app.js` from Stage 6.
 
 **Test it:**
@@ -1757,6 +1785,8 @@ curl -X DELETE http://localhost:7878/  # 405 Method Not Allowed
 ## Stage 8 — The Request Struct
 
 *Difficulty: Medium*
+
+Right now we have loose variables — method, path, headers — scattered across a single monolithic function. Adding a new feature means threading more variables through more code. This stage solves the structural problem: we'll forge `Request` and `Response` types that bundle related data together, making the code readable, extensible, and ready for the routing system we'll build in Act 2.
 
 Our `handle_connection` function is getting long and messy. Time to refactor — we'll create proper `Request` and `Response` types. This is where Rust's ownership system really shows up.
 
@@ -1776,6 +1806,8 @@ class Request:
 In Express.js, the framework gives you a `req` object. In Rust, we'll use a **struct** — Rust's equivalent of a class (but without inheritance).
 
 ### 8.2 — Defining the Request struct
+
+Right now we have method, path, version, and headers as separate local variables with no connection between them. We can't pass "a request" to a function — we'd have to pass four separate arguments, and that list will only grow.
 
 Update `src/main.rs` — we'll rebuild it with proper structure:
 
@@ -1871,6 +1903,8 @@ Let's break down every new concept:
 - **`fn header(&self, name: &str) -> Option<&str>`** — a method that takes `&self` (borrows the Request immutably). The `&self` is like Python's `self` parameter, but explicit about borrowing. `&self` means "I'm reading from the Request but not modifying it."
 
 ### 8.3 — Defining the Response struct
+
+Right now we build responses by hand-formatting HTTP strings with `format!()` every time — duplicating the status line, header, and body assembly logic across every code path. One typo in a `\r\n` and the response is malformed.
 
 Add this after the `Request` impl block:
 
@@ -2154,6 +2188,8 @@ curl -X POST http://localhost:7878/
 Open `http://localhost:7878` in your browser — everything should work exactly as before, but the code is now clean and extensible.
 
 ### Stage 8 checkpoint — Complete final code
+
+You've forged the raw metal of Act 1 into clean, structured types. Your server has proper `Request` and `Response` abstractions — the building blocks every web framework is made of. In Act 2, you'll use these types to build a real router with path parameters, query strings, and JSON APIs.
 
 Your complete `src/main.rs`:
 

@@ -25,6 +25,8 @@ This is the hardest act in the course. Cryptography is unforgiving — a single 
 
 **Difficulty:** Medium | **Concepts:** Key derivation, arrays, slices, OsRng, hex encoding
 
+Your master password is a human-readable string — maybe 20 characters, maybe 40. AES-256 needs exactly 256 bits of high-entropy key material. You can't just pad the password with zeros or hash it with SHA-256 (which is catastrophically fast for attackers). This stage builds the bridge between a human secret and a cryptographic key, using Argon2id — the algorithm specifically designed to make brute-force attacks economically ruinous.
+
 > *"Deep beneath the vault lies the Salt Mines — ancient tunnels where crystalline salts are harvested. Each grain is unique, and when mixed with the Master Key in the Forge's furnace, they produce an unbreakable alloy. Without salt, two identical keys would produce identical alloys — and a thief who cracks one cracks them all."*
 
 ### Why You Can't Just Hash a Password
@@ -353,6 +355,8 @@ mod tests {
 
 Run with `cargo test`. All six should pass.
 
+You now have a key derivation function that turns a password into a 256-bit key — slowly, deliberately, and uniquely per vault. But a key without a cipher is just a number. In Stage 9, you'll build the Cipher that uses this key to actually encrypt and decrypt data.
+
 ### 8.6 — What to Try
 
 1. **Benchmark it.** Add `use std::time::Instant;` and measure how long `derive_key` takes. Try changing `ARGON2_M_COST` to `8192` (8 MiB) — notice how much faster it gets? That's the tradeoff: faster for you = faster for attackers.
@@ -462,6 +466,8 @@ mod tests {
 
 **Difficulty:** Hard | **Concepts:** AES-256-GCM, AEAD, Vec\<u8\>, slice splitting, custom error types, From trait
 
+You have a 256-bit key from Argon2id, but a key alone doesn't protect anything. This stage builds the encryption and decryption functions that transform readable JSON into indecipherable ciphertext — and back again. Critically, it uses *authenticated* encryption (AES-GCM), which means tampering with even a single byte of the encrypted vault will be detected and rejected. Without authentication, an attacker who can't read your passwords could still silently corrupt them.
+
 > *"In the deepest chamber of the Forge, the Cipher awaits — an ancient mechanism that transforms your relics into indecipherable glyphs. Feed it a key and your secrets, and it produces a sealed scroll that no one can read without the same key. But the Cipher does more than hide — it seals. If even a single glyph on the scroll is altered, the Cipher refuses to unseal it. Tampering is detected. Forgery is impossible."*
 
 ### What is Authenticated Encryption?
@@ -512,6 +518,8 @@ aes-gcm = "0.10"   # AES-256-GCM authenticated encryption
 ```
 
 ### 9.2 — Custom Error Type
+
+Right now our `derive_key` function returns `argon2::Error`, but encryption will introduce `aes_gcm::Error` and data validation errors. We can't return three different error types from the same function without a unifying type. A custom error enum solves this — each variant wraps a specific failure mode, and the `From` trait lets the `?` operator convert automatically.
 
 Before we write the crypto functions, we need a proper error type. Crypto operations can fail in multiple ways, and we want to distinguish them:
 
@@ -800,6 +808,8 @@ Add these tests to the `tests` module in `crypto.rs`:
 
 Run `cargo test`. All tests should pass. Pay special attention to `wrong_key_fails` and `tampered_ciphertext_fails` — these prove that GCM's authentication works. A cipher without authentication (like AES-CBC) would happily decrypt with the wrong key and return garbage instead of an error.
 
+With key derivation and authenticated encryption in hand, you're ready to define the binary file format that ties them together — the Vault Door in Stage 10.
+
 ### 9.6 — What to Try
 
 1. **Measure the overhead.** Encrypt a 1 KB plaintext and check the output size. It should be 1024 + 12 (nonce) + 16 (tag) = 1052 bytes. GCM adds exactly 28 bytes of overhead regardless of plaintext size.
@@ -1027,6 +1037,8 @@ mod tests {
 
 **Difficulty:** Hard | **Concepts:** Binary I/O, Read/Write traits, byte packing, Cursor, atomic file writes
 
+You have encryption and key derivation, but no way to persist an encrypted vault to disk. The challenge: you need metadata (salt, nonce, Argon2 parameters) *before* you can decrypt, but that metadata must be stored alongside the ciphertext. This stage defines a binary file format with a plaintext header and an encrypted payload — the physical structure that makes the vault a real file on disk rather than an in-memory exercise.
+
 > *"The Vault Door is no ordinary gate. It is inscribed with runes that declare its nature — 'IRONVAULT' in the old tongue — followed by sigils that encode the exact recipe for the alloy that seals it. Any smith who finds the door can read these runes and know what furnace settings to use. But without the Master Key itself, the runes are useless. The recipe is public. The key is not."*
 
 Until now, your vault has been a plaintext JSON file. Anyone who opens it in a text editor can read every password. In this stage, we replace that with a binary file format that embeds the cryptographic parameters in a plaintext header, followed by the encrypted vault payload.
@@ -1047,6 +1059,8 @@ This metadata must be readable *without* the key. So the file has two sections:
 The header is not secret. An attacker who reads it learns your Argon2 cost parameters and salt — both of which are designed to be public. The salt is random noise. The parameters tell the attacker "this will cost you 64 MiB per guess" — that's a feature, not a bug.
 
 ### 10.1 — The Header Struct
+
+Right now we have `encrypt()` and `decrypt()` functions that work on raw bytes, but no way to store the salt, nonce, and Argon2 parameters that the decryptor needs. We need a structured header that lives at the beginning of the file — readable without the key — followed by the encrypted payload.
 
 From the design spec (§4.1), the file layout is:
 
@@ -1419,6 +1433,8 @@ Add `tempfile` to your dev-dependencies for the filesystem tests:
 tempfile = "3"
 ```
 
+The vault file format is defined and tested — you can write encrypted data to disk and read it back. But there's no user-facing way to create or unlock a vault yet. Stage 11 wires up the password prompt, key derivation, and file I/O into the Master Key Ceremony.
+
 ### 10.6 — What to Try
 
 1. **Hex-dump your vault file.** After saving, run `xxd ~/.ironvault/vault.iron | head -5` in your terminal. You should see `IRONVAULT` in ASCII at the start, followed by binary data.
@@ -1440,6 +1456,8 @@ tempfile = "3"
 ## Stage 11 — The Master Key Ceremony
 
 **Difficulty:** Hard | **Concepts:** rpassword, interactive prompts, retry loops, process::exit, wiring it all together
+
+You have all the cryptographic primitives — key derivation, encryption, decryption, a binary file format — but they're disconnected functions. This stage wires them into the two most important user-facing operations: creating a new vault (`iv init`) and opening an existing one (`iv unlock`). This is where the vault becomes real — a user types a password, and either a new fortress is forged or an existing one opens its doors.
 
 > *"The Master Key Ceremony is a solemn rite. To forge a new vault, you must speak your secret word twice — once to declare it, once to confirm. The Forge listens, but it does not remember. Your word is consumed in the furnace, transformed into the key, and the word itself is destroyed. If you forget it, no locksmith in the realm can help you. The vault is sealed forever."*
 
@@ -1726,6 +1744,8 @@ cargo run -- unlock
 cargo run -- unlock
 ```
 
+The vault can be created and unlocked, but every command requires typing the master password and waiting for Argon2id. That's unusable for daily work. Stage 12 introduces session management — caching the derived key so you only authenticate once per session.
+
 ### 11.5 — What to Try
 
 1. **Create a vault, then hex-dump it.** `xxd ~/.ironvault/vault.iron | head` — you should see the IRONVAULT magic bytes and binary header data.
@@ -1747,6 +1767,8 @@ cargo run -- unlock
 ## Stage 12 — The Session Seal
 
 **Difficulty:** Hard | **Concepts:** tmpfs, file permissions, PermissionsExt, process IDs, session management
+
+Running Argon2id on every single command makes the vault unusable — 200ms of key derivation for a quick `iv list` is maddening. But keeping the derived key in memory only works for a single process invocation. This stage solves the UX problem by caching the derived key in a temporary file on RAM-backed storage, with strict permissions and PID tracking. The result: authenticate once, then use the vault freely until you lock it or the session expires.
 
 > *"Once the vault is open, the Master Key must be kept close — but not too close. The ancient smiths devised the Session Seal: a wax imprint of the key, pressed into a tablet that exists only in the ether. When the vault is locked, the tablet dissolves. When the smith dies, the tablet dissolves. It cannot be copied to parchment, cannot survive a reboot of the realm. It exists only in the fleeting memory of the workshop."*
 
@@ -2092,6 +2114,8 @@ pub fn get_vault_key() -> Option<([u8; 32], vault::VaultHeader)> {
 }
 ```
 
+Sessions make the vault usable, but an unlocked session that never expires is a security hole. If you walk away from your terminal, anyone can access your credentials. Stage 13 adds a configurable inactivity timeout that automatically seals the vault.
+
 ### 12.6 — What to Try
 
 1. **Run `iv unlock`, then check the key cache.** On macOS: `ls -la $TMPDIR/ironvault-*`. You should see a 32-byte file with `-rw-------` permissions (0600).
@@ -2116,6 +2140,8 @@ pub fn get_vault_key() -> Option<([u8; 32], vault::VaultHeader)> {
 
 **Difficulty:** Medium | **Concepts:** TOML parsing, config with defaults, duration arithmetic, SystemTime
 
+An unlocked vault that stays unlocked forever is an invitation to disaster. If you step away from your desk, anyone who sits down has full access to every credential. This stage adds an inactivity timeout — after a configurable period of silence, the session key is zeroized and the vault re-seals itself. It also introduces the configuration file, giving users control over security-convenience tradeoffs.
+
 > *"Even the most vigilant guardian must sleep. The Timeout is a ward placed upon the Session Seal — after a period of silence, the seal dissolves on its own. A thief who finds an unattended workshop has only minutes before the key vanishes. The ward is configurable: a paranoid smith sets it to five minutes, a trusting one to an hour. But it must never be infinite. An eternal session is an eternal vulnerability."*
 
 Right now, once you unlock the vault, the session lasts forever (until you explicitly `iv lock` or reboot). If you walk away from your laptop with the vault unlocked, anyone who sits down can run `iv get --show-password` and read all your credentials.
@@ -2123,6 +2149,8 @@ Right now, once you unlock the vault, the session lasts forever (until you expli
 The fix: check the `last_activity` timestamp in the lock file against a configurable timeout. If the session has been idle too long, require re-authentication.
 
 ### 13.1 — The Config File
+
+Right now the lock timeout, clipboard clear duration, and Argon2 parameters are all hardcoded constants scattered across the codebase. Users can't adjust them without recompiling. We need a configuration file with sensible defaults that users can override — and the `#[serde(default)]` pattern makes this painless.
 
 Ironvault's configuration lives at `~/.ironvault/config.toml`. We'll use the `toml` crate to parse it and provide sensible defaults for every field:
 
@@ -2375,6 +2403,8 @@ pub fn get_vault_key() -> Option<([u8; 32], vault::VaultHeader)> {
 This means the timeout is an *inactivity* timeout, not an absolute timeout. If you're actively using the vault, the session stays alive. It only expires after `lock_timeout_minutes` of no commands.
 
 **AWS parallel:** IAM session tokens have a fixed expiry (1-12 hours). AWS SSO credentials refresh automatically on use. Our approach is closer to SSO — activity extends the session.
+
+With the timeout in place, Act 2's cryptographic foundation is complete. The vault encrypts, decrypts, manages sessions, and auto-locks. In Act 3, you'll build the tools that make the vault genuinely useful — password generation, clipboard management, TOTP, search, and more.
 
 ### 13.5 — Testing the Timeout
 

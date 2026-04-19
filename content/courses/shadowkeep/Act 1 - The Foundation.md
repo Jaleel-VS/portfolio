@@ -27,6 +27,8 @@ graph LR
 
 ## Stage 1 — Hello Shadowkeep
 
+Every horror story begins with a single step into the dark. Before you can build a multiplayer server, you need to know that your tools work — that Rust compiles, that your terminal speaks, that the void answers back. This stage exists because every complex system starts with the simplest possible proof of life.
+
 **Difficulty:** Very Easy | **Time:** < 5 minutes
 
 ### Story Beat
@@ -96,6 +98,8 @@ If you see those two lines, you've entered the castle.
 
 In Python you'd write `print("hello")`. In TypeScript, `console.log("hello")`. In Rust, `println!` is a macro (note the `!`). Why? Because Rust's type system needs to know at compile time how many arguments you're passing and what types they are. A macro can accept a variable number of arguments — a regular function in Rust cannot (without extra machinery). You'll see more macros later. For now: if it has `!`, it's a macro.
 
+You've proven the castle answers. But a single shout into the void isn't enough — you need to remember things. Names. Places. The shape of the darkness ahead.
+
 ### Checkpoint Code
 
 ```rust
@@ -109,6 +113,8 @@ fn main() {
 ---
 
 ## Stage 2 — The Map
+
+You can print text, but you can't remember anything. A game needs state — names, descriptions, layouts held in memory. Before you can build rooms or track players, you need to understand how Rust stores and displays data. Variables are the first bricks of the castle wall.
 
 **Difficulty:** Very Easy | **Time:** < 5 minutes
 
@@ -211,6 +217,8 @@ In Python and JS, variables are mutable by default. You use `const` in JS to opt
 | JavaScript | `const x = 5` | `let x = 5` |
 | Rust | `let x = 5` | `let mut x = 5` |
 
+You can store text and print it. But a castle isn't just a name and a map — it's rooms, each with their own identity. You need a way to bundle related data together.
+
 ### Checkpoint Code
 
 ```rust
@@ -238,6 +246,8 @@ fn main() {
 
 ## Stage 3 — Rooms and Doors
 
+You have variables, but they're loose — a name here, a description there, nothing tying them together. A room in Shadowkeep isn't just a string; it's a *thing* with properties. You need a way to say "this name and this description belong to the same room." Without that, the castle is just scattered words in the dark.
+
 **Difficulty:** Easy | **Time:** 5–10 minutes
 
 ### Story Beat
@@ -251,6 +261,8 @@ Structs — Rust's way of grouping related data together (like a class in Python
 ### Instructions
 
 **Step 1: Define a struct.**
+
+Right now we have separate `let` variables for each piece of data, but nothing connects a room's name to its description. If we had ten rooms, we'd have twenty loose variables with no structure. We need a single type that bundles a room's data together.
 
 Replace `src/main.rs` with:
 
@@ -362,6 +374,8 @@ This is one of the first things that trips up Rust beginners. Rust has two main 
 - Use `&str` for function parameters that just need to read a string.
 - Convert with `String::from("text")`, `"text".to_string()`, or `"text".into()`.
 
+Two rooms is a start, but Shadowkeep has many chambers. Hardcoding each one as a separate variable won't scale — you need a collection that can hold all of them at once.
+
 ### Checkpoint Code
 
 ```rust
@@ -393,6 +407,8 @@ fn main() {
 ---
 
 ## Stage 4 — The Hallway
+
+A castle with two rooms is a closet, not a dungeon. You need to hold an unknown number of rooms and iterate over them — the fundamental operation of any game world. Vectors are how Rust handles dynamic collections, and understanding them now prevents a wall of confusion later when rooms, items, and players all live in lists.
 
 **Difficulty:** Easy | **Time:** 5–10 minutes
 
@@ -518,6 +534,8 @@ The `&` in `for room in &rooms` is a **borrow** — you're looking at the data w
 | `rooms[0]` | `&rooms[0]` |
 | `rooms.append(x)` | `rooms.push(x)` (needs `let mut rooms`) |
 
+You can store rooms and walk through them. But walking is meaningless without choice — the player needs to decide which direction to go, and the castle needs to understand their answer.
+
 ### Checkpoint Code
 
 ```rust
@@ -564,6 +582,8 @@ fn main() {
 
 ## Stage 5 — Choose Your Path
 
+A game without player input is a screensaver. This stage transforms your program from a static display into an interactive loop — the player types, the castle responds. More importantly, you'll learn enums and `match`, which are how Rust models choices and forces you to handle every possibility. In a horror game, forgetting to handle a case means something slips through the cracks. Rust won't let that happen.
+
 **Difficulty:** Easy | **Time:** 5–10 minutes
 
 ### Story Beat
@@ -577,6 +597,8 @@ Enums for representing a fixed set of options. `match` for exhaustive pattern ma
 ### Instructions
 
 **Step 1: Define a Direction enum.**
+
+Right now we have rooms in a list, but no way for the player to choose where to go. We could use strings like `"north"` and `"south"`, but strings are fragile — a typo like `"nroth"` compiles fine and silently breaks. We need a type that represents exactly the valid directions, nothing more.
 
 Add this above your `Room` struct:
 
@@ -738,6 +760,8 @@ match direction {
 
 In Python/TS, a `switch` or `if/elif` chain silently ignores unhandled cases. Rust refuses.
 
+The player can move between rooms. But what's a dungeon without loot? The crypt floor glints with something metallic — and picking it up means understanding who *owns* that data.
+
 ### Checkpoint Code
 
 ```rust
@@ -832,6 +856,8 @@ fn main() {
 
 ## Stage 6 — The Inventory
 
+This is the stage where Rust stops feeling like Python-with-types and starts feeling like *Rust*. Ownership is the concept that makes Rust unique — it's how the language guarantees memory safety without a garbage collector. You're learning it now because picking up an item is the perfect physical metaphor: the key leaves the room and enters your pocket. It can't be in both places. The compiler enforces this, and once you internalize it, an entire class of bugs becomes impossible.
+
 **Difficulty:** Medium | **Time:** 30 minutes – 1 hour
 
 ### Story Beat
@@ -845,6 +871,8 @@ Ownership, borrowing, and moving — the heart of Rust. We learn it by picking u
 ### Instructions
 
 **Step 1: Add items to rooms.**
+
+Right now rooms are just names and descriptions — static scenery. But a game needs *things* in rooms that players can interact with. And we need a player who can carry those things. The question is: when a player picks up a key, who owns the key's data? The room? The player? Both? Rust demands a clear answer.
 
 Update the `Room` struct to hold items:
 
@@ -1072,6 +1100,8 @@ This is what makes Rust memory-safe without a garbage collector. The compiler ch
 | Mutation | Anything, anytime | Only through `&mut`, one at a time |
 | Memory free | GC decides when | Deterministic — when owner goes out of scope |
 
+Items move between owners. But the castle isn't just rooms and loot — something *lives* in these halls. Different creatures with different behaviors, all sharing the ability to describe themselves and attack. You need a way to define that shared contract.
+
 ### Checkpoint Code
 
 ```rust
@@ -1206,6 +1236,8 @@ fn main() {
 
 ## Stage 7 — Creatures in the Dark
 
+A horror game without monsters is just a walking simulator. But monsters aren't all the same — a wraith drains life, a spider shoots webs. They share a common interface (name, describe, attack) but differ in implementation. This is the problem traits solve, and it's the same pattern you'll use later when different network message types all need to be "sendable" or different game events all need to be "processable."
+
 **Difficulty:** Medium | **Time:** 30 minutes – 1 hour
 
 ### Story Beat
@@ -1219,6 +1251,8 @@ Traits — Rust's way of defining shared behavior across different types. Like i
 ### Instructions
 
 **Step 1: Define the Monster trait.**
+
+Right now we have `Room` and `Player` structs, but no way to represent creatures that behave differently from each other while still sharing a common set of actions. We could use a single `Monster` struct with a `kind` field, but then every function would need `if kind == "wraith" { ... } else if kind == "spider" { ... }` — fragile and forgettable. We need a contract that says "anything that implements these methods counts as a monster."
 
 Add this below your existing structs:
 
@@ -1390,6 +1424,8 @@ The encounters print before the game loop starts. In later acts, we'll trigger e
 | Static dispatch | `impl Trait` or generics | N/A | N/A |
 
 Rust traits can also have **default implementations** — methods with a body that types can override. We'll use this in later acts.
+
+Monsters lurk in the rooms, but some doors won't open for just anyone. The Tower is sealed — and what happens when you try to enter a room that might not let you in? You need types that represent "maybe" and "success or failure."
 
 ### Checkpoint Code
 
@@ -1594,6 +1630,8 @@ fn main() {
 
 ## Stage 8 — The Locked Door
 
+Every real program must handle things that might not exist and operations that might fail. In Python, you get `None` and exceptions — and you find out you forgot to handle them at 3 AM in production. Rust replaces both with `Option` and `Result`, types that the compiler *forces* you to deal with. Learning them now means every error path in your multiplayer server will be visible and handled.
+
 **Difficulty:** Easy | **Time:** 5–10 minutes
 
 ### Story Beat
@@ -1607,6 +1645,8 @@ The door to the Tower is locked. A rusted iron lock stares back at you. You need
 ### Instructions
 
 **Step 1: Add locked doors to rooms.**
+
+Right now every room is open — the player walks wherever they want. But the Tower should be locked, and some doors might not have a key at all. We need to represent "this room might require a key" (maybe a value, maybe nothing) and "trying to enter might succeed or fail" (success or error). These are the two most common patterns in all of programming.
 
 Update the `Room` struct:
 
@@ -1772,6 +1812,8 @@ Rust has no `null` and no exceptions. Instead:
 | Must handle? | No (runtime crash) | Yes (compiler enforces it) |
 
 This means: if your Rust code compiles, you've handled every possible absence and every possible error. No surprise `NoneType has no attribute 'x'` at 3 AM.
+
+Doors lock and unlock, errors are handled, the game state grows richer. But when the player quits, everything vanishes. The castle forgets. You need a way to write the world to disk and read it back — persistence.
 
 ### Checkpoint Code
 
@@ -2013,6 +2055,8 @@ fn main() {
 
 ## Stage 9 — The Journal
 
+A game that forgets your progress is a game no one finishes. Serialization — converting live data structures to bytes on disk and back — is a skill you'll use in every Rust project, from config files to network protocols. You're learning it now with serde because the multiplayer server in Act 2 will need to serialize game state for save files, and Act 3 will serialize messages for the network. The journal is your first taste of persistence in a world that wants to forget you.
+
 **Difficulty:** Medium | **Time:** 30 minutes – 1 hour
 
 ### Story Beat
@@ -2076,6 +2120,8 @@ struct Player {
 - Every field type must also be serializable. `String`, `Vec<String>`, `bool`, and `Option<String>` all implement `Serialize`/`Deserialize` already.
 
 **Step 3: Create a SaveState struct.**
+
+Right now we have `Room`, `Player`, and a `current_room` index scattered across our `main` function. To save the game, we need to bundle everything into a single snapshot — a struct that captures the entire world at one moment in time.
 
 Add this below `Player`:
 
@@ -2261,6 +2307,8 @@ In Python, errors bubble up automatically via exceptions. You add `try/except` t
 | Crash on error | (unhandled exception) | `.unwrap()` or `.expect("msg")` |
 
 The `?` operator is the idiomatic way to propagate errors in Rust. It keeps your code clean while making every error path visible in the function signature.
+
+The journal remembers. But a single-player game in a haunted castle is lonely — the real horror begins when other souls arrive. You need to open a door to the outside world: a TCP server that listens for connections.
 
 ### Checkpoint Code
 
@@ -2557,6 +2605,8 @@ fn main() {
 
 ## Stage 10 — Echoes in the Hall
 
+Everything you've built so far runs locally — one player, one terminal, one process. This stage cracks open the castle gates to the network. TCP is the foundation of every multiplayer game, every web server, every chat application. You're building the simplest possible networked server here so that Act 2 can focus on the hard part: making it handle *many* players at once.
+
 **Difficulty:** Medium | **Time:** 30 minutes – 1 hour
 
 ### Story Beat
@@ -2816,6 +2866,8 @@ In Act 2, we'll make this concurrent — handling many players at once using thr
 | Blocking (this stage) | 1 player | Simple | Act 1 |
 | Threads | Many players | Medium | Act 2 |
 | Async (tokio) | Thousands | Advanced | Act 3 |
+
+The gate is open. One soul at a time can enter — but the castle hungers for more. In Act 2, you'll learn to let many players through at once, sharing the same haunted world.
 
 ### Checkpoint Code
 

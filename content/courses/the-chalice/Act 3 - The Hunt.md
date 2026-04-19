@@ -23,9 +23,13 @@ By the end of this act, your dungeon will be alive with enemies that patrol corr
 
 > *"Know your enemy. Each beast has a rhythm, a pattern. Learn it, or die to it."*
 
+The placeholder enemies from Act 2 were mannequins — identical, stateless, interchangeable. A real roguelike needs enemies with *identity*: different types with different stats, different behaviors, different weaknesses. We define the full enemy type system now because the AI in Stage 18 needs to know *what* an enemy is before it can decide *how* it acts. The type determines the behavior, and the behavior determines the challenge.
+
 Every enemy in The Chalice is defined by two things: what it *is* (type, stats, weaknesses) and what it's *doing* (AI state). We model both with enums — Rust's most powerful feature for game logic.
 
 ### 17.1 — Enemy Types
+
+Right now every enemy is a generic `Enemy` struct with hardcoded stats. We can't distinguish a shambling Husk from a charging Beast — they're all the same. We need an `EnemyType` enum that captures the identity of each enemy species, with methods that return type-specific stats. This way, creating a new enemy type means adding one enum variant and filling in its `match` arms — the compiler ensures nothing is forgotten.
 
 The design spec defines 9 enemy types. Each has unique stats and behavior:
 
@@ -348,7 +352,7 @@ The enemy system is defined:
 - Shorthand constructors for common enemy types
 - State-specific data (patrol waypoints) lives inside the enum variant
 
-The enemies exist. Next, we teach them to think.
+The enemies exist. They have bodies and brains — but the brains are empty. Next, we teach them to think, to hunt, to close the distance between themselves and the `@` that dares walk their halls.
 
 ---
 
@@ -357,6 +361,8 @@ The enemies exist. Next, we teach them to think.
 **Difficulty:** Medium | **Concepts:** BFS pathfinding, line-of-sight, state transitions, different behaviors per type
 
 > *"The Husk shambles. The Beast charges. The Watcher waits. Each has a pattern — learn it, or be consumed."*
+
+Enemies with stats but no behavior are furniture. This stage is where the dungeon becomes dangerous — each enemy type gets a distinct movement algorithm that creates a unique tactical challenge. Husks use BFS to relentlessly track you through corridors. Beasts charge in straight lines at double speed. Watchers patrol routes and alert the room when they spot you. We implement AI now because combat without intelligent opposition is just clicking — and because each AI behavior teaches a different algorithm (BFS, line movement, patrol routes, line-of-sight).
 
 This is where the dungeon comes alive. Each enemy type has a distinct behavior that creates different tactical challenges. Husks are slow but relentless. Beasts are fast and deadly in straight lines. Watchers patrol and alert the room. The AI is simple — but simple AI in a roguelike creates emergent complexity.
 
@@ -927,6 +933,8 @@ Enemies now have brains:
 - Line-of-sight detection for Watcher spotting
 - Room-wide alert when a Watcher spots the player
 
+The enemies move with purpose. But one enemy type is conspicuously passive — the Bell Maiden stands still, doing nothing. That changes next, when she begins to ring her bell and fill the room with the dead.
+
 ---
 
 ## Stage 19 — The Bell Maiden
@@ -934,6 +942,8 @@ Enemies now have brains:
 **Difficulty:** Medium | **Concepts:** Spawning entities, priority targeting, interruptible actions
 
 > *"The bell tolls. From the shadows, more Husks emerge. Silence the bell, or drown in the dead."*
+
+Most enemies are threats you can ignore temporarily — walk past a Husk, dodge a Beast. The Bell Maiden is different: she's a *strategic* threat that gets worse every turn she's alive. She forces the player to prioritize, to push through other enemies to reach her, to use heavy attacks to interrupt her summoning. We introduce her now because she's the first enemy that tests the player's decision-making rather than their reflexes, and because her summoning mechanic teaches an important Rust pattern: modifying a `Vec` while processing it.
 
 The Bell Maiden is the most tactically interesting enemy in the early game. She doesn't move. She doesn't deal much damage. But every turn she's alive, she summons a new Husk. Left unchecked, the room fills with enemies. She forces the player to make a choice: fight through the Husks to reach her, or get overwhelmed.
 
@@ -1119,7 +1129,7 @@ The Bell Maiden creates emergent tactical pressure:
 - Priority target indicator in the HUD
 - Summoning stops when all adjacent tiles are occupied
 
-The room fills with the dead. The bell tolls. Act fast.
+The room fills with the dead. The bell tolls. Act fast. With enemies that move, fight, and summon, we now have a combat system complex enough to need formal structure — a turn resolver that processes everything in the right order and prevents the chaos of ad-hoc resolution.
 
 ---
 
@@ -1128,6 +1138,8 @@ The room fills with the dead. The bell tolls. Act fast.
 **Difficulty:** Hard | **Concepts:** Turn resolution order, status effects, death processing, system composition
 
 > *"The hunt is not a duel. It is a storm of steel and blood, where every action ripples outward."*
+
+As the game grows — multiple enemy types, summoning, stagger, rally, items — ad-hoc combat resolution becomes a minefield of ordering bugs. Does the Bell Maiden summon before or after the player attacks? Does poison tick before or after death checks? A formal turn resolver answers these questions once and for all. We build it now because every system we've created (stamina, rally, stagger, status effects) needs to compose correctly, and composition requires a defined execution order.
 
 Until now, combat has been ad-hoc — the player acts, enemies retaliate, we check for deaths. But as the game grows more complex (status effects, multiple enemies, summoning, traps), we need a *formal turn resolution system*. This stage builds the complete combat flow that will carry us through the rest of the game.
 
@@ -1512,7 +1524,7 @@ The combat system is now formally structured:
 - **Combat log:** Color-coded messages for damage, rally, loot, and status effects
 - **Clean game loop:** All complexity in `resolve_turn`, loop is just draw → input → resolve
 
-The system composes. Each piece (stamina, rally, stagger, status effects) works independently but creates emergent depth together.
+The system composes. Each piece (stamina, rally, stagger, status effects) works independently but creates emergent depth together. Now that combat is formally resolved, we can add environmental hazards that interact with the same system — traps that deal damage, inflict status effects, and punish the careless.
 
 ---
 
@@ -1521,6 +1533,8 @@ The system composes. Each piece (stamina, rally, stagger, status effects) works 
 **Difficulty:** Medium | **Concepts:** Tile interaction, triggered events, insight-based visibility, the Mimic pattern
 
 > *"The floor gives way. The air turns green. A chest grins with teeth. Trust nothing in the labyrinth."*
+
+Enemies are threats you can see and fight. Traps are threats you can't see — until it's too late. They add a layer of environmental danger that rewards careful play and punishes recklessness. More importantly, traps are the first system that interacts with insight: high-insight hunters can *see* traps before triggering them, creating a tangible reward for the insight mechanic we'll build in Stage 22. We introduce traps now because they complete the dungeon's threat model (enemies + environment) and set up the insight payoff.
 
 Traps add a layer of environmental danger that interacts with the insight system. High-insight Hunters can see traps before triggering them. Low-insight Hunters walk into them blind. This creates a natural reward for exploration (which raises insight).
 
@@ -1798,6 +1812,8 @@ The dungeon is now dangerous even without enemies:
 - **Trap detection reward:** +2 insight for spotting a trap
 - Traps are invisible at low insight, visible at high insight
 
+Traps reward insight, and insight rewards exploration — but what *is* insight, exactly? How does it grow, what does it cost, and what happens when you have too much of it? That's the final piece of Act 3's puzzle.
+
 ---
 
 ## Stage 22 — The Insight Mechanic
@@ -1805,6 +1821,8 @@ The dungeon is now dangerous even without enemies:
 **Difficulty:** Medium | **Concepts:** Threshold-based game mutations, dynamic difficulty, resource spending, enum-driven world state
 
 > *"Eyes on the inside... grant us eyes, grant us eyes. Plant eyes on our brains, to cleanse our beastly idiocy."*
+
+Insight is the mechanic that ties everything together. It's earned through exploration and boss kills, spent at altars for powerful effects, and — crucially — it changes the dungeon itself as it rises. High insight reveals traps but also spawns Madmen, shifts corridors, and doubles bosses. This creates the game's deepest decision: do you hoard insight for power, or spend it to stay safe? We build insight last in Act 3 because it touches every system we've created — traps, enemies, dungeon generation, combat — and transforms them based on a single number.
 
 Insight is The Chalice's most unique mechanic. It's simultaneously a score, a difficulty slider, a currency, and a narrative device. As insight rises, the dungeon changes — subtly at first, then dramatically. The player must decide: hoard insight for its powerful altar effects, or spend it to stay sane?
 
@@ -1853,6 +1871,8 @@ impl GameState {
 ```
 
 ### 22.2 — Insight Thresholds
+
+Right now insight is just a number that goes up and down. We need it to *mean* something — to change the world in concrete, observable ways. The tier system transforms a raw counter into a progression of dungeon mutations, each more dramatic than the last. By modeling tiers as an enum, we get exhaustive matching: every rendering function, every spawn check, every ambient text generator must explicitly handle every tier.
 
 The design spec defines five insight tiers that progressively mutate the dungeon:
 
@@ -2026,6 +2046,8 @@ impl GameState {
 ```
 
 ### 22.4 — Insight as a Spendable Resource: Altars
+
+Insight would be a one-dimensional difficulty slider if you could only gain it. Altars transform it into a *currency* — a resource you actively choose to spend for immediate power. This creates the core tension: every point of insight spent at an altar is a point that won't push you toward the Ascended tier's 3x loot quality. The altar system gives the player agency over their own difficulty curve.
 
 Altars are special tiles (placed in Cathedral prefab rooms) where the Hunter can spend insight for powerful effects:
 

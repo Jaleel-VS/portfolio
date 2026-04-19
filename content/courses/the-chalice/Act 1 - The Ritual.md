@@ -43,6 +43,8 @@ A terminal-rendered dungeon with rooms, corridors, doors, traps, enemies, and a 
 
 > *"Every hunt begins with a single step into the dark."*
 
+Every labyrinth begins with a foundation — and every Rust project begins with `cargo`. Before we can carve dungeons or slay beasts, we need a working toolchain and a project that compiles. This stage exists because nothing else in The Chalice is possible without it, and because the ritual of `cargo new` teaches you how Rust organizes code from the very first incantation.
+
 **Goal:** Create a new Rust project and print a message to the terminal.
 
 ### Installing Rust
@@ -124,7 +126,7 @@ Fear the old blood.
 
 ### Checkpoint
 
-Your project compiles and prints to the terminal. The foundation is laid.
+Your project compiles and prints to the terminal. The foundation is laid — and now that the toolchain obeys your hand, we can begin defining the language of the labyrinth itself: the tiles that compose every wall, floor, and door.
 
 **Files changed:** `src/main.rs`
 
@@ -134,6 +136,8 @@ Your project compiles and prints to the terminal. The foundation is laid.
 ## Stage 2 — The Tile
 
 > *"The labyrinth speaks in symbols. Learn its alphabet, or be consumed by it."*
+
+A dungeon is nothing without a vocabulary — a finite set of symbols that describe every cell in the grid. We define tiles now because every system that follows (rooms, corridors, fog, enemies) needs to know what can exist in a cell. Getting the tile model right early means the compiler will guard every future interaction with the dungeon grid.
 
 **Goal:** Define every tile type in the dungeon as a Rust enum and display them as characters.
 
@@ -152,6 +156,8 @@ type Tile =
 In Python, you might use `enum.Enum` or a string literal type. Rust enums are far more powerful — each variant can carry different data.
 
 ### Defining Our Tiles
+
+Right now we have a project that prints text, but we can't represent a single cell of the dungeon. We need a type that captures every possible thing a cell can be — wall, floor, door, trap, loot — so that the rest of the codebase can reason about the grid without guessing.
 
 The design spec defines these tile types. Create a new file `src/tile.rs`:
 
@@ -195,6 +201,8 @@ pub enum TrapType {
 ```
 
 ### The Display Trait — Rendering Tiles as Characters
+
+We need each tile to render as a single character in the terminal — walls as `█`, floors as `·`, doors as `+`. Rather than scattering rendering logic across the codebase, we implement the `Display` trait once on `Tile` so that `println!("{}", tile)` just works everywhere. This is Rust's way of giving a type a canonical text representation.
 
 In Python, you'd define `__str__` on a class. In TypeScript, you'd write a `toString()` method. In Rust, you implement the `Display` trait.
 
@@ -314,7 +322,7 @@ Tile rendering: █·+⊞▼▲··♦☠
 
 ### Checkpoint
 
-You now have a type-safe representation of every tile in the dungeon. The compiler guarantees you can never create an invalid tile — there's no "undefined" or "null" sneaking in. Every tile is exactly one of the variants you defined.
+You now have a type-safe representation of every tile in the dungeon. The compiler guarantees you can never create an invalid tile — there's no "undefined" or "null" sneaking in. Every tile is exactly one of the variants you defined. With the alphabet established, we can now build the parchment it's written on — the 2D grid that holds the dungeon itself.
 
 **Files changed:** `src/tile.rs` (new), `src/main.rs` (updated)
 
@@ -324,6 +332,8 @@ You now have a type-safe representation of every tile in the dungeon. The compil
 ## Stage 3 — The Empty Grid
 
 > *"Before the labyrinth can breathe, it must first be stone. Solid, unyielding stone."*
+
+Tiles are the vocabulary; the grid is the page. We need a 2D structure that holds tiles, supports reading and writing individual cells, and can render itself to the terminal. This stage builds the `Dungeon` struct — the data structure that every future system (BSP, corridors, fog, enemies) will read from and write to. Without it, tiles are just symbols floating in the void.
 
 **Goal:** Create a 2D grid of tiles, fill it with walls, and carve a single room in the center.
 
@@ -337,6 +347,8 @@ grid = [["Wall" for _ in range(width)] for _ in range(height)]
 ```
 
 In Rust, we use `Vec<Vec<Tile>>` — a vector of vectors. Create `src/dungeon.rs`:
+
+Right now we have individual tiles but no way to arrange them into a spatial structure. We need a container that maps (x, y) coordinates to tiles, enforces bounds, and starts as solid stone — because in roguelike generation, you carve rooms *out of* walls rather than placing walls *around* rooms.
 
 ```rust
 use crate::tile::Tile;
@@ -459,7 +471,7 @@ You should see a 40x30 grid of wall characters (`█`) with a rectangular hole o
 
 ### Checkpoint
 
-You have a dungeon grid that can carve rectangular rooms. Next, we'll use Binary Space Partitioning to decide *where* to place rooms — the algorithm that makes roguelike dungeons feel organic.
+You have a dungeon grid that can carve rectangular rooms. But we're placing rooms by hand — hardcoding coordinates like medieval cartographers. Next, we'll use Binary Space Partitioning to decide *where* to place rooms — the algorithm that makes roguelike dungeons feel organic.
 
 **Files changed:** `src/dungeon.rs` (new), `src/main.rs` (updated)
 
@@ -469,6 +481,8 @@ You have a dungeon grid that can carve rectangular rooms. Next, we'll use Binary
 ## Stage 4 — Binary Space Partitioning
 
 > *"The labyrinth does not grow — it divides. Again and again, until the spaces are small enough to hold a secret."*
+
+We can carve rooms, but we've been choosing their positions by hand. A real roguelike needs an algorithm that decides *where* rooms go — one that guarantees no overlaps, ensures connectivity, and produces layouts that feel organic rather than grid-like. BSP is that algorithm, and it's the beating heart of procedural dungeon generation. We introduce it now because every subsequent stage (corridors, population, fog) depends on the room layout BSP produces.
 
 **Goal:** Implement BSP — recursively split a rectangle into sub-rectangles that will become rooms.
 
@@ -512,6 +526,8 @@ Other approaches exist (random room placement, cellular automata, drunkard's wal
 
 ### The Rect Struct
 
+Right now we have a grid and a `carve_room` method, but no way to describe *where* a room should go without hardcoding coordinates. We need a simple rectangle type that BSP can subdivide — a building block that says "this region of the grid is reserved for a room."
+
 We need a simple rectangle type. Create `src/bsp.rs`:
 
 ```rust
@@ -538,7 +554,9 @@ impl Rect {
 
 ### The BSP Node
 
-Each node in the BSP tree is either a **leaf** (will become a room) or a **split** (has two children). This is a perfect use case for Rust enums:
+Each node in the BSP tree is either a **leaf** (will become a room) or a **split** (has two children). We model this as an enum rather than a class hierarchy because the two states carry different data — a leaf has only an area, while a split has an area plus two children. Rust's enum makes this distinction explicit and compiler-enforced.
+
+This is a perfect use case for Rust enums:
 
 ```rust
 /// A node in the BSP tree.
@@ -730,7 +748,7 @@ You should see a list of partitions and a grid with multiple rectangular rooms c
 
 ### Checkpoint
 
-You've implemented the core BSP algorithm. The dungeon floor is partitioned into non-overlapping rectangles, each ready to become a room. The tree structure will guide corridor placement in Stage 6.
+You've implemented the core BSP algorithm. The dungeon floor is partitioned into non-overlapping rectangles, each ready to become a room. The tree structure will guide corridor placement in Stage 6. But first, the rooms themselves need personality — varying sizes and padding so the dungeon doesn't look like a sterile grid.
 
 **Files changed:** `src/bsp.rs` (new), `src/main.rs` (updated)
 
@@ -741,6 +759,8 @@ You've implemented the core BSP algorithm. The dungeon floor is partitioned into
 
 > *"Not every void is the same shape. Some are halls. Some are crypts. Some are arenas where blood was spilled long ago."*
 
+BSP gives us partitions, but partitions are not rooms. If we carved rooms that filled their entire partition, the dungeon would be a rigid grid of rectangles with uniform gaps — more spreadsheet than labyrinth. This stage adds random padding so rooms vary in size and position within their partitions, creating the organic irregularity that makes roguelike dungeons feel hand-crafted even though they're procedurally generated.
+
 **Goal:** Place rooms inside BSP leaf nodes with random padding, so rooms don't fill their entire partition.
 
 ### Why Padding?
@@ -750,6 +770,8 @@ If every room filled its entire partition, the dungeon would look like a grid of
 We need randomness for the padding. We haven't added `rand` yet (that's Stage 7), so we'll use a simple deterministic approach first — a basic hash of the room's position to vary the padding. This keeps the code testable and lets us swap in proper RNG later.
 
 ### Room Placement
+
+Right now we have BSP leaf partitions, but carving them directly produces rooms that fill their entire partition — no breathing room, no variation. We need a `Room` struct that represents the actual carved space *within* a partition, offset by random padding on each side.
 
 Add a `Room` struct and room placement to `src/bsp.rs`:
 
@@ -944,7 +966,7 @@ You should see rooms of varying sizes, no longer filling their entire partitions
 
 ### Checkpoint
 
-Rooms are placed with varying padding inside BSP partitions. The dungeon is starting to look organic. But the rooms are isolated islands — next we connect them.
+Rooms are placed with varying padding inside BSP partitions. The dungeon is starting to look organic. But the rooms are isolated islands — each one a sealed crypt with no way in or out. Next we carve the passages between them, and the labyrinth begins to breathe.
 
 **Files changed:** `src/bsp.rs` (updated), `src/dungeon.rs` (updated), `src/main.rs` (updated)
 
@@ -955,9 +977,13 @@ Rooms are placed with varying padding inside BSP partitions. The dungeon is star
 
 > *"The passages between chambers are where hunters are most vulnerable. Move quickly, or the darkness will find you."*
 
+Rooms without corridors are tombs — sealed, unreachable, useless. The BSP tree already tells us which rooms are siblings, and siblings must be connected. This stage carves L-shaped corridors between sibling rooms and places doors at the junctions, transforming a collection of isolated chambers into a traversable labyrinth. Connectivity is the difference between a dungeon and a graveyard.
+
 **Goal:** Connect sibling rooms in the BSP tree with L-shaped corridors and place doors where corridors meet rooms.
 
 ### L-Shaped Corridors
+
+We use L-shaped corridors rather than straight lines because rooms are rarely aligned on the same axis. An L-shaped path connects any two points with exactly one bend — simple to implement, natural-looking, and guaranteed to reach the destination. Straight corridors would only work for rooms that share a row or column; diagonal corridors would require fractional tile math. The L-shape is the sweet spot.
 
 The design spec (section 3.1) says: *"connect sibling rooms with L-shaped corridors."* An L-shaped corridor goes horizontally from one room's center, then vertically to the other room's center (or vice versa). This creates natural-looking paths with a single bend.
 
@@ -1177,7 +1203,7 @@ You should now see rooms connected by corridors with `+` symbols at doorways. Th
 
 ### Checkpoint
 
-The dungeon is now fully connected. Rooms are linked by L-shaped corridors with doors at the junctions. The BSP tree guarantees every room is reachable. Next, we add seeded randomness to make every dungeon unique.
+The dungeon is now fully connected. Rooms are linked by L-shaped corridors with doors at the junctions. The BSP tree guarantees every room is reachable. But every run produces the same dungeon — because our splits are deterministic. Next, we add seeded randomness so that the same seed always produces the same labyrinth, but different seeds produce entirely different worlds.
 
 **Files changed:** `src/bsp.rs` (updated), `src/dungeon.rs` (updated), `src/main.rs` (updated)
 
@@ -1187,6 +1213,8 @@ The dungeon is now fully connected. Rooms are linked by L-shaped corridors with 
 ## Stage 7 — The Seed
 
 > *"Speak the word, and the labyrinth remembers. The same word, the same labyrinth. Always."*
+
+Until now, our BSP splits the same way every time — deterministic but boring. A roguelike lives and dies by variety: each run should feel different, yet reproducible when you want to share a dungeon or debug a specific layout. Seeded RNG is the mechanism that makes this possible. We introduce it now because every system that follows — room padding, enemy placement, loot distribution, boss selection — needs controlled randomness flowing from a single source of truth.
 
 **Goal:** Add seeded random number generation so the same seed always produces the same dungeon.
 
@@ -1224,6 +1252,8 @@ rand_chacha = "0.10"
 Run `cargo build` to download and compile the dependencies. Cargo fetches them from [crates.io](https://crates.io), Rust's package registry (like npm or PyPI).
 
 ### Converting a String Seed to a Number
+
+Right now we have a deterministic dungeon generator, but no way to vary its output. We need to convert a human-friendly string like `"old-yharnam"` into a number that initializes the RNG — bridging the gap between what the player types and what the algorithm consumes.
 
 The design spec says seeds are user-provided strings like `"old-yharnam"`. We need to convert these to a `u64` for `ChaCha8Rng`. A simple hash works:
 
@@ -1523,7 +1553,7 @@ Run it twice — the output should be identical. Change the seed string and the 
 
 ### Checkpoint
 
-The dungeon is now seeded. Same seed, same labyrinth. You can share seeds with other hunters. The foundation for reproducible procedural generation is complete.
+The dungeon is now seeded. Same seed, same labyrinth. You can share seeds with other hunters. The foundation for reproducible procedural generation is complete — and with randomness under our control, we can now scatter the things that make a dungeon dangerous: enemies, traps, and loot.
 
 **Files changed:** `Cargo.toml` (updated), `src/seed.rs` (new), `src/bsp.rs` (updated), `src/main.rs` (updated)
 
@@ -1533,6 +1563,8 @@ The dungeon is now seeded. Same seed, same labyrinth. You can share seeds with o
 ## Stage 8 — Populate
 
 > *"The labyrinth is never empty. Something always waits in the dark."*
+
+An empty dungeon is a maze, not a game. This stage transforms the labyrinth from architecture into encounter design — placing enemies that threaten, traps that punish carelessness, loot that rewards exploration, and a boss door that gates progression. We do this now because the dungeon generator needs to produce *playable* floors, not just pretty maps, and the placement logic depends on the room structure and seeded RNG we just built.
 
 **Goal:** Scatter enemies, traps, loot, and a boss door across the dungeon floor based on the design spec's floor tier table.
 
@@ -1548,7 +1580,9 @@ From the design spec (section 3.2):
 | 4 | 70x45 | 8-12 | 10-15 | 4-6 | Tier 4 |
 | 5 | 80x50 | 10-14 | 12-18 | 5-8 | Final Boss |
 
-We need a data structure to hold these parameters. Create `src/floor_config.rs`:
+We need a data structure to hold these parameters. Each floor has different dimensions, enemy counts, and trap densities — hardcoding these values in the generation function would make scaling impossible. A `FloorConfig` struct captures the design spec's scaling table as data, keeping generation logic clean and the difficulty curve tunable.
+
+Create `src/floor_config.rs`:
 
 ```rust
 /// Configuration for a single dungeon floor, from the design spec scaling table.
@@ -1821,7 +1855,7 @@ You should see a dungeon with stairs, a boss door, loot items, and hidden traps.
 
 ### Checkpoint
 
-The dungeon is populated. Enemies lurk in rooms, traps hide underfoot, loot glimmers in the dark, and a boss door blocks the way forward. The labyrinth is alive.
+The dungeon is populated. Enemies lurk in rooms, traps hide underfoot, loot glimmers in the dark, and a boss door blocks the way forward. The labyrinth is alive — but it's only one floor deep. Next, we stack five of these floors on top of each other, each more dangerous than the last.
 
 **Files changed:** `src/floor_config.rs` (new), `src/populate.rs` (new), `src/main.rs` (updated)
 
@@ -1832,9 +1866,13 @@ The dungeon is populated. Enemies lurk in rooms, traps hide underfoot, loot glim
 
 > *"Deeper. Always deeper. The chalice waits at the bottom, and the bottom is further than you think."*
 
+A single floor is a demo; five floors is a game. The Chalice's progression — from the cramped 40×30 corridors of floor 1 to the sprawling 80×50 labyrinth of floor 5 — creates a sense of descent, of escalating danger. We build the multi-floor generator now because it ties together everything from Acts 1-8 into a complete dungeon structure, and because the game loop in Act 2 needs all five floors ready before the player takes their first step.
+
 **Goal:** Generate all 5 dungeon floors with scaling difficulty, connected by stairs.
 
 ### The Floor Generator
+
+Right now we can generate a single floor, but we have no way to produce a complete dungeon — five floors of increasing size and danger, all deterministically derived from the same seed. We need a generator that loops through floor configs, builds each floor's BSP tree, carves rooms and corridors, populates entities, and packages everything into a single `ChaliceDungeon` structure.
 
 Each floor is an independent dungeon with its own BSP tree, rooms, corridors, and entities. But they share the same RNG — so the seed determines the entire 5-floor dungeon.
 
@@ -2025,7 +2063,7 @@ Each floor's `StairsUp` is in the first room (spawn). `StairsDown` is in the las
 
 ### Checkpoint
 
-The complete 5-floor dungeon generates from a single seed. Each floor scales in size and difficulty per the design spec. Stairs connect the floors. The full dungeon structure is in place.
+The complete 5-floor dungeon generates from a single seed. Each floor scales in size and difficulty per the design spec. Stairs connect the floors. The full dungeon structure is in place — but the player sees everything at once, which ruins the mystery. Next, we shroud the labyrinth in fog and force the hunter to earn every inch of visibility.
 
 **Files changed:** `src/generator.rs` (new), `src/main.rs` (updated)
 
@@ -2035,6 +2073,8 @@ The complete 5-floor dungeon generates from a single seed. Each floor scales in 
 ## Stage 10 — The Minimap
 
 > *"The labyrinth reveals itself only to those who walk its halls. What you have not seen does not exist — not yet."*
+
+A dungeon you can see entirely from the start holds no mystery. Fog of war is what transforms a map into an *experience* — the tension of not knowing what's behind the next door, the reward of discovering a new room, the dread of hearing a bell toll from somewhere in the dark. We implement fog now because it's the final layer of the dungeon generator: the system that controls what the player perceives, which is ultimately what makes the labyrinth feel alive.
 
 **Goal:** Implement fog of war — rooms start hidden and reveal when the player enters them. A minimap shows discovered rooms as rectangles and unexplored areas as `?`.
 
@@ -2050,6 +2090,8 @@ From the design spec (section 11):
 This is a core roguelike mechanic. The player doesn't see the full dungeon — they discover it room by room. This creates tension (what's behind that door?) and rewards exploration (insight +1 per new room discovered).
 
 ### Visibility Tracking
+
+Right now every tile in the dungeon is visible from the moment it's generated. We need a parallel grid of booleans — one per tile — that tracks which cells the player has seen. Unrevealed tiles render as blank space; revealed tiles show their true nature. This separation of *data* (what's actually there) from *perception* (what the player can see) is a fundamental roguelike pattern.
 
 We need to track which tiles have been revealed. Add a visibility layer to `Dungeon` in `src/dungeon.rs`:
 
@@ -2372,7 +2414,7 @@ Plus a minimap showing which rooms are discovered and which are still `???`.
 
 ### Checkpoint
 
-Fog of war is implemented. The dungeon starts hidden and reveals itself as the player explores. The minimap provides a high-level overview of discovered rooms.
+Fog of war is implemented. The dungeon starts hidden and reveals itself as the player explores. The minimap provides a high-level overview of discovered rooms. The ritual is complete — the labyrinth is carved, seeded, populated, and shrouded. In Act 2, we step inside it.
 
 **Files changed:** `src/dungeon.rs` (updated), `src/main.rs` (updated)
 

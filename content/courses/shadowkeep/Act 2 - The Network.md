@@ -31,6 +31,8 @@ All code in this act uses **only the Rust standard library** (`std::net`, `std::
 
 ## Stage 11 — A Second Voice
 
+Your Act 1 server handles one connection, then stops — useless for a multiplayer game. OS threads are the simplest way to handle multiple connections simultaneously, and understanding them is essential before you can appreciate why async (Act 3) exists. Every player gets their own thread, their own execution context, their own line into the darkness.
+
 **Difficulty:** Medium (30min–1h)
 
 ### Story Beat
@@ -237,6 +239,8 @@ stream.write_all(b"hello"); // can't write — stream is borrowed by reader
 ```
 Use `try_clone()` to get a second handle to the same socket.
 
+Each thread now handles its own player, but they're all strangers in separate rooms — no shared world, no awareness of each other. The castle needs a single truth that every thread can see and modify.
+
 ### Checkpoint Code
 
 ```rust
@@ -302,6 +306,8 @@ fn main() {
 
 ## Stage 12 — The Shared World
 
+Threads without shared state are just parallel echo servers — each player trapped in their own private castle. The moment you want players to see each other, you need shared mutable state, and that's where most languages let you shoot yourself in the foot. Rust's `Arc<Mutex<T>>` pattern makes shared state explicit and safe — the compiler won't let two threads corrupt the same data.
+
 **Difficulty:** Medium (30min–1h)
 
 ### Story Beat
@@ -342,7 +348,9 @@ use std::sync::{Arc, Mutex};
 use std::thread;
 ```
 
-Now define the shared game state. For now, we'll track which rooms exist and how many players are in each:
+Now define the shared game state. Right now each thread has its own local variables — there's no single source of truth about the world. We need one struct that holds the entire castle's state, protected so threads take turns accessing it.
+
+For now, we'll track which rooms exist and how many players are in each:
 
 ```rust
 /// The world that all players share.
@@ -595,6 +603,8 @@ writer.write_all(description.as_bytes()); // other threads aren't blocked
 **Forgetting that `lock()` can fail:**
 `lock()` returns `Result` because it fails if another thread panicked while holding the lock (a "poisoned" mutex). In a game server, `.unwrap()` is fine — if a thread panics, something is seriously wrong and crashing is reasonable.
 
+Players can see occupancy counts change in real time. But seeing a number tick up isn't the same as hearing another soul scream — you need a way to send messages to *all* connected players at once.
+
 ### Checkpoint Code
 
 ```rust
@@ -746,6 +756,8 @@ fn main() {
 ---
 
 ## Stage 13 — Whispers
+
+Players share a world, but they can't talk to each other. Broadcasting — sending a message to every connected player — is the fundamental operation of any multiplayer server. You're building the nervous system of the castle: when something happens, every soul must know. This pattern (a registry of write handles, iterated on events) is the same one used by chat servers, game lobbies, and notification systems everywhere.
 
 **Difficulty:** Medium (30min–1h)
 
@@ -1027,6 +1039,8 @@ let game2 = state.lock().unwrap(); // BLOCKS FOREVER — we already hold the loc
 **Broadcasting while holding a personal writer:**
 The broadcast writes to all streams including the sender's. This is fine — `TcpStream` writes are independent of reads, and `try_clone()` handles give us separate write access.
 
+Players can shout into the void and be heard. But "Soul #3" is a cold way to address someone in a haunted castle — the next step is giving these souls names.
+
 ### Checkpoint Code
 
 ```rust
@@ -1244,6 +1258,8 @@ fn main() {
 ---
 
 ## Stage 14 — Who Goes There
+
+Anonymous soul IDs are impersonal — horror is more effective when you know the name of the person screaming. A login flow is also your first taste of a multi-step TCP protocol: prompt, read, validate, then enter the main loop. This pattern — a handshake before the session — appears in every networked application from SSH to HTTP.
 
 **Difficulty:** Easy (5–10min)
 
@@ -1518,6 +1534,8 @@ Type `shout Hello Grimshaw!` in Terminal 2. Both terminals see:
 
 We use `read_line` for the login prompt (one line), then `lines()` for the game loop (many lines).
 
+Named players can see each other, but their shouts echo through the entire castle. Sometimes you want to whisper — to speak only to those standing beside you in the same dark room.
+
 ### Checkpoint Code
 
 The full checkpoint is the Stage 13 checkpoint with these additions:
@@ -1531,6 +1549,8 @@ The full checkpoint is the Stage 13 checkpoint with these additions:
 ---
 
 ## Stage 15 — The Chat
+
+Global shouts are useful for panic, but most communication should be local — whispers in the crypt shouldn't reach the tower. Room-scoped messaging is the foundation of spatial awareness in multiplayer games. It also forces you to think about filtering: not every message is for every player, and the server must decide who hears what.
 
 **Difficulty:** Medium (30min–1h)
 
@@ -1722,6 +1742,8 @@ game.broadcast(&format!("{} says: ...", name)); // everyone hears it!
 ```
 Use `broadcast_to_room` for `say`, `broadcast` for `shout`.
 
+Players can whisper and shout, but they're all trapped in the entrance hall. The castle has many rooms — it's time to let them wander through the darkness and see each other come and go.
+
 ### Checkpoint Code
 
 Same as Stage 13 checkpoint, plus:
@@ -1732,6 +1754,8 @@ Same as Stage 13 checkpoint, plus:
 ---
 
 ## Stage 16 — Moving Together
+
+A multiplayer game where everyone is stuck in the same room is a chat room, not a dungeon. Movement is the first command that mutates shared state in a way that affects *other* players — when you leave, they see you vanish; when you arrive, they see you emerge. This is the most complex state mutation so far because it touches two rooms, two sets of observers, and the player's own view simultaneously.
 
 **Difficulty:** Medium (30min–1h)
 
@@ -2117,6 +2141,8 @@ Always update the local `current_room` variable after a successful move.
 **Broadcasting to the wrong room after a move:**
 The player's room in `GameState` is already updated by `move_player`. So `broadcast_to_room_except(&old_room, ...)` correctly targets the room they *left*, and `broadcast_to_room_except(&new_room, ...)` targets the room they *entered*. The order matters — save `old_room` before the move updates it.
 
+Players roam the castle, talk, and see each other. But the command handling is a tangled mess of string slicing — one typo from a panic. Before adding more features, you need to tame the input into something the compiler can reason about.
+
 ### Checkpoint Code
 
 The full code is the Stage 13 checkpoint with all additions from Stages 14-16:
@@ -2131,6 +2157,8 @@ The full code is the Stage 13 checkpoint with all additions from Stages 14-16:
 ---
 
 ## Stage 17 — The Command Parser
+
+Your `if/else if` chain of string checks is a ticking time bomb — fragile slicing, no validation, impossible to extend cleanly. A proper parser converts messy human input into clean, typed data that the compiler can verify. This is the same principle behind every protocol parser, every CLI tool, every API endpoint: turn unstructured input into structured types as early as possible, then work only with the types.
 
 **Difficulty:** Medium (30min–1h)
 
@@ -2155,6 +2183,8 @@ graph LR
 ```
 
 ### Instructions
+
+Right now the game loop is a chain of `if input == "quit"` and `input.starts_with("take ")` checks — fragile string slicing that panics on short input and can't distinguish "unknown command" from "missing argument." We need a single type that represents every possible player action, with the data each action needs baked in.
 
 Define the `Command` enum. Put this above `GameState`:
 
@@ -2588,6 +2618,8 @@ Command::Say { message: rest.to_string() } // "hello world" — wrong!
 ```
 We lowercase for verb matching but use the original input for message content.
 
+Commands are clean and extensible. But the castle is still purely reactive — nothing happens unless a player types. It's time to give Shadowkeep a heartbeat: a background loop that moves monsters, flickers torches, and reminds every soul that the darkness is alive.
+
 ### Checkpoint Code
 
 The checkpoint is the same as Stage 16, with these changes:
@@ -2603,6 +2635,8 @@ The checkpoint is the same as Stage 16, with these changes:
 ---
 
 ## Stage 18 — The Game Loop
+
+A purely reactive server — one that only does things when players type — feels dead. Real game worlds have a heartbeat: monsters patrol, torches flicker, time passes whether you act or not. The tick-based game loop is the standard pattern for this, used by everything from Minecraft to MMOs. It also teaches you the critical discipline of "lock briefly, release before I/O" — the rule that prevents your server from freezing under load.
 
 **Difficulty:** Hard (>1h)
 
@@ -2976,6 +3010,7 @@ Instead, `tick()` returns events (data), and the caller broadcasts them after re
 **Monster patrol index overflow:**
 We use modulo (`%`) to wrap the patrol index. Without it, the index would grow forever and eventually panic on out-of-bounds access. Always use modulo for cyclic iteration.
 
+The castle breathes. Monsters patrol. Players explore, talk, and fight. But each thread costs real memory and OS resources — and the `Mutex` is a bottleneck every thread must pass through. In Act 3, you'll replace this architecture with something lighter, faster, and far more scalable.
 
 ### Checkpoint Code
 

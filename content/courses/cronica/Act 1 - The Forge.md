@@ -25,6 +25,8 @@ flowchart LR
 
 > *Difficulty: Very Easy — Your first Rust program.*
 
+Every legend begins with a single spark in the dark. Before we can build characters, roll dice, or summon AI narrators, we need a project that compiles and runs. This stage gets Rust's toolchain under your fingers and proves the forge is lit — everything that follows depends on this foundation.
+
 > [!tip] What You'll Learn
 > - The anatomy of a Rust project (`Cargo.toml`, `src/main.rs`)
 > - `fn main()` — the entry point
@@ -84,6 +86,8 @@ You should see:
 > [!warning] Common Mistake
 > **Forgetting the semicolon.** Rust won't guess where your statement ends. If you see `expected ;`, add one. In Python you never need them; in Rust you almost always do.
 
+The forge is lit and the anvil rings — but a single print statement won't slay any dragons. Next stage, we'll give Crónica its first real creation: a character with stats, HP, and a name worth remembering.
+
 > [!check] Checkpoint
 > Run `cargo run`. If you see the ⚔️ line printed, Stage 1 is complete.
 
@@ -93,6 +97,8 @@ You should see:
 
 > *Difficulty: Easy — Structs, fields, methods, and derived stats.*
 
+A world without heroes is just empty terrain. Right now our project can print text, but it has no concept of *who* inhabits the story. We need a way to represent a character — their strengths, their vitality, their potential — in a form the compiler can reason about. This stage introduces Rust's most fundamental building block for modeling data.
+
 > [!tip] What You'll Learn
 > - **Structs** — Rust's version of classes / dataclasses
 > - Field types: `String` vs `&str`, integers
@@ -101,7 +107,9 @@ You should see:
 
 ### Defining the Character struct
 
-Per the game spec, a character has five stats (Might, Finesse, Wit, Charm, Grit), a fortune pool, HP, level, and XP. No "Luck" stat — fortune tokens replace it.
+Right now we have a project that compiles, but no way to represent a hero. We need a data structure that bundles a character's identity, stats, and vitals into a single type the compiler can check.
+
+Per the game spec, a character has five stats (Might, Finesse, Wit, Charm, Grit), a fortune pool, HP, level, and XP. These five stats were chosen because each maps to a distinct pillar of gameplay — physical power, agility, intellect, social influence, and endurance — ensuring every challenge has multiple viable approaches. No "Luck" stat — fortune tokens replace it, giving players agency over their luck rather than leaving it to passive rolls.
 
 ```rust
 struct Character {
@@ -264,6 +272,8 @@ Expected output:
 
 Verify the math: HP = 10 + (3×2) + 2 = 18 ✓ | Fortune = 2 + (1/3) = 2 ✓ | Initiative = 2+1 = 3 ✓ | Carry = 5+3 = 8 ✓
 
+Our hero has a name and stats etched in code, but they exist in a void — no world to inhabit, no realm to shape their story. Next stage, we'll forge the realms themselves and learn Rust's most powerful feature: enums.
+
 > [!check] Checkpoint
 > Run `cargo run`. Verify HP is 18, Fortune is 2, Initiative is 3, Carry is 8. Stage 2 complete.
 
@@ -273,6 +283,8 @@ Verify the math: HP = 10 + (3×2) + 2 = 18 ✓ | Fortune = 2 + (1/3) = 2 ✓ | I
 
 > *Difficulty: Easy — Enums, pattern matching, and Display.*
 
+A hero without a homeland is a wanderer without purpose. Right now our character has stats but no world — no tone, no atmosphere, no narrative anchor. We need a way to represent the distinct realms of Crónica so the AI narrator (in Act 2) knows whether to whisper gothic horror or shout cyberpunk chaos. This stage introduces enums — Rust's way of saying "exactly one of these options, and the compiler will hold you to it."
+
 > [!tip] What You'll Learn
 > - **Enums** — a type that can be one of several variants
 > - `match` — Rust's powerful pattern matching (like switch on steroids)
@@ -280,6 +292,8 @@ Verify the math: HP = 10 + (3×2) + 2 = 18 ✓ | Fortune = 2 + (1/3) = 2 ✓ | I
 > - How enums differ from Python/TS string unions
 
 ### The Realm enum
+
+Right now we have a character with stats, but no world for them to inhabit. We need a type that represents the distinct realms — and guarantees at compile time that no one can accidentally create a quest in "Sombrahiem" (note the typo). We need an enum.
 
 Crónica's world has five realms, each with a distinct tone. In Python you might use string literals (`"Sombraheim"`); in TypeScript, a union type (`type Realm = "Sombraheim" | ...`). Rust uses enums — and the compiler guarantees you handle every variant.
 
@@ -368,6 +382,8 @@ Realm: Ironlands
 > [!warning] Common Mistake
 > **Non-exhaustive match.** If you add a sixth realm variant later but forget to update a `match`, the compiler will refuse to build. This is a *feature* — it prevents bugs that Python/TS would only catch at runtime.
 
+We have heroes and realms now, but no way to test their mettle — no randomness, no uncertainty, no risk. Next stage, we'll add the dice that decide fate.
+
 > [!check] Checkpoint
 > Run `cargo run`. You should see the character sheet followed by the Ironlands description. Stage 3 complete.
 
@@ -376,6 +392,8 @@ Realm: Ironlands
 ## Stage 4 — Rolling the Dice
 
 > *Difficulty: Easy — Functions, external crates, and randomness.*
+
+No RPG lives without the roll of dice — that moment of held breath between action and consequence. Right now our characters have stats but no way to test them against the world. We need randomness, and Rust's standard library doesn't include a random number generator. This stage teaches you how to pull in external crates and write your first standalone functions.
 
 > [!tip] What You'll Learn
 > - Adding an external dependency (`rand` crate)
@@ -463,6 +481,8 @@ The `_result` prefix tells Rust "I know I'm not using this value" — without th
 > [!warning] Common Mistake
 > **Semicolon on the return line.** If `roll_d20()` ends with `rng.gen_range(1..=20);` (note the semicolon), the function returns `()` (nothing) instead of `i32`, and the compiler will complain about mismatched types.
 
+We can roll dice now, but a raw d20 is just a number — it doesn't know whether Might or Wit is the right stat for kicking down a door. Next stage, we'll build the DC system that gives those rolls meaning.
+
 > [!check] Checkpoint
 > Run `cargo run`. You should see two dice rolls with random results. Stage 4 complete.
 
@@ -472,6 +492,8 @@ The `_result` prefix tells Rust "I know I'm not using this value" — without th
 
 > *Difficulty: Medium — Enums with data, the DC system, and Result types.*
 
+Rolling a d20 is meaningless without context — is this a Might check or a Charm check? Is the door reinforced or rotting? Right now we have dice and stats but no system connecting them. We need a challenge framework that classifies which stats apply, adjusts difficulty accordingly, and returns structured results. This stage also reveals Rust's killer feature: enums that carry data.
+
 > [!tip] What You'll Learn
 > - Enums that **carry data** (Rust's killer feature)
 > - The three-tier DC system from the game spec
@@ -480,7 +502,7 @@ The `_result` prefix tells Rust "I know I'm not using this value" — without th
 
 ### The DC system (spec v0.3)
 
-The game spec defines three tiers for stat checks:
+The game spec defines three tiers for stat checks. The three-tier system exists because a flat pass/fail check makes every stat equally useful for every challenge — which is boring. By classifying stats as primary, secondary, or off-stat, the system rewards players who lean into their character's strengths while still allowing creative approaches at a higher cost:
 
 | Tier | Rule | DC |
 |------|------|----|
@@ -491,6 +513,8 @@ The game spec defines three tiers for stat checks:
 There is no "wrong fit" tier. If a stat doesn't fit at all, the engine narrates it as color and moves on.
 
 ### Modeling it in Rust
+
+Right now we have dice rolls and character stats, but no way to classify *which* stat applies to a given challenge. We need types that represent stats, match tiers, and structured check results.
 
 ```rust
 #[derive(Debug)]
@@ -621,6 +645,8 @@ fn main() {
 > [!warning] Common Mistake
 > **Using `==` on enums without `PartialEq`.** We used a `Debug` format string comparison as a shortcut. The proper way is `#[derive(Debug, PartialEq)]` on `Stat`, then you can write `stat == &Stat::Might`. We'll clean this up later — for now, it works.
 
+We can challenge our heroes now, but they carry nothing — no sword, no potion, no map. Next stage, we'll build an inventory system and confront Rust's most infamous guardian: the borrow checker.
+
 > [!check] Checkpoint
 > Run `cargo run`. You should see a primary roll at DC 12, a secondary roll at DC 15, and an off-stat narration. Stage 5 complete.
 
@@ -629,6 +655,8 @@ fn main() {
 ## Stage 6 — The Inventory
 
 > *Difficulty: Medium — Ownership, borrowing, and the borrow checker.*
+
+What good is a hero who can't carry a sword? Right now our characters have stats and can face challenges, but they own nothing — no weapons, no potions, no loot. More importantly, we haven't yet confronted Rust's central concept: ownership. This stage forces you to move items between collections, and in doing so, teaches you the rules that make Rust memory-safe without a garbage collector.
 
 > [!tip] What You'll Learn
 > - `Vec<Item>` — dynamic lists
@@ -650,6 +678,8 @@ room_items.append(shield)  # player_items also sees the shield — surprise!
 Rust prevents this entire class of bugs. When you move a value, the original variable is **gone**. No shared mutable state, no surprises.
 
 ### The Item types
+
+Right now we have characters and challenges, but no concept of equipment or loot. We need item types that can be created, moved between locations, and inspected — and Rust's ownership system will ensure no item can exist in two places at once.
 
 ```rust
 #[derive(Debug)]
@@ -783,6 +813,8 @@ Room has 1 items remaining
 > [!warning] Common Mistake
 > **Borrowing as both `&` and `&mut` at the same time.** You can't read from a `Vec` while also modifying it. If you need to iterate and remove, collect indices first, then remove in reverse order.
 
+Our heroes carry swords and potions now, but when the program ends, everything vanishes — characters, items, progress, all gone. Next stage, we'll learn to save the world to disk with serialization.
+
 > [!check] Checkpoint
 > Run `cargo run`. Verify items move from room to inventory and the room count decreases. Stage 6 complete.
 
@@ -791,6 +823,8 @@ Room has 1 items remaining
 ## Stage 7 — Saving the World
 
 > *Difficulty: Medium — Serialization with serde, file I/O, and error handling.*
+
+A chronicle that vanishes when the candle goes out is no chronicle at all. Right now, every character we create dies when the program exits — no persistence, no memory, no continuity between sessions. We need to write game state to disk and read it back, which means converting Rust structs to JSON and handling the inevitable "file not found" errors gracefully.
 
 > [!tip] What You'll Learn
 > - Adding `serde` and `serde_json` dependencies
@@ -929,6 +963,8 @@ Check the generated `kael.json`:
 > [!warning] Common Mistake
 > **Using `.unwrap()` everywhere.** It works but panics on errors with no useful message. Prefer `.expect("description")` during development and proper `?` propagation in production code.
 
+Our heroes persist beyond death now — saved to disk, resurrected from JSON. But a character without a quest is just a stat block gathering dust. Next stage, we'll build the quest engine that drives the entire narrative arc.
+
 > [!check] Checkpoint
 > Run `cargo run`. Check that `kael.json` appears in your project directory with valid JSON. Load it back and verify the stats match. Stage 7 complete.
 
@@ -938,6 +974,8 @@ Check the generated `kael.json`:
 
 > *Difficulty: Medium — State machines, the 5-beat arc, and tension tracking.*
 
+Characters, realms, dice, items, persistence — we have all the pieces, but no engine to drive them. Right now there's nothing connecting a hero's first step to their final confrontation. We need a quest system that tracks narrative momentum, transitions between dramatic beats, and knows when the story has reached its climax. This stage turns scattered game mechanics into a living narrative machine.
+
 > [!tip] What You'll Learn
 > - Enums as **state machines** — the quest beat arc
 > - Structs containing enums — composing complex types
@@ -946,7 +984,7 @@ Check the generated `kael.json`:
 
 ### The 5-beat arc (spec v0.3)
 
-Every quest in Crónica follows a five-beat dramatic arc, driven by a tension level (0–10):
+Every quest in Crónica follows a five-beat dramatic arc, driven by a tension level (0–10). The five-beat structure exists because unstructured AI narration tends to meander — without guardrails, quests either fizzle out or escalate too fast. By tying narrative beats to a tension number, we give the AI a pacing framework while keeping the story feeling organic:
 
 ```mermaid
 flowchart LR
@@ -970,6 +1008,8 @@ flowchart LR
 | **Resolution** | Falling | Wrap up, rewards, consequences |
 
 ### Quest types and beats
+
+Right now we have characters, dice, and items — but no concept of a quest's narrative shape. We need enums to represent where we are in the story arc and what kind of quest we're running.
 
 ```rust
 #[derive(Debug, Clone)]
@@ -1127,6 +1167,8 @@ The quest flows naturally through all five beats, driven entirely by tension cha
 
 > [!warning] Common Mistake
 > **Match arm order matters.** Rust evaluates match arms top to bottom. If you put a catch-all `_` before specific patterns, those patterns will never match. Always put specific patterns first.
+
+The engine hums, the quest arc bends from hook to resolution — but the narrator's chair sits empty. In Act 2, we'll give Crónica its voice by connecting to AWS Bedrock and letting an AI breathe life into every scene.
 
 > [!check] Checkpoint
 > Run `cargo run`. Verify the quest transitions through all five beats: Hook → Exploration → Twist → Climax → Resolution. Stage 8 complete.
