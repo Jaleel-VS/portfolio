@@ -27,7 +27,14 @@ Source text (.rune file or REPL input)
 > - Colored terminal output
 
 
-**Estimated time:** 4–6 hours across all 4 stages.
+**Estimated time:** 5–7 hours across all 4 stages.
+
+```mermaid
+flowchart LR
+    S23["Stage 23\nThe Scrying Pool"] --> S24["Stage 24\nMulti-Line"]
+    S24 --> S25["Stage 25\nScroll Execution"]
+    S25 --> S26["Stage 26\nMiscast Diagnostics"]
+```
 
 **How Acts 4–5 differ from Acts 1–3:** Earlier acts gave you complete code for every function. From here on, you get **scaffolding with guided hints** — the structure and key snippets, but you fill in the gaps. You've learned enough Rust to connect the dots. Where a new concept appears, it's still explained in full.
 
@@ -245,6 +252,10 @@ Key behaviors to test:
 - Up arrow recalls previous input
 
 The scrying pool shimmers with single-line incantations. But try defining a function — the `{` hangs open and the parser chokes. Next, we teach the pool to detect incomplete input and wait for the closing `}`.
+
+### Extend it
+
+Add a `help` command to the REPL: when the user types `help`, print a list of available built-in functions and their signatures. This exercises the pattern of checking for special commands before sending input to the pipeline.
 
 > [!check] Checkpoint
 > Your project now has:
@@ -476,6 +487,10 @@ cargo run
 
 Multi-line incantations flow naturally now — the pool waits patiently for the closing brace. But the pool only works interactively. Next, we add scroll execution: reading `.rune` files from the command line, so dungeon rooms can be scripted and run directly.
 
+### Extend it
+
+Add a `clear` command that resets the environment — `Evaluator::new()` — so the user can start fresh without restarting the REPL. Print "Grimoire cleared." when it runs. This is useful when experimenting and you want a clean slate.
+
 > [!check] Checkpoint
 > Updated files:
 > - `src/main.rs` — REPL with multi-line buffer, `is_complete()` brace counter, persistent history
@@ -687,6 +702,10 @@ cargo run
 Note the `--` between `cargo run` and the filename — this tells Cargo "everything after `--` is for the program, not for Cargo."
 
 Scrolls execute from the command line and the hunter object awaits within. But when a spell misfires, the error message is bare — no suggestions, no color, no guidance. Next, we polish the diagnostics so miscast spells point the hunter toward the fix.
+
+### Extend it
+
+Add a `--ast` flag that prints the parsed AST instead of evaluating it: `cargo run -- --ast examples/01_hello.rune`. This is a debugging tool — it shows the tree the parser produced, which is invaluable when something evaluates wrong. Dispatch on `args[1]` being `"--ast"` and use `{:#?}` to pretty-print the statements.
 
 > [!check] Checkpoint
 > Updated files:
@@ -977,6 +996,10 @@ cargo run -- /tmp/test_error.rune
 # Should show: Undefined variable 'hq' (did you mean 'hp'?)
 # Exit code: 1
 ```
+
+### Extend it
+
+Add a "did you mean?" suggestion for unknown *function* calls too, not just variables. When `prnt("hello")` fails because `prnt` is undefined, suggest `print`. You already have `suggest_variable` — reuse it since functions are just variables that hold `Value::Function` or `Value::BuiltinFn`.
 
 > [!check] Checkpoint
 > New files:

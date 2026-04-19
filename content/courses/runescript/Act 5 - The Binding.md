@@ -24,7 +24,14 @@ Game Engine
 > - Integration testing — running real scripts end-to-end
 
 
-**Estimated time:** 4–6 hours across all 4 stages.
+**Estimated time:** 5–7 hours across all 4 stages.
+
+```mermaid
+flowchart LR
+    S27["Stage 27\nThe Game Bridge"] --> S28["Stage 28\nLoading Scrolls"]
+    S28 --> S29["Stage 29\nThe Watcher"]
+    S29 --> S30["Stage 30\nThe Grand Ritual"]
+```
 
 **The dependency inversion principle:** Right now, your built-in functions like `spawn_enemy` and `show_text` print `[GAME] ...` to stdout. That's fine for standalone mode, but when Runescript runs inside a game engine, those functions need to *call the engine*. The solution: define a `GameCallback` trait that the engine implements. The evaluator calls trait methods instead of printing directly. The engine provides the implementation. The interpreter never knows (or cares) what the engine actually does.
 
@@ -277,6 +284,10 @@ cargo run -- examples/05_dungeon_trap.rune
 Output should be identical to before — `[GAME] show_text(...)`, `[GAME] damage(...)`, etc. The difference is invisible from the outside but fundamental architecturally: the evaluator no longer knows *how* game events are handled.
 
 The bridge is built — game events flow through a trait, and any engine can implement it. But right now we load one script at a time. Next, we build the `ScriptManager` that scans a directory of scrolls, parses them all, and dispatches to the right one when a room is entered.
+
+### Extend it
+
+Write a `LoggingCallbacks` struct that implements `GameCallback` and records every call to a `Vec<String>` (like `TestCallbacks`) but *also* prints to stdout. This is the **decorator pattern** — wrapping one implementation with extra behavior. It's useful for debugging: see what the game engine would receive while still getting console output.
 
 > [!check] Checkpoint
 > New files:
@@ -565,6 +576,10 @@ Loaded 6 scrolls (0 errors)
 ```
 
 Scrolls load from a directory, parse once, and dispatch on demand. But during development, you'd have to restart the interpreter every time you edit a script. Next, we add the watcher — a sentinel that detects file changes and hot-reloads scripts without restarting.
+
+### Extend it
+
+Add a `run_all` method to `ScriptManager` that evaluates every loaded script in sorted order, printing the room ID before each one. Use it in `run_directory` to demo all rooms in sequence. This is your first end-to-end integration test — if all 6 example scripts run without errors, the interpreter works.
 
 > [!check] Checkpoint
 > New files:
@@ -871,6 +886,10 @@ The old version of the script is preserved — the game keeps running.
 
 The watcher stands guard — edit a scroll, save it, and the interpreter picks up the change without missing a beat. One final stage remains: the Grand Ritual, where every scroll runs end-to-end and we measure the interpreter's speed.
 
+### Extend it
+
+Add debouncing to the polling watcher: after detecting a change, wait 200ms before reloading. If another change arrives during the wait, reset the timer. This prevents double-reloads when editors write a temp file then rename it (which produces two filesystem events in quick succession). Use `std::time::Instant` to track the last change time.
+
 > [!check] Checkpoint
 > New files:
 > - `src/watcher.rs` — `FileWatcher` with `check_changes()` (polling approach)
@@ -1157,6 +1176,10 @@ Evaluations/sec: 308
 ```
 
 If all six scripts run and the benchmark completes, the Grand Ritual is done. Your interpreter is complete.
+
+### Extend it
+
+Add a `--bench` CLI flag that runs the benchmark directly (not through `cargo test`). It should read the boss encounter script, run it 1000 times, and print the results. This makes benchmarking a first-class feature of the interpreter: `cargo run --release -- --bench examples/06_boss_encounter.rune`.
 
 > [!check] Checkpoint
 > New files:

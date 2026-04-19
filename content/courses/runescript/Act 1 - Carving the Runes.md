@@ -21,8 +21,17 @@ Source text (.rune file)
 > - Character-by-character scanning — why hand-written lexers beat regex
 > - The two fundamental lexer operations: **peek** (look at the current character without consuming it) and **advance** (consume it and move forward)
 
+```mermaid
+flowchart LR
+    S1["Stage 1\nThe First Rune"] --> S2["Stage 2\nSingle-Char Runes"]
+    S2 --> S3["Stage 3\nTwo-Char Runes"]
+    S3 --> S4["Stage 4\nNumbers"]
+    S4 --> S5["Stage 5\nWords of Power"]
+    S5 --> S6["Stage 6\nThe Spoken Word"]
+    S6 --> S7["Stage 7\nThe Complete Carver"]
+```
 
-**Estimated time:** 3–5 hours across all 7 stages.
+**Estimated time:** 6–10 hours across all 7 stages.
 
 **Project setup:** Everything lives in `~/juk/runescript/`, a standard Cargo project.
 
@@ -229,10 +238,28 @@ New concepts:
 - `println!("...", tok)` — the `!` means it's a **macro**, not a function. `println!` is special because it parses the format string at compile time. `{:?}` is the Debug format specifier.
 
 > [!warning] Common Mistakes
-> - **Forgetting `mod token;` in `main.rs`** — Rust won't find your file. Every `.rs` file must be declared as a module somewhere.
-> - **Forgetting `pub` on struct fields** — without `pub`, fields are private and `main.rs` can't access them. You'll get: `field 'kind' of struct 'Token' is private`.
-> - **Using `{}` instead of `{:?}` in println** — `{}` requires the `Display` trait (human-readable output). `{:?}` uses `Debug` (programmer-readable). We derived `Debug` but not `Display`.
-> - **Edition not set to 2024** — check `Cargo.toml`. The 2024 edition has slightly different module resolution rules.
+> **Forgetting `mod token;` in `main.rs`** — Rust won't find your file. Every `.rs` file must be declared as a module somewhere. You'll see:
+> ```
+> error[E0432]: unresolved import `token`
+>  --> src/main.rs:3:5
+>   |
+> 3 | use token::{Token, TokenKind, Span};
+>   |     ^^^^^ use of undeclared crate or module `token`
+> ```
+>
+> **Forgetting `pub` on struct fields** — without `pub`, fields are private and `main.rs` can't access them:
+> ```
+> error[E0616]: field `kind` of struct `Token` is private
+>  --> src/main.rs:8:9
+>   |
+> 8 |         kind: TokenKind::IntLit(42),
+>   |         ^^^^ private field
+> ```
+>
+> **Using `{}` instead of `{:?}` in println** — `{}` requires the `Display` trait (human-readable output). `{:?}` uses `Debug` (programmer-readable). We derived `Debug` but not `Display`:
+> ```
+> error[E0277]: `Token` doesn't implement `std::fmt::Display`
+> ```
 
 ### Verify it works
 
@@ -249,7 +276,9 @@ Our first rune: Token { kind: IntLit(42), span: Span { line: 1, col: 1 } }
 
 If you see that, your types are defined correctly and the module system is wired up. The rune has been carved.
 
-The types are defined, but they're inert — we created them by hand. In the next stage, we'll build the `Lexer` struct that *produces* these tokens automatically by scanning source text character by character.
+### Extend it
+
+Create two more tokens by hand in `main.rs` — a `Plus` token at line 1, col 4, and a `StringLit("hello")` token at line 2, col 1. Print all three. This gets you comfortable with struct literal syntax and enum variant construction before we automate it.
 
 > [!check] Checkpoint
 > Your project should have these files:
@@ -334,6 +363,7 @@ The types are defined, but they're inert — we created them by hand. In the nex
 >     println!("Our first rune: {:?}", tok);
 > }
 > ```
+
 
 ---
 
@@ -430,6 +460,24 @@ impl Lexer {
 - `source: &str` — a **borrowed string slice**. The `&` means "I'm borrowing this data, not taking ownership." The caller keeps their string; we just read it. `.chars().collect()` iterates over the characters and collects them into a `Vec<char>`, which the lexer *owns*.
 - `source.chars()` — returns an iterator over the Unicode characters. `.collect()` consumes the iterator and builds a `Vec<char>`.
 
+### Concept: Ownership and Borrowing — Your First Encounter
+
+This is the moment Rust stops feeling like Python. Let's talk about what `&str` actually means.
+
+In Python, when you pass a string to a function, both the caller and the function can use it freely. Python's garbage collector figures out when to free the memory.
+
+Rust has no garbage collector. Instead, every value has exactly one **owner**. When the owner goes out of scope, the value is dropped (freed). This prevents memory leaks and use-after-free bugs at compile time.
+
+`&str` is a **reference** — it lets you *look at* data without owning it. Think of it like borrowing a book from a library:
+
+- The library (caller) still owns the book (the string)
+- You (the function) can read it, but you can't destroy it or keep it forever
+- When you're done (function returns), the borrow ends
+
+Our `Lexer::new` borrows the source string (`&str`), reads its characters, and copies them into a `Vec<char>` that the lexer owns. After `new` returns, the borrow is over — the caller's string is untouched, and the lexer has its own copy of the characters.
+
+Why not just store `&str` in the lexer? We could, but it would require **lifetime annotations** — telling the compiler "this lexer can't outlive the string it borrows." That's a topic for Act 3. For now, copying into `Vec<char>` is simpler and avoids lifetimes entirely.
+
 The two fundamental operations — **peek** and **advance**:
 
 ```rust
@@ -457,7 +505,10 @@ The two fundamental operations — **peek** and **advance**:
 ```
 
 - `&self` vs `&mut self` — this is Rust's borrowing system in action. `peek` only *reads* the lexer state, so it takes `&self` (shared/immutable reference). `advance` *modifies* `pos`, `line`, and `col`, so it takes `&mut self` (exclusive/mutable reference). The compiler enforces this — you can't call `advance` through a shared reference.
-- `Option<char>` — Rust's version of nullable. `Some('x')` means "there's a character here." `None` means "end of input." There's no `null` in Rust — you must use `Option` and handle both cases.
+
+  **Mental model:** `&self` is like looking through a window — you can see but not touch. `&mut self` is like having the key — you can go in and rearrange things. Rust guarantees that only one person has the key at a time (no data races).
+
+- `Option<char>` — Rust's version of nullable. `Some('x')` means "there's a character here." `None` means "end of input." There's no `null` in Rust — you must use `Option` and handle both cases. In Python, this is like returning `None` from a function, but Rust forces you to check for it.
 - `.get(self.pos)` — safe indexing that returns `Option<&char>` instead of panicking on out-of-bounds. `.copied()` converts `Option<&char>` to `Option<char>` (copies the char out of the reference — chars are tiny, this is cheap).
 - `if let Some(c) = ch` — **pattern matching** in an `if`. This destructures the `Option`: if it's `Some`, bind the inner value to `c` and run the block. If it's `None`, skip it. This is like Python's `if ch is not None: c = ch` but more elegant.
 
@@ -488,7 +539,19 @@ Skip whitespace — spaces, tabs, and newlines are not tokens:
 - `while let Some(c) = self.peek()` — loop as long as `peek()` returns `Some`. When it returns `None` (end of input), the loop exits. This is idiomatic Rust for "keep going until there's nothing left."
 - `c.is_ascii_whitespace()` — a method on `char`. Returns `true` for space, tab, newline, carriage return, etc.
 
-Now the main scanning method:
+Now the main scanning method. **Try implementing this yourself first.** You have `peek()`, `advance()`, `skip_whitespace()`, and `span()`. The method should:
+
+1. Loop until end of input
+2. Skip whitespace at the start of each iteration
+3. Record the span before consuming a character
+4. Advance to get the next character
+5. Match the character to a `TokenKind`
+6. Push the token onto a `Vec<Token>`
+
+Give it a shot — handle at least `+`, `-`, `*`, `(`, `)`. Skip unknown characters with `continue`.
+
+<details>
+<summary>Solution: scan_tokens</summary>
 
 ```rust
     /// Scan all tokens from the source text.
@@ -536,6 +599,10 @@ Now the main scanning method:
 }
 ```
 
+</details>
+
+Key concepts in the solution:
+
 - `let mut tokens = Vec::new();` — creates an empty, growable vector. `mut` because we'll `.push()` into it. `Vec` is Rust's `list` / `Array` — a heap-allocated, resizable array.
 - `loop { ... }` — infinite loop. We `break` when we hit end of input.
 - `match ch { ... }` — **pattern matching** on the character. This is Rust's `switch` statement, but exhaustive — the compiler warns if you don't cover all cases. The `_` arm is the catch-all (like `default` in a switch).
@@ -565,9 +632,32 @@ fn main() {
 
 - `mod lexer;` — declare the new module.
 - `let mut lex = Lexer::new(source);` — `mut` because `scan_tokens` takes `&mut self`.
-- `for tok in &tokens` — iterate over *references* to the tokens. The `&` means "borrow each token, don't move it out of the vector." Without `&`, the loop would *consume* the vector and you couldn't use `tokens` afterward. This is Rust's ownership system at work.
+- `for tok in &tokens` — iterate over *references* to the tokens. The `&` means "borrow each token, don't move it out of the vector." Without `&`, the loop would *consume* the vector and you couldn't use `tokens` afterward.
 
-Let's also add our first test. In Rust, tests live in the same file as the code they test, inside a `#[cfg(test)]` module. Add this at the bottom of `src/lexer.rs`:
+> [!warning] The Ownership Wall: `for tok in tokens` vs `for tok in &tokens`
+> Try removing the `&` and adding a `println!("{}", tokens.len());` after the loop:
+> ```rust
+> for tok in tokens {       // moves each token OUT of the vector
+>     println!("{:?}", tok);
+> }
+> println!("{}", tokens.len());  // ERROR!
+> ```
+> The compiler says:
+> ```
+> error[E0382]: borrow of moved value: `tokens`
+>  --> src/main.rs:12:20
+>   |
+> 9 |     for tok in tokens {
+>   |                ------ `tokens` moved due to this implicit call to `.into_iter()`
+> ...
+> 12|     println!("{}", tokens.len());
+>   |                    ^^^^^^ value borrowed here after move
+> ```
+> **What happened:** `for tok in tokens` calls `.into_iter()`, which *consumes* the vector. Each token is moved out, and after the loop, `tokens` is empty and invalid. The compiler prevents you from using it.
+>
+> **The fix:** `for tok in &tokens` calls `.iter()`, which borrows each element. The vector stays intact. This is Rust's ownership system protecting you from use-after-free — at compile time, not runtime.
+
+Let's also add our first tests. In Rust, tests live in the same file as the code they test, inside a `#[cfg(test)]` module. Add this at the bottom of `src/lexer.rs`:
 
 ```rust
 #[cfg(test)]
@@ -619,10 +709,29 @@ mod tests {
 - `tokens.iter().map(|t| &t.kind).collect()` — iterator chain. `.iter()` borrows each element, `.map(|t| &t.kind)` transforms each token into a reference to its kind, `.collect()` gathers results into a `Vec`. The `|t|` is a **closure** (anonymous function) — like Python's `lambda t: t.kind`.
 
 > [!warning] Common Mistakes
-> - **Forgetting `mut` on the lexer** — `scan_tokens` takes `&mut self`, so the variable must be `let mut lex`. The compiler error is clear: "cannot borrow `lex` as mutable, as it is not declared as mutable."
-> - **Using `source[i]` on a `&str`** — Rust strings aren't indexable by position. That's why we convert to `Vec<char>`. If you try `source[0]`, you'll get: "the type `str` cannot be indexed by `usize`."
-> - **Forgetting `&` in `for tok in &tokens`** — without the `&`, the loop *moves* each token out of the vector, consuming it. If you try to use `tokens` afterward, the compiler says "value used after move."
-> - **Missing `mod lexer;` in `main.rs`** — the file exists but Rust doesn't know about it. You'll get "unresolved import."
+> **Forgetting `mut` on the lexer** — `scan_tokens` takes `&mut self`, so the variable must be `let mut lex`:
+> ```
+> error[E0596]: cannot borrow `lex` as mutable, as it is not declared as mutable
+>  --> src/main.rs:8:18
+>   |
+> 8 |     let tokens = lex.scan_tokens();
+>   |                  ^^^ cannot borrow as mutable
+>   |
+> help: consider changing this to be mutable
+>   |
+> 7 |     let mut lex = Lexer::new(source);
+>   |         +++
+> ```
+>
+> **Using `source[i]` on a `&str`** — Rust strings aren't indexable by position. That's why we convert to `Vec<char>`:
+> ```
+> error[E0277]: the type `str` cannot be indexed by `{integer}`
+> ```
+>
+> **Missing `mod lexer;` in `main.rs`** — the file exists but Rust doesn't know about it:
+> ```
+> error[E0432]: unresolved import `lexer`
+> ```
 
 ### Verify it works
 
@@ -647,7 +756,9 @@ cargo test
 
 Expected: all 3 tests pass.
 
-The lexer can now scan single-character tokens and skip whitespace — but it treats `==` as two separate `Eq` tokens. Next, we teach it to peek ahead and recognize two-character runes.
+### Extend it
+
+Write a test called `scan_all_delimiters` that lexes `"( ) { } [ ] , ;"` and verifies all 8 delimiter tokens are produced in the correct order. This reinforces the test-writing pattern and the match-arm-to-token mapping.
 
 > [!check] Checkpoint
 > **`src/lexer.rs`** (complete):
@@ -806,6 +917,7 @@ The lexer can now scan single-character tokens and skip whitespace — but it tr
 > }
 > ```
 
+
 ---
 
 ## Stage 3: Two-Character Runes — Easy
@@ -856,7 +968,10 @@ We need a helper method that peeks at the next character and advances only if it
 
 This is the peek-then-conditionally-advance pattern. It's used everywhere in lexers and parsers. The key insight: `peek()` doesn't move the cursor, so if the character doesn't match, we haven't consumed anything.
 
-Now update the `match ch` block in `scan_tokens`. Replace the single-character arms for `=`, `!`, `<`, `>`, and add `&`:
+Now update the `match ch` block in `scan_tokens`. **Try it yourself first:** replace the `'='` arm so it checks for `==` vs `=`. The pattern is: call `self.match_char('=')` — if true, return `EqEq`; if false, return `Eq`. Then do the same for `!`, `<`, `>`.
+
+<details>
+<summary>Solution: updated match block</summary>
 
 ```rust
             let kind = match ch {
@@ -923,6 +1038,8 @@ Now update the `match ch` block in `scan_tokens`. Replace the single-character a
             };
 ```
 
+</details>
+
 Notice the pattern: each arm is a block `{ ... }` that returns a `TokenKind`. In Rust, `if/else` is an **expression** — it returns a value. So `if self.match_char('=') { TokenKind::EqEq } else { TokenKind::Eq }` evaluates to one of those two variants. No `return` needed — the last expression in a block is its value (no semicolon!).
 
 For `&` and `|`, a lone character isn't valid in Runescript (there's no bitwise AND/OR), so we `continue` to skip it. We'll turn this into a proper error in Stage 7.
@@ -967,12 +1084,6 @@ Add tests at the bottom of the `mod tests` block:
 
     #[test]
     fn mixed_operators() {
-        // Make sure two-char and single-char tokens work side by side
-        let mut lexer = Lexer::new("x = 5 == 5");
-        let tokens = lexer.scan_tokens();
-        // x is unknown (skipped for now), so we get: Eq, EqEq
-        // Actually = and == with numbers — numbers are skipped too.
-        // Let's just test the operators:
         let mut lexer = Lexer::new("= == !=");
         let tokens = lexer.scan_tokens();
         let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
@@ -984,10 +1095,18 @@ Add tests at the bottom of the `mod tests` block:
 ```
 
 > [!warning] Common Mistakes
-> - **Forgetting to add `match_char` before using it** — Rust methods must be defined before they're called within the same `impl` block... actually, no — Rust doesn't care about declaration order within an `impl` block. But if you put it in a *different* `impl` block, make sure it's for the same type.
-> - **Missing the `else` branch** — in Rust, `if` used as an expression *must* have an `else` branch (unless the `if` arm diverges with `return`/`break`/`continue`). The compiler says: "expected `TokenKind`, found `()`."
-> - **Adding a semicolon after the `if/else` expression** — `if x { A } else { B };` with a trailing semicolon turns the expression into a statement that returns `()` (unit/void). The match arm then has the wrong type.
-> - **Confusing `&` (reference) with `&&` (logical AND token)** — in Rust code, `&` creates a reference and `&&` is a double-reference or logical AND. In Runescript source, `&&` is the logical AND operator. Don't mix up the language you're *writing* with the language you're *lexing*.
+> **Missing the `else` branch** — in Rust, `if` used as an expression *must* have an `else` branch (unless the `if` arm diverges with `return`/`break`/`continue`):
+> ```
+> error[E0317]: `if` may be missing an `else` clause
+>  --> src/lexer.rs:52:17
+>   |
+> 52|                 if self.match_char('=') {
+>   |                 ^ expected `TokenKind`, found `()`
+> ```
+>
+> **Adding a semicolon after the `if/else` expression** — `if x { A } else { B };` with a trailing semicolon turns the expression into a statement that returns `()` (unit/void). The match arm then has the wrong type.
+>
+> **Confusing `&` (reference) with `&&` (logical AND token)** — in Rust code, `&` creates a reference and `&&` is a double-reference or logical AND. In Runescript source, `&&` is the logical AND operator. Don't mix up the language you're *writing* with the language you're *lexing*.
 
 ### Verify it works
 
@@ -1017,7 +1136,9 @@ cargo run
 
 You should see `EqEq`, `BangEq`, `LtEq`, `GtEq` in the output.
 
-Operators are handled — both single and double-character. But the lexer still skips over digits and letters. Next, we teach it to consume multi-character sequences: numbers.
+### Extend it
+
+Write a test called `adjacent_two_char_ops` that lexes `"===!=="` (no spaces) and verifies the lexer produces `EqEq`, `Eq`, `BangEq`, `Eq`. This tests that the lookahead correctly handles operators jammed together without whitespace.
 
 > [!check] Checkpoint
 > **`src/lexer.rs`** — only the changed/added parts are shown. The full file is the Stage 2 checkpoint with these modifications:
@@ -1026,7 +1147,8 @@ Operators are handled — both single and double-character. But the lexer still 
 > 2. Replace the `match ch` block in `scan_tokens` with the expanded version above.
 > 3. Add the three new tests.
 >
-> The full `scan_tokens` match block is shown in The Code section above. The rest of the file (struct, `new`, `peek`, `advance`, `span`, `skip_whitespace`) is unchanged from Stage 2.
+> The full `scan_tokens` match block is shown in the solution above. The rest of the file (struct, `new`, `peek`, `advance`, `span`, `skip_whitespace`) is unchanged from Stage 2.
+
 
 ---
 
@@ -1061,7 +1183,25 @@ Same idea in Rust — accumulate digit characters into a string, then parse it.
 
 ### The Code
 
-Add a `scan_number` method to the `impl Lexer` block:
+This is your first multi-character scanning method. **Implement `scan_number` yourself.** Here's the signature and what it should do:
+
+```rust
+fn scan_number(&mut self, first_char: char) -> TokenKind
+```
+
+1. Create a `String`, push `first_char` into it
+2. Loop: peek at the next character — if it's a digit, advance and push it
+3. Parse the accumulated string into an `i64`
+4. Return `TokenKind::IntLit(value)`
+
+Hints:
+- `String::new()` creates an empty string
+- `num_str.push(c)` appends a char
+- `num_str.parse::<i64>().unwrap()` converts string to integer
+- `c.is_ascii_digit()` checks if a char is `0`–`9`
+
+<details>
+<summary>Solution: scan_number</summary>
 
 ```rust
     /// Scan an integer literal. The first digit has already been consumed
@@ -1088,10 +1228,32 @@ Add a `scan_number` method to the `impl Lexer` block:
     }
 ```
 
+</details>
+
+Let's break down the new concepts:
+
 - `String::new()` — creates an empty, heap-allocated string. Like `""` in Python but explicitly allocated.
 - `num_str.push(first_char)` — appends a single `char` to the string. Like Python's `+=` for strings, but mutates in place (more efficient).
 - `num_str.parse().unwrap()` — `.parse()` is a generic method that converts a string to any type that implements `FromStr`. The compiler infers we want `i64` from the type annotation `let value: i64`. It returns a `Result<i64, ParseIntError>` — either `Ok(42)` or `Err(...)`. `.unwrap()` extracts the `Ok` value or panics on `Err`. Since we only collected digits, parsing can't fail (unless the number overflows `i64`, which we'll ignore for now).
-- `Result` is Rust's error handling type — like `Option` but the error case carries information about *what* went wrong. `Ok(value)` is success, `Err(error)` is failure. We'll use `Result` properly in Stage 7.
+
+### Concept: Result and .unwrap() — A Preview of Error Handling
+
+`Result` is Rust's error handling type — like `Option` but the error case carries information about *what* went wrong. `Ok(value)` is success, `Err(error)` is failure.
+
+| Python | Rust |
+|--------|------|
+| `try: int(s)` / `except ValueError` | `s.parse::<i64>()` returns `Result<i64, ParseIntError>` |
+| Success: returns the int | `Ok(42)` |
+| Failure: raises exception | `Err(ParseIntError { ... })` |
+
+`.unwrap()` is a shortcut that says "I'm sure this will succeed — panic if it doesn't." It's fine for prototyping but dangerous in production code. **What happens when `.unwrap()` panics?**
+
+```
+thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value:
+ParseIntError { kind: InvalidDigit }', src/lexer.rs:42:47
+```
+
+The program crashes with a stack trace. No graceful error message, no recovery. In Stage 6, we'll replace `.unwrap()` with the `?` operator for proper error propagation. For now, `.unwrap()` is safe because we only feed digit characters to `.parse()`.
 
 Now hook it into `scan_tokens`. Add this arm to the `match ch` block, *before* the `_ => continue` catch-all:
 
@@ -1128,10 +1290,23 @@ Add tests:
 ```
 
 > [!warning] Common Mistakes
-> - **Trying to handle `-7` in the lexer** — don't. `-` is always `Minus`. The parser combines `Minus` + `IntLit(7)` into a negation expression. If you try to handle it in the lexer, you'll break subtraction: `10 - 7` would lex as `IntLit(10)`, `IntLit(-7)` instead of `IntLit(10)`, `Minus`, `IntLit(7)`.
-> - **Forgetting `mut` on `num_str`** — `push` mutates the string, so it must be `let mut num_str`.
-> - **Putting the digit arm after `_ => continue`** — match arms are checked top to bottom. The `_` catch-all matches everything, so nothing below it runs. Always put `_` last.
-> - **Using `num_str.parse::<i64>()` without the type annotation** — either annotate the variable (`let value: i64 = ...`) or use the turbofish syntax (`.parse::<i64>()`). Without either, Rust can't infer what type to parse into.
+> **Trying to handle `-7` in the lexer** — don't. `-` is always `Minus`. The parser combines `Minus` + `IntLit(7)` into a negation expression. If you try to handle it in the lexer, you'll break subtraction: `10 - 7` would lex as `IntLit(10)`, `IntLit(-7)` instead of `IntLit(10)`, `Minus`, `IntLit(7)`.
+>
+> **Forgetting `mut` on `num_str`** — `push` mutates the string, so it must be `let mut num_str`:
+> ```
+> error[E0596]: cannot borrow `num_str` as mutable, as it is not declared as mutable
+> ```
+>
+> **Putting the digit arm after `_ => continue`** — match arms are checked top to bottom. The `_` catch-all matches everything, so nothing below it runs. Always put `_` last.
+>
+> **Using `num_str.parse::<i64>()` without the type annotation** — either annotate the variable (`let value: i64 = ...`) or use the turbofish syntax (`.parse::<i64>()`). Without either, Rust can't infer what type to parse into:
+> ```
+> error[E0284]: type annotations needed
+>   --> src/lexer.rs:45:30
+>    |
+> 45 |         let value = num_str.parse().unwrap();
+>    |                             ^^^^^ cannot infer type of the type parameter `F`
+> ```
 
 ### Verify it works
 
@@ -1161,7 +1336,9 @@ cargo run
 
 Expected output includes `IntLit(42)`, `Plus`, `IntLit(7)`, `EqEq`, `IntLit(49)`.
 
-Numbers flow through the carver now, but words are still invisible — `let`, `hp`, `if` all vanish into the `_ => continue` void. Next, we teach the lexer to read identifiers and distinguish them from keywords.
+### Extend it
+
+Write a test called `negative_is_two_tokens` that lexes `"-42"` and verifies it produces `Minus`, `IntLit(42)` — NOT `IntLit(-42)`. This reinforces the design decision that the lexer doesn't handle negative numbers.
 
 > [!check] Checkpoint
 > Add to `src/lexer.rs`:
@@ -1171,6 +1348,7 @@ Numbers flow through the carver now, but words are still invisible — `let`, `h
 > 3. The two new tests.
 >
 > Everything else is unchanged from Stage 3.
+
 
 ---
 
@@ -1182,7 +1360,7 @@ Numbers flow through the carver now, but words are still invisible — `let`, `h
 
 **Spec reference:** §3.1 (Keywords Table — all 11 keywords), §3 (`Ident(String)`, `True`, `False`, `Nil`, and all keyword tokens)
 
-**New Rust concept(s):** `HashMap`, `lazy_static` alternative (function-local initialization), closures in `.is_ascii_alphanumeric()`, `String` ownership in enum variants, the `_` character in identifiers
+**New Rust concept(s):** `HashMap`, closures in `.is_ascii_alphanumeric()`, `String` ownership in enum variants, the `_` character in identifiers
 
 ### Why this stage
 
@@ -1245,9 +1423,33 @@ Add a method that builds the keyword table:
 
 - `fn keywords()` — no `&self` parameter, so this is an **associated function** (like a static method in Python). You call it as `Lexer::keywords()`, not `self.keywords()`.
 - `HashMap<&'static str, TokenKind>` — the keys are string slices with a `'static` lifetime, meaning they live for the entire program. String literals like `"let"` are baked into the binary and are always `'static`. The values are `TokenKind` variants.
-- **Lifetime `'static`** — this is your first encounter with Rust lifetimes. Don't panic. A lifetime tells the compiler "this reference is valid for at least this long." `'static` means "forever" — it's the simplest lifetime. String literals are always `'static` because they're embedded in the compiled binary. We'll see more complex lifetimes in later acts.
 
-Now the identifier/keyword scanner:
+### Concept: Lifetimes — Don't Panic
+
+`'static` is your first encounter with Rust lifetimes. A lifetime tells the compiler "this reference is valid for at least this long." `'static` means "forever" — it's the simplest lifetime. String literals are always `'static` because they're embedded in the compiled binary.
+
+In Python, you never think about this — the garbage collector handles it. In Rust, the compiler tracks how long every reference lives and refuses to compile code where a reference might outlive the data it points to. This prevents dangling pointer bugs.
+
+For now, just know: `&'static str` means "a string slice that lives forever." We'll see more complex lifetimes in later acts. Don't worry about them until the compiler asks you to.
+
+Now implement `scan_identifier`. **Try it yourself.** The pattern is identical to `scan_number`:
+
+```rust
+fn scan_identifier(&mut self, first_char: char) -> TokenKind
+```
+
+1. Create a `String`, push `first_char`
+2. Loop: peek — if the next char is alphanumeric or `_`, advance and push
+3. Look up the word in the keyword table
+4. Return the keyword `TokenKind` if found, or `TokenKind::Ident(word)` if not
+
+Hints:
+- `Self::keywords()` calls the associated function
+- `keywords.get(word.as_str())` looks up a `&str` in the map
+- You'll need `.clone()` on the keyword result (the map gives you a reference)
+
+<details>
+<summary>Solution: scan_identifier</summary>
 
 ```rust
     /// Scan an identifier or keyword. The first character has already been
@@ -1275,10 +1477,35 @@ Now the identifier/keyword scanner:
     }
 ```
 
+</details>
+
+Key concepts in the solution:
+
 - `Self::keywords()` — `Self` refers to the current type (`Lexer`). This calls the associated function we just defined.
 - `word.as_str()` — converts `String` to `&str` for the HashMap lookup. `String` is owned, `&str` is borrowed. The HashMap keys are `&str`, so we need to convert.
 - `kind.clone()` — the HashMap gives us a `&TokenKind` (a reference). We need to return an owned `TokenKind`, so we `.clone()` it. This is why we derived `Clone` on `TokenKind` back in Stage 1.
 - `TokenKind::Ident(word)` — when it's not a keyword, we move `word` into the `Ident` variant. This is an **ownership transfer** — `word` is consumed and now lives inside the `TokenKind`. After this line, you can't use `word` anymore. This is Rust's ownership system preventing use-after-free bugs.
+
+> [!note] Ownership Transfer in Action
+> When we write `TokenKind::Ident(word)`, the `String` stored in `word` is **moved** into the enum variant. If you tried to use `word` after this line:
+> ```rust
+> let kind = TokenKind::Ident(word);
+> println!("{}", word);  // ERROR!
+> ```
+> The compiler says:
+> ```
+> error[E0382]: borrow of moved value: `word`
+>  --> src/lexer.rs:78:20
+>   |
+> 75|         let mut word = String::new();
+>   |             -------- move occurs because `word` has type `String`
+> ...
+> 77|         TokenKind::Ident(word)
+>   |                          ---- value moved here
+> 78|         println!("{}", word);
+>   |                        ^^^^ value borrowed here after move
+> ```
+> In Python, both `kind` and `word` would point to the same string object. In Rust, there's exactly one owner. The `String` moved from `word` into the enum — `word` is now empty/invalid.
 
 Hook it into `scan_tokens`. Add this arm before `_ => continue`:
 
@@ -1351,10 +1578,17 @@ Add tests:
 The last test is a milestone — `let hp = 100` is the first real Runescript statement we can fully tokenize! It produces exactly the token stream the parser will expect in Act 2.
 
 > [!warning] Common Mistakes
-> - **Forgetting `use std::collections::HashMap;`** — you'll get "cannot find type `HashMap` in this scope."
-> - **Checking `keywords.get(&word)` instead of `keywords.get(word.as_str())`** — `&word` is `&String`, but the HashMap keys are `&str`. Rust *can* auto-deref `&String` to `&str` in many contexts, but `.get()` on a `HashMap<&str, _>` expects `&str`. Using `.as_str()` is explicit and always works.
-> - **Forgetting `.clone()` on the keyword lookup result** — the HashMap gives you a reference. You need an owned value to return. Without `.clone()`, you'd be trying to return a reference to data owned by the local `keywords` variable, which gets dropped at the end of the function. The compiler catches this: "cannot return reference to local variable."
-> - **Starting identifiers with digits** — `3hp` should lex as `IntLit(3)` then `Ident("hp")`, not `Ident("3hp")`. Our match order handles this: the digit arm comes before the identifier arm, so `3` is consumed as a number first.
+> **Forgetting `use std::collections::HashMap;`** — you'll get:
+> ```
+> error[E0433]: failed to resolve: use of undeclared type `HashMap`
+> ```
+>
+> **Forgetting `.clone()` on the keyword lookup result** — the HashMap gives you a reference. You need an owned value to return. Without `.clone()`, you'd be trying to return a reference to data owned by the local `keywords` variable, which gets dropped at the end of the function:
+> ```
+> error[E0515]: cannot return reference to local variable `keywords`
+> ```
+>
+> **Starting identifiers with digits** — `3hp` should lex as `IntLit(3)` then `Ident("hp")`, not `Ident("3hp")`. Our match order handles this: the digit arm comes before the identifier arm, so `3` is consumed as a number first.
 
 ### Verify it works
 
@@ -1377,7 +1611,9 @@ Token { kind: Eq, span: Span { line: 1, col: 8 } }
 Token { kind: IntLit(100), span: Span { line: 1, col: 10 } }
 ```
 
-The carver speaks the language's words now — `let hp = 100` produces exactly the token stream the parser will expect. But one token type remains: the spoken word, the string literal. Next, we handle `"hello"` with its escape sequences and interpolation markers.
+### Extend it
+
+Add a `Colon` token variant to `TokenKind` in `token.rs`, add the `':'` arm to the lexer's match block, and write a test that lexes `"key: value"` into `Ident("key")`, `Colon`, `Ident("value")`. This exercises the full loop: define a type, scan it, test it. (You can remove `Colon` afterward if it's not in the spec — the point is the practice.)
 
 > [!check] Checkpoint
 > Add to `src/lexer.rs`:
@@ -1387,6 +1623,7 @@ The carver speaks the language's words now — `let hp = 100` produces exactly t
 > 3. `fn scan_identifier()` method in the `impl Lexer` block.
 > 4. The `c if c.is_ascii_alphabetic() || c == '_'` arm in the match block (before `_ => continue`).
 > 5. Four new tests.
+
 
 ---
 
@@ -1430,9 +1667,54 @@ if ch == '"':
     tokens.append(Token(STRING_LIT, string_content, ...))
 ```
 
+### Concept: Result<T, E> and the ? Operator — Real Error Handling
+
+This is the stage where we graduate from `.unwrap()` to proper error handling. In Python, you raise exceptions. In Rust, you return `Result`.
+
+| Python | Rust |
+|--------|------|
+| `raise LexError("unterminated string")` | `return Err("unterminated string".to_string())` |
+| `try: ... except LexError as e:` | `match result { Ok(v) => ..., Err(e) => ... }` |
+| Exceptions propagate automatically up the call stack | Errors propagate explicitly with `?` |
+
+`Result<T, E>` has two variants:
+- `Ok(value)` — success, carrying the result
+- `Err(error)` — failure, carrying error information
+
+The `?` operator is syntactic sugar for "if this is `Err`, return the error immediately; if it's `Ok`, unwrap the value." It replaces this:
+
+```rust
+let kind = match self.scan_string() {
+    Ok(k) => k,
+    Err(e) => return Err(e),
+};
+```
+
+With this:
+
+```rust
+let kind = self.scan_string()?;
+```
+
+Much cleaner. The `?` can only be used in functions that return `Result`.
+
 ### The Code
 
-This is the first time we need to return errors from the lexer. We'll change `scan_tokens` to return `Result<Vec<Token>, String>` — either a list of tokens or an error message. First, let's write the string scanner:
+**Implement `scan_string` yourself.** The opening `"` has already been consumed by the caller. Your method should:
+
+```rust
+fn scan_string(&mut self) -> Result<TokenKind, String>
+```
+
+1. Create an empty `String` for the content
+2. Loop: advance to get the next character
+   - `None` → return `Err("Unterminated string literal")`
+   - `'"'` → return `Ok(TokenKind::StringLit(content))`
+   - `'\\'` → advance again, match the escape character (`n` → `\n`, `t` → `\t`, `\\` → `\`, `"` → `"`, `{` → `{`, `}` → `}`)
+   - Anything else → push it to content
+
+<details>
+<summary>Solution: scan_string</summary>
 
 ```rust
     /// Scan a string literal. The opening '"' has already been consumed.
@@ -1488,61 +1770,31 @@ This is the first time we need to return errors from the lexer. We'll change `sc
     }
 ```
 
-Let's break down the new concepts:
+</details>
 
-- `Result<TokenKind, String>` — a **Result** type. `Ok(TokenKind::StringLit(...))` on success, `Err("error message")` on failure. This is Rust's primary error handling mechanism — no exceptions, no try/catch. Errors are values that you must handle.
-- `format!(...)` — like `println!` but returns a `String` instead of printing. Like Python's f-strings: `f"[line {start_line}, col {start_col}] ..."`.
-- `return Err(...)` — early return with an error. The caller must handle this.
-- Nested `match` — we match on the character after `\` to determine the escape sequence. `\n` becomes a real newline character, `\"` becomes a literal quote, etc.
+Key concepts:
+
+- `format!(...)` — like `println!` but returns a `String` instead of printing. Like Python's f-strings.
+- `return Err(...)` — early return with an error. The caller must handle this. Note the explicit `return` — without it, the error value is created and immediately dropped.
+- Nested `match` — we match on the character after `\` to determine the escape sequence.
 - `{` and `}` pass through as regular characters — the lexer preserves them for the evaluator to handle interpolation (§3.2).
 
-Now update `scan_tokens` to return `Result` and handle the string case. Change the signature and add the `'"'` arm:
+Now update `scan_tokens` to return `Result` and handle the string case. Change the signature:
 
 ```rust
     pub fn scan_tokens(&mut self) -> Result<Vec<Token>, String> {
-        let mut tokens = Vec::new();
-
-        loop {
-            self.skip_whitespace();
-            let sp = self.span();
-
-            let ch = match self.advance() {
-                Some(c) => c,
-                None => break,
-            };
-
-            let kind = match ch {
-                // ... all previous arms unchanged ...
-
-                // String literals
-                '"' => self.scan_string()?,
-
-                // Identifiers and keywords
-                c if c.is_ascii_alphabetic() || c == '_' => self.scan_identifier(c),
-
-                // Number literals
-                c if c.is_ascii_digit() => self.scan_number(c),
-
-                _ => continue,
-            };
-
-            tokens.push(Token { kind, span: sp });
-        }
-
-        Ok(tokens)
-    }
 ```
 
-- `self.scan_string()?` — the `?` operator is Rust's error propagation. If `scan_string()` returns `Err(msg)`, the `?` immediately returns that error from `scan_tokens`. If it returns `Ok(kind)`, the `?` unwraps it to just `kind`. It's syntactic sugar for:
-  ```rust
-  match self.scan_string() {
-      Ok(kind) => kind,
-      Err(e) => return Err(e),
-  }
-  ```
-  This is like Python's exception propagation but explicit — you choose where errors propagate with `?`.
+Add the `'"'` arm in the match block:
 
-- The return type changed from `Vec<Token>` to `Result<Vec<Token>, String>`. The final line is `Ok(tokens)` — wrapping the success case.
+```rust
+                // String literals
+                '"' => self.scan_string()?,
+```
+
+And change the final line from `tokens` to `Ok(tokens)`.
+
+The `?` on `self.scan_string()?` means: if `scan_string` returns `Err`, propagate it immediately from `scan_tokens`. If it returns `Ok(kind)`, unwrap it to `kind`.
 
 Since `scan_tokens` now returns `Result`, update `main.rs`:
 
@@ -1570,7 +1822,7 @@ fn main() {
 - `r#"..."#` — a **raw string literal** in Rust. Characters inside aren't escaped, so `"` doesn't need to be `\"`. The `#` delimiters let you include literal double quotes. This is handy for test strings that contain quotes.
 - `eprintln!` — like `println!` but prints to stderr. Standard practice for error messages.
 
-Update the existing tests to handle the `Result` return type — add `.unwrap()` after `scan_tokens()`:
+**Update all existing tests** to handle the `Result` return type — add `.unwrap()` after `scan_tokens()`:
 
 Every previous test that calls `scan_tokens()` needs to change from:
 ```rust
@@ -1582,6 +1834,13 @@ let tokens = lexer.scan_tokens().unwrap();
 ```
 
 `.unwrap()` on a `Result` extracts the `Ok` value or panics on `Err`. In tests, panicking is fine — it fails the test with a clear message.
+
+> [!warning] Why `.unwrap()` is OK in tests but not in production
+> In tests, a panic means "test failed" — exactly what we want. The test runner catches the panic and reports it.
+>
+> In production code, a panic crashes the entire program. That's why `scan_tokens` returns `Result` instead of panicking — the caller can decide how to handle the error (print a message, try to recover, etc.).
+>
+> Rule of thumb: `.unwrap()` in tests = fine. `.unwrap()` in library/application code = code smell. Use `?` or `match` instead.
 
 Add string-specific tests:
 
@@ -1634,10 +1893,15 @@ Add string-specific tests:
 ```
 
 > [!warning] Common Mistakes
-> - **Forgetting to update ALL existing tests to use `.unwrap()`** — once `scan_tokens` returns `Result`, every call site must handle it. The compiler will tell you: "expected `Vec<Token>`, found `Result<Vec<Token>, String>`."
-> - **Not handling `\{` and `\}` escapes** — if someone writes `"literal \{braces\}"`, the backslash should escape the brace. Without this, the evaluator would try to interpolate `braces\` as a variable name.
-> - **Consuming the closing `"` twice** — the `Some('"')` arm in the match already consumed it via `advance()`. Don't call `advance()` again.
-> - **Forgetting `return` in the error cases** — `Err(...)` creates an error value but doesn't return it. You need `return Err(...)` to exit the function. Without `return`, the error value is created and immediately dropped, and execution continues.
+> **Forgetting to update ALL existing tests to use `.unwrap()`** — once `scan_tokens` returns `Result`, every call site must handle it:
+> ```
+> error[E0308]: mismatched types
+>   expected `Vec<Token>`, found `Result<Vec<Token>, String>`
+> ```
+>
+> **Consuming the closing `"` twice** — the `Some('"')` arm in the match already consumed it via `advance()`. Don't call `advance()` again.
+>
+> **Forgetting `return` in the error cases** — `Err(...)` creates an error value but doesn't return it. You need `return Err(...)` to exit the function. Without `return`, the error value is created and immediately dropped, and execution continues.
 
 ### Verify it works
 
@@ -1647,13 +1911,9 @@ cargo test
 
 Expected: all 17 tests pass (12 previous + 5 new). Remember to add `.unwrap()` to all previous test calls.
 
-```bash
-cargo run
-```
+### Extend it
 
-With the `r#"let greeting = "Hello, {name}!""#` source, you should see `Let`, `Ident("greeting")`, `Eq`, `StringLit("Hello, {name}!")`.
-
-Strings are carved, escapes resolved, interpolation markers preserved for the evaluator. One final stage remains: comments, the `Eof` sentinel, and proper error reporting to polish the carver into a production-quality component.
+Write a test called `empty_string` that lexes `r#""""#` (two double-quotes with nothing between them) and verifies it produces `StringLit("")` — an empty string. Then write `string_with_only_escapes` that lexes `r#""\n\t""#` and verifies the content is `"\n\t"` (actual newline and tab characters).
 
 > [!check] Checkpoint
 > Changes to `src/lexer.rs`:
@@ -1665,6 +1925,7 @@ Strings are carved, escapes resolved, interpolation markers preserved for the ev
 > 5. Add `.unwrap()` to all existing test calls to `scan_tokens()`.
 > 6. Add 5 new string tests.
 
+
 ---
 
 ## Stage 7: The Complete Carver — Medium
@@ -1675,13 +1936,11 @@ Strings are carved, escapes resolved, interpolation markers preserved for the ev
 
 **Spec reference:** §3 (`Eof` token), §8.1 (`LexError` with span), §8.2 (error examples: unknown character, unterminated string), §9.3 (project structure — `lexer.rs` complete), §10.1–10.2 (example scripts to lex)
 
-**New Rust concept(s):** Returning multiple errors, `Vec<String>` for error accumulation, refactoring `Result` to collect errors, the `Eof` sentinel token
+**New Rust concept(s):** Refactoring `Result` to report errors, the `Eof` sentinel token
 
 ### Why this stage
 
 A lexer that silently skips unknown characters is useless for debugging. A lexer without `Eof` makes the parser's job harder — it needs a clean "end of input" signal. And comments are essential for any real language. This stage polishes the carver into a production-quality component.
-
-We also change the error strategy: instead of stopping at the first error, we collect all errors and report them together. This matches the spec's design (§8.3) — the parser does the same with panic-mode recovery.
 
 ### Python equivalent
 
@@ -1692,8 +1951,6 @@ if ch == '/' and source[i+1] == '/':
         i += 1
     continue
 ```
-
-For error accumulation in Python you'd collect errors in a list and raise them all at the end. Rust's `Result` type makes this pattern explicit.
 
 ### The Code
 
@@ -1747,69 +2004,9 @@ Update the `'/'` arm in the match block:
 
 This matches the spec's error format (§8.2): `[line 7, col 1] Unexpected character '~'`.
 
-Now let's put it all together. Here's the complete, final `scan_tokens` method:
+Also update the lone `&` and `|` cases to return errors instead of `continue`:
 
 ```rust
-    pub fn scan_tokens(&mut self) -> Result<Vec<Token>, String> {
-        let mut tokens = Vec::new();
-
-        loop {
-            self.skip_whitespace();
-            let sp = self.span();
-
-            let ch = match self.advance() {
-                Some(c) => c,
-                None => break,
-            };
-
-            let kind = match ch {
-                '+' => TokenKind::Plus,
-                '-' => TokenKind::Minus,
-                '*' => TokenKind::Star,
-                '%' => TokenKind::Percent,
-
-                '/' => {
-                    if self.match_char('/') {
-                        while let Some(c) = self.peek() {
-                            if c == '\n' {
-                                break;
-                            }
-                            self.advance();
-                        }
-                        continue;
-                    } else {
-                        TokenKind::Slash
-                    }
-                }
-
-                '=' => {
-                    if self.match_char('=') {
-                        TokenKind::EqEq
-                    } else {
-                        TokenKind::Eq
-                    }
-                }
-                '!' => {
-                    if self.match_char('=') {
-                        TokenKind::BangEq
-                    } else {
-                        TokenKind::Bang
-                    }
-                }
-                '<' => {
-                    if self.match_char('=') {
-                        TokenKind::LtEq
-                    } else {
-                        TokenKind::Lt
-                    }
-                }
-                '>' => {
-                    if self.match_char('=') {
-                        TokenKind::GtEq
-                    } else {
-                        TokenKind::Gt
-                    }
-                }
                 '&' => {
                     if self.match_char('&') {
                         TokenKind::And
@@ -1830,41 +2027,10 @@ Now let's put it all together. Here's the complete, final `scan_tokens` method:
                         ));
                     }
                 }
-
-                '.' => TokenKind::Dot,
-                '(' => TokenKind::LParen,
-                ')' => TokenKind::RParen,
-                '{' => TokenKind::LBrace,
-                '}' => TokenKind::RBrace,
-                '[' => TokenKind::LBracket,
-                ']' => TokenKind::RBracket,
-                ',' => TokenKind::Comma,
-                ';' => TokenKind::Semicolon,
-
-                '"' => self.scan_string()?,
-
-                c if c.is_ascii_alphabetic() || c == '_' => self.scan_identifier(c),
-                c if c.is_ascii_digit() => self.scan_number(c),
-
-                _ => {
-                    return Err(format!(
-                        "[line {}, col {}] Unexpected character '{}'",
-                        sp.line, sp.col, ch
-                    ));
-                }
-            };
-
-            tokens.push(Token { kind, span: sp });
-        }
-
-        tokens.push(Token {
-            kind: TokenKind::Eof,
-            span: self.span(),
-        });
-
-        Ok(tokens)
-    }
 ```
+
+**Update existing tests for `Eof`.** Every token stream now ends with `Eof`, so tests that check `tokens.len()` will be off by one. For example, `skips_whitespace` expected 2 tokens but now gets 3 (Plus, Minus, Eof). Update length checks or filter out `Eof` in assertions.
+
 
 Add the final round of tests:
 
@@ -1873,7 +2039,6 @@ Add the final round of tests:
     fn skips_line_comments() {
         let mut lexer = Lexer::new("+ // this is a comment\n-");
         let tokens = lexer.scan_tokens().unwrap();
-        // Should see: Plus, Minus, Eof
         assert_eq!(tokens[0].kind, TokenKind::Plus);
         assert_eq!(tokens[1].kind, TokenKind::Minus);
         assert_eq!(tokens[2].kind, TokenKind::Eof);
@@ -1964,17 +2129,6 @@ Add the final round of tests:
     }
 
     #[test]
-    fn lex_string_interpolation() {
-        // §3.2: "The hunter has {hp} health"
-        let mut lexer = Lexer::new(r#""The hunter has {hp} health""#);
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(
-            tokens[0].kind,
-            TokenKind::StringLit("The hunter has {hp} health".to_string())
-        );
-    }
-
-    #[test]
     fn lex_multiline_snippet() {
         // A realistic multi-line snippet from §10.2
         let source = "let hp = 100\nlet max_hp = 100\n// combat stats\nlet weapon_damage = 25";
@@ -2046,10 +2200,11 @@ Add the final round of tests:
 ```
 
 > [!warning] Common Mistakes
-> - **Consuming the newline in the comment handler** — if you `advance()` past `\n`, the line counter gets incremented inside `advance`, but then `skip_whitespace` won't see the newline. It works either way, but leaving the `\n` for `skip_whitespace` is cleaner.
-> - **Forgetting `continue` after skipping a comment** — without it, the code falls through to `tokens.push(...)` and tries to push a token with no `kind` set.
-> - **Not updating previous tests for `Eof`** — tests that check `tokens.len()` will be off by one now that every token stream ends with `Eof`. For example, `skips_whitespace` expected 2 tokens but now gets 3 (Plus, Minus, Eof). Update length checks or switch to checking specific indices.
-> - **Lone `&` and `|` now error instead of being silently skipped** — the `mixed_operators` test and any test with lone `&`/`|` will now fail. Update them.
+> **Consuming the newline in the comment handler** — if you `advance()` past `\n`, the line counter gets incremented inside `advance`, but then `skip_whitespace` won't see the newline. It works either way, but leaving the `\n` for `skip_whitespace` is cleaner.
+>
+> **Forgetting `continue` after skipping a comment** — without it, the code falls through to `tokens.push(...)` and tries to push a token with no `kind` set.
+>
+> **Not updating previous tests for `Eof`** — tests that check `tokens.len()` will be off by one now that every token stream ends with `Eof`. For example, `skips_whitespace` expected 2 tokens but now gets 3 (Plus, Minus, Eof). Update length checks.
 
 ### Verify it works
 
@@ -2057,7 +2212,7 @@ Add the final round of tests:
 cargo test
 ```
 
-Expected: all tests pass. You'll need to update earlier tests for the `Eof` token and the `Result` return type. The exact count depends on how many you've accumulated — with all stages, you should have around 30 tests.
+Expected: all tests pass. You'll need to update earlier tests for the `Eof` token. With all stages, you should have around 30 tests.
 
 Final `main.rs` to demonstrate the complete lexer:
 
@@ -2097,6 +2252,10 @@ cargo run
 ```
 
 You should see a clean stream of tokens: `Let`, `Ident("hp")`, `Eq`, `IntLit(100)`, `Let`, `Ident("trap_armed")`, `Eq`, `True`, `If`, `Ident("trap_armed")`, `LBrace`, ... ending with `Eof`. The comment line produces no tokens.
+
+### Extend it
+
+Write a test called `slash_is_not_comment` that lexes `"10 / 2"` and verifies it produces `IntLit(10)`, `Slash`, `IntLit(2)`, `Eof` — confirming that a single `/` is the division operator, not the start of a comment. Only `//` starts a comment.
 
 
 > [!check] Checkpoint
@@ -2342,7 +2501,9 @@ You should see a clean stream of tokens: `Let`, `Ident("hp")`, `Eq`, `IntLit(100
 >             }
 >         }
 >     }
+> ```
 >
+> ```rust
 >     pub fn scan_tokens(&mut self) -> Result<Vec<Token>, String> {
 >         let mut tokens = Vec::new();
 >
@@ -2632,7 +2793,9 @@ You should see a clean stream of tokens: `Let`, `Ident("hp")`, `Eq`, `IntLit(100
 >         assert_eq!(tokens[2].kind, TokenKind::Eq);
 >         assert_eq!(tokens[3].kind, TokenKind::IntLit(100));
 >     }
+> ```
 >
+> ```rust
 >     // --- Stage 6: Strings ---
 >
 >     #[test]
@@ -2884,26 +3047,34 @@ You should see a clean stream of tokens: `Let`, `Ident("hp")`, `Eq`, `IntLit(100
 
 ---
 
-## Act Complete — What's Next
+## Act Summary
 
-The rune carver is finished. You can feed any Runescript source text into `Lexer::new(source).scan_tokens()` and get back a clean stream of tokens — or a precise error message pointing to the exact line and column where things went wrong.
+| Component Built | Description |
+|----------------|-------------|
+| `Token`, `TokenKind`, `Span` | Type system for the lexer's output — 38 token variants |
+| `Lexer` struct | Character-by-character scanner with peek/advance architecture |
+| Single-char scanning | Operators and delimiters in one match arm each |
+| Two-char scanning | Lookahead with `match_char` for `==`, `!=`, `<=`, `>=`, `&&`, `\|\|` |
+| Number scanning | Multi-character `IntLit` tokens with string-to-i64 parsing |
+| Identifier/keyword scanning | Word accumulation + HashMap keyword lookup |
+| String scanning | Escape sequences, interpolation markers, unterminated string errors |
+| Comments | `//` line comments skipped without producing tokens |
+| Error reporting | `Result<T, E>`, the `?` operator, line/column in error messages |
+| Test suite | ~30 tests covering every token type and edge case |
 
-**What you built:**
-- A `Token` type system with 38 variants covering every symbol in the Runescript language (§3)
-- A hand-written, character-by-character scanner with peek/advance architecture
-- Single and two-character operator scanning with lookahead
-- Integer literal, string literal (with escapes), identifier, and keyword scanning
-- Line comment skipping, `Eof` termination, and error reporting with source positions
-- 30 tests covering every token type and edge case
-
-**Rust concepts you learned:**
-- `enum` with data variants, `struct`, `#[derive(...)]`
-- `impl` blocks, methods, associated functions
-- `Option<T>`, `Result<T, E>`, the `?` operator
-- Pattern matching with `match`, `if let`, `while let`, match guards
-- `Vec<T>`, `String` vs `&str`, `HashMap`
-- Ownership, borrowing (`&` vs `&mut`), `.clone()`
-- `#[cfg(test)]` modules, `#[test]`, `assert_eq!`
+| Rust Concept | Where Introduced |
+|-------------|-----------------|
+| `enum` with data, `struct`, `#[derive]` | Stage 1 |
+| `impl` blocks, methods, associated functions | Stage 2 |
+| Ownership, `&self` vs `&mut self`, `for x in &vec` | Stage 2 |
+| `Option<T>`, `match`, `if let`, `while let` | Stage 2 |
+| `Vec<T>`, `.push()`, iterators, closures | Stage 2 |
+| Match guards (`c if condition`) | Stage 4 |
+| `String` vs `&str`, `.to_string()`, `.as_str()` | Stage 5 |
+| `HashMap`, `'static` lifetime | Stage 5 |
+| Ownership transfer (move semantics) | Stage 5 |
+| `Result<T, E>`, `?` operator, `.unwrap()` | Stage 6 |
+| `#[cfg(test)]`, `#[test]`, `assert_eq!` | Stage 2 |
 
 **In Act 2 — Deciphering the Incantation**, you'll build the parser that transforms this token stream into an abstract syntax tree. The parser reads tokens the same way the lexer reads characters — with peek and advance — but instead of producing tokens, it produces tree nodes. You'll learn recursive descent parsing, Pratt parsing for operator precedence (§5.2), and how Rust's `Box<T>` enables recursive data structures.
 

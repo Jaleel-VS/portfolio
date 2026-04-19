@@ -22,12 +22,15 @@ flowchart LR
 
 > *Difficulty: Very Easy — The Card struct and the enums that describe it.*
 
+*~35 min*
+
 Before you can shuffle, draw, or play, you need to define what a card *is*. This stage builds the data types — card type, rarity, target — that every card in the game will use.
 
 > [!tip] What You'll Learn
 > - `cargo new` and project setup
 > - Enums for card classification (type, rarity, target)
 > - The `Card` struct with serde serialization
+> - How Rust modules connect files to your project
 > - Why data-driven design matters for card games
 
 ### Why data-driven?
@@ -35,6 +38,9 @@ Before you can shuffle, draw, or play, you need to define what a card *is*. This
 In a naive implementation, each card is a function: `fn strike(target) { target.hp -= 6; }`. Adding a new card means writing new code. In a data-driven design, each card is a *struct* with a list of effects. Adding a new card means adding data — no new functions, no new match arms, no recompilation.
 
 This is how real card games are built. Slay the Spire's cards are defined in JSON files. Hearthstone's cards are database entries. The engine interprets the data.
+
+> [!note] Python comparison
+> In Python you'd model a card as a dictionary or a dataclass: `@dataclass class Card: name: str; cost: int; ...`. Rust's `struct` is the same idea, but with compile-time type checking — you can't accidentally put a string where an integer belongs.
 
 ### 1.1 — Create the project
 
@@ -44,12 +50,16 @@ cargo new baraja --edition 2024
 cd baraja
 ```
 
+Open `Cargo.toml` and add dependencies:
+
 ```toml
 [dependencies]
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 rand = "0.8"
 ```
+
+Run `cargo build` to download and compile dependencies. This takes a minute the first time — Rust compiles everything from source.
 
 ### 1.2 — Card types
 
@@ -87,11 +97,44 @@ pub enum Target {
 
 Three enums, each with `Copy` (they're small, no heap data) and serde derives. These classify every card in the game.
 
-### 1.3 — The Card struct
+### Concept: The Rust Module System
+
+You just created `src/card.rs`, but Rust doesn't know about it yet. Unlike Python, where any `.py` file in a package is automatically importable, Rust requires you to **declare** modules explicitly.
+
+Add this to the top of `src/main.rs`:
 
 ```rust
-use crate::effect::Effect;
+mod card;
+```
 
+This tells the compiler: "there's a module called `card`, and its code lives in `src/card.rs`." Without this line, your `card.rs` file is invisible — it won't be compiled at all.
+
+To use types from `card.rs` in `main.rs`:
+
+```rust
+use card::{Card, CardType, Rarity, Target};
+```
+
+`mod` declares the module (connects the file). `use` imports specific items from it. You need both.
+
+> [!warning] Common Mistake: Forgetting `mod`
+> If you create `src/card.rs` but forget `mod card;` in `main.rs`, you'll get:
+> ```
+> error[E0432]: unresolved import `card`
+>  --> src/main.rs:2:5
+>   |
+> 2 | use card::Card;
+>   |     ^^^^ maybe a missing crate `card`?
+> ```
+> The fix: add `mod card;` before the `use` line. Every `.rs` file needs a corresponding `mod` declaration in its parent.
+
+Also note: everything in `card.rs` that you want to use from other files must be marked `pub`. Without `pub`, items are private to their module.
+
+### 1.3 — The Card struct
+
+Still in `src/card.rs`, add the struct below the enums. We reference `Effect` from a module we'll create in Stage 2, so for now use a placeholder:
+
+```rust
 /// A card definition — immutable template.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Card {
@@ -100,28 +143,86 @@ pub struct Card {
     pub rarity: Rarity,
     pub cost: i32,        // energy cost to play
     pub target: Target,
-    pub effects: Vec<Effect>,  // what happens when played
     pub description: String,   // human-readable effect text
     pub upgraded: bool,
 }
+```
 
+We'll add the `effects: Vec<Effect>` field in Stage 2 once the `Effect` enum exists. For now, the card holds its metadata.
+
+> [!note] Python comparison — `String` vs `&str`
+> In Python, strings are just `str` — one type, always. Rust has two:
+> - `String` — owned, heap-allocated, can grow. Like Python's `str`.
+> - `&str` — a borrowed reference to string data. Like a read-only view.
+>
+> The `Card` struct uses `String` because it *owns* its name and description. When you pass `"Strike"` (a `&str` literal) to a function that expects `String`, you call `.to_string()` to convert it.
+
+Add a constructor:
+
+```rust
 impl Card {
     pub fn new(
         name: &str, card_type: CardType, rarity: Rarity,
-        cost: i32, target: Target, effects: Vec<Effect>, description: &str,
+        cost: i32, target: Target, description: &str,
     ) -> Self {
         Card {
-            name: name.to_string(), card_type, rarity, cost, target, effects,
+            name: name.to_string(), card_type, rarity, cost, target,
             description: description.to_string(), upgraded: false,
         }
     }
 }
 ```
 
-A card is a template — it describes what the card does but doesn't hold game state. The same `Card` definition is shared across all copies in your deck. Game state (which pile it's in, whether it's exhausted) lives elsewhere.
+The constructor takes `&str` parameters (convenient for callers passing string literals) and converts them to owned `String` values. This is a common Rust pattern — accept borrows, store owned data.
+
+### Try it yourself
+
+Create a `Card` in `main.rs`, serialize it to JSON with `serde_json::to_string_pretty`, and print the result. You'll need:
+- `mod card;` and `use card::*;` at the top
+- `serde_json::to_string_pretty(&my_card)` returns a `Result<String, _>` — use `.unwrap()` for now (we'll replace this with proper error handling in Stage 4)
+
+When you're ready, compare with the solution below.
+
+<details>
+<summary>Solution</summary>
+
+```rust
+mod card;
+
+use card::*;
+
+fn main() {
+    let strike = Card::new(
+        "Strike", CardType::Attack, Rarity::Starter,
+        1, Target::SingleEnemy, "Deal 6 damage.",
+    );
+
+    let json = serde_json::to_string_pretty(&strike).unwrap();
+    println!("{}", json);
+}
+```
+
+Output:
+```json
+{
+  "name": "Strike",
+  "card_type": "Attack",
+  "rarity": "Starter",
+  "cost": 1,
+  "target": "SingleEnemy",
+  "description": "Deal 6 damage.",
+  "upgraded": false
+}
+```
+
+</details>
+
+> [!tip] Extend it
+> Add a `Display` implementation for `Card` that prints a one-line summary like `Strike (Attack, Cost 1) — Deal 6 damage.` Use `impl std::fmt::Display for Card` with `fn fmt(&self, f: &mut std::fmt::Formatter) -> std::fmt::Result`. Then print your card with `println!("{}", strike);` instead of the JSON.
 
 > [!check] Checkpoint
-> Create a `Card` with placeholder effects. Serialize it to JSON and verify all fields appear. Stage 1 complete.
+> Your project compiles. You can create a `Card`, serialize it to JSON, and see all fields. You understand `mod` vs `use` and `String` vs `&str`. Stage 1 complete.
+
 
 ---
 
@@ -129,17 +230,35 @@ A card is a template — it describes what the card does but doesn't hold game s
 
 > *Difficulty: Medium — Enums with data that describe what cards do.*
 
+*~60 min*
+
 This is the most important stage in the course. The `Effect` enum defines every possible thing a card can do — deal damage, gain block, draw cards, apply a status. Effects compose: a single card can have multiple effects. This is Rust enums at their most powerful.
 
 > [!tip] What You'll Learn
 > - Enums with data — `Damage(i32)`, `ApplyStatus(StatusType, i32)`
 > - Composable effects — a card is a `Vec<Effect>`
-> - The `Conditional` variant — effects that depend on game state
 > - Why this design scales (adding a new effect = adding one enum variant)
+> - `#[test]` and `cargo test` — your first Rust tests
+
+### Concept: Enums with Data
+
+In Python, enums are just named constants: `class CardType(Enum): ATTACK = 1`. Rust enums can carry *data* — each variant can hold different types and amounts of data. This is closer to a Python tagged union or a TypeScript discriminated union.
+
+```python
+# Python — you'd use a dict or a class hierarchy:
+{"type": "damage", "amount": 6}
+{"type": "apply_status", "status": "vulnerable", "stacks": 2}
+
+# Rust — the compiler enforces the shape:
+Effect::Damage(6)
+Effect::ApplyStatus(StatusType::Vulnerable, 2)
+```
+
+The Rust version is type-safe — you can't accidentally pass a string where an integer belongs, and `match` forces you to handle every variant.
 
 ### 2.1 — The Effect enum
 
-Create `src/effect.rs`:
+Create `src/effect.rs` and add `mod effect;` to `main.rs`:
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -181,11 +300,22 @@ pub enum Effect {
 
 Each variant carries exactly the data it needs. `Damage(6)` means "deal 6 damage." `ApplyStatus(Vulnerable, 2)` means "apply 2 turns of Vulnerable." No stringly-typed nonsense, no dictionaries — the compiler enforces that every effect has the right data.
 
-### 2.2 — Resolving effects
+Notice `Effect` derives `Clone` but not `Copy`. Why? `Copy` requires all fields to be trivially copyable. Most variants are just integers (`Copy`-able), but the enum as a whole could grow to include heap data later. `Clone` is the safe choice — it works for everything and makes the intent explicit.
+
+### 2.2 — Describing effects
+
+Try implementing a `description` method on `Effect` yourself. It should return a `String` describing the effect in human-readable text. Use `match` on `self` — you'll need one arm per variant.
+
+Here are the expected outputs:
+- `Effect::Damage(6)` → `"Deal 6 damage"`
+- `Effect::Block(5)` → `"Gain 5 block"`
+- `Effect::ApplyStatus(StatusType::Vulnerable, 2)` → `"Apply 2 Vulnerable"`
+- `Effect::DamageMulti(3, 4)` → `"Deal 3 damage 4 times"`
+
+<details>
+<summary>Solution</summary>
 
 ```rust
-use crate::game::GameState;
-
 impl Effect {
     /// Describe this effect as human-readable text.
     pub fn description(&self) -> String {
@@ -204,11 +334,50 @@ impl Effect {
 }
 ```
 
+</details>
+
 We'll implement the actual resolution (applying effects to game state) in Act 2 when we have enemies and combat. For now, effects are just data.
 
-### 2.3 — Example cards
+### 2.3 — Wire effects into Card
+
+Now update `src/card.rs` to include effects. Add the import and the field:
 
 ```rust
+use crate::effect::Effect;
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct Card {
+    pub name: String,
+    pub card_type: CardType,
+    pub rarity: Rarity,
+    pub cost: i32,
+    pub target: Target,
+    pub effects: Vec<Effect>,  // what happens when played
+    pub description: String,
+    pub upgraded: bool,
+}
+
+impl Card {
+    pub fn new(
+        name: &str, card_type: CardType, rarity: Rarity,
+        cost: i32, target: Target, effects: Vec<Effect>, description: &str,
+    ) -> Self {
+        Card {
+            name: name.to_string(), card_type, rarity, cost, target, effects,
+            description: description.to_string(), upgraded: false,
+        }
+    }
+}
+```
+
+Note `crate::effect::Effect` — `crate` means "the root of this project." It's how modules reference each other.
+
+### 2.4 — Example cards
+
+```rust
+use crate::card::*;
+use crate::effect::*;
+
 // Strike: Deal 6 damage. Cost 1.
 Card::new("Strike", CardType::Attack, Rarity::Starter, 1, Target::SingleEnemy,
     vec![Effect::Damage(6)], "Deal 6 damage.");
@@ -226,19 +395,75 @@ Card::new("Shrug It Off", CardType::Skill, Rarity::Common, 1, Target::Player,
 
 Each card is just a struct with a `Vec<Effect>`. Bash has two effects — damage AND apply vulnerable. Shrug It Off has two effects — block AND draw. The engine resolves them in order.
 
-> [!warning] Common Mistake
-> **Hardcoding card behavior in functions.** If `strike()` is a function and `bash()` is a different function, adding 30 cards means 30 functions. With the `Effect` enum, adding a card is one `Card::new(...)` call. The engine handles all effects generically.
+### Concept: Your First Rust Tests
 
-Cards have effects, but no home. Next stage, we build the deck — draw pile, hand, and discard pile.
+Rust has a built-in test framework — no external library needed. Tests live in the same file as the code they test, inside a `#[cfg(test)]` block. This block is only compiled when you run `cargo test`, so it adds zero overhead to your release binary.
+
+Add this to the bottom of `src/effect.rs`:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_damage_description() {
+        let effect = Effect::Damage(6);
+        assert_eq!(effect.description(), "Deal 6 damage");
+    }
+
+    #[test]
+    fn test_multi_effect_descriptions() {
+        let effects = vec![
+            Effect::Damage(8),
+            Effect::ApplyStatus(StatusType::Vulnerable, 2),
+        ];
+        let descriptions: Vec<String> = effects.iter().map(|e| e.description()).collect();
+        assert_eq!(descriptions[0], "Deal 8 damage");
+        assert_eq!(descriptions[1], "Apply 2 Vulnerable");
+    }
+}
+```
+
+Run them:
+
+```bash
+cargo test
+```
+
+You should see:
+
+```
+running 2 tests
+test effect::tests::test_damage_description ... ok
+test effect::tests::test_multi_effect_descriptions ... ok
+```
+
+You can also run a specific test by name:
+
+```bash
+cargo test test_damage_description
+```
+
+> [!warning] Common Mistake: Hardcoding card behavior in functions
+> If `strike()` is a function and `bash()` is a different function, adding 30 cards means 30 functions. With the `Effect` enum, adding a card is one `Card::new(...)` call. The engine handles all effects generically.
+>
+> The temptation is strong — "I'll just write a quick function for this card." Resist it. The data-driven approach pays off the moment you have more than 5 cards.
+
+> [!tip] Extend it
+> Add a `total_damage` method to `Effect` that returns the total damage an effect deals (0 for non-damage effects, `damage * times` for `DamageMulti`). Write a test for it. Then write a function `fn card_total_damage(card: &Card) -> i32` that sums the total damage across all of a card's effects.
 
 > [!check] Checkpoint
-> Define Strike, Defend, and Bash using the `Effect` enum. Verify `description()` produces readable text for each effect. Stage 2 complete.
+> Define Strike, Defend, and Bash using the `Effect` enum. Your tests pass with `cargo test`. You understand enums with data and how `match` forces you to handle every variant. Stage 2 complete.
+
 
 ---
 
 ## Stage 3 — The Deck
 
 > *Difficulty: Easy — Draw pile, hand, discard pile, and the shuffle cycle.*
+
+*~50 min*
 
 A deckbuilder has three piles: draw (face-down, you draw from here), hand (your current options), and discard (played cards go here). When the draw pile is empty, shuffle the discard pile into it. This cycle means you see every card in your deck roughly once per "shuffle cycle."
 
@@ -247,10 +472,17 @@ A deckbuilder has three piles: draw (face-down, you draw from here), hand (your 
 > - Shuffling with `rand`
 > - Drawing cards (move from draw pile to hand)
 > - The shuffle-on-empty mechanic
+> - Ownership and `&mut self` — why Rust makes you think about who owns the cards
+
+### Concept: Ownership and the Deck
+
+Here's where Rust starts to feel different from Python. In Python, you can put the same card object in multiple lists — they're all references to the same thing. In Rust, a value has **one owner**. When a card moves from the draw pile to the hand, it literally *moves* — it's removed from one `Vec` and added to another. It can't be in both.
+
+This is actually perfect for a card game. A physical card can only be in one pile at a time. Rust's ownership model enforces the same rule at compile time — you can't accidentally have a card in both the draw pile and the hand.
 
 ### 3.1 — The Deck struct
 
-Create `src/deck.rs`:
+Create `src/deck.rs` and add `mod deck;` to `main.rs`:
 
 ```rust
 use crate::card::Card;
@@ -316,6 +548,16 @@ impl Deck {
 }
 ```
 
+Notice `&mut self` on methods that modify the deck. Rust distinguishes between:
+- `&self` — read-only borrow (you can look at the deck)
+- `&mut self` — mutable borrow (you can modify the deck)
+- `self` — takes ownership (consumes the deck)
+
+`draw()` needs `&mut self` because it moves cards between piles. `total_cards()` only reads, so it takes `&self`.
+
+> [!note] Python comparison
+> In Python, every method gets `self` and can modify anything. Rust makes you declare your intent: "this method reads" vs "this method writes." The compiler enforces it — if you try to call a `&mut self` method through a shared reference, you get an error.
+
 The key mechanic: when the draw pile is empty, the discard pile gets shuffled and becomes the new draw pile. This means:
 - You see every card roughly once per cycle
 - Adding cards to your deck dilutes it (each card appears less often)
@@ -323,30 +565,95 @@ The key mechanic: when the draw pile is empty, the discard pile gets shuffled an
 
 This is why "deck thinning" (removing weak cards) is a core strategy in deckbuilders.
 
-### 3.2 — Test it
+### 3.2 — Test the deck
+
+Write tests for the deck. The tricky part: shuffling is random, so you can't assert exact card order. Test *properties* instead — counts, totals, the shuffle-on-empty behavior.
+
+Try writing these tests yourself in `src/deck.rs`:
+
+1. Create a deck with 10 cards. Assert `total_cards() == 10` and `draw_pile.len() == 10`.
+2. Draw 5. Assert `hand.len() == 5` and `draw_pile.len() == 5`.
+3. Discard hand. Assert `discard.len() == 5` and `hand.len() == 0`.
+4. Draw 7 (more than the 5 remaining in draw pile). Assert the discard shuffles back in and `hand.len() == 7`.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
-fn main() {
-    let cards = vec![
-        Card::new("Strike", CardType::Attack, Rarity::Starter, 1, Target::SingleEnemy,
-            vec![Effect::Damage(6)], "Deal 6 damage."),
-        // ... add 9 more starter cards
-    ];
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::card::*;
+    use crate::effect::*;
 
-    let mut deck = Deck::new(cards);
-    println!("Draw pile: {}", deck.draw_pile.len());
+    fn make_test_card(name: &str) -> Card {
+        Card::new(name, CardType::Attack, Rarity::Starter, 1,
+            Target::SingleEnemy, vec![Effect::Damage(6)], "Test card.")
+    }
 
-    deck.draw(5);
-    println!("Hand: {:?}", deck.hand.iter().map(|c| &c.name).collect::<Vec<_>>());
-    println!("Draw pile: {}", deck.draw_pile.len());
+    fn make_deck(n: usize) -> Deck {
+        let cards: Vec<Card> = (0..n).map(|i| make_test_card(&format!("Card {}", i))).collect();
+        Deck::new(cards)
+    }
 
-    deck.discard_hand();
-    println!("Discard: {}", deck.discard.len());
+    #[test]
+    fn test_new_deck_has_all_cards_in_draw_pile() {
+        let deck = make_deck(10);
+        assert_eq!(deck.total_cards(), 10);
+        assert_eq!(deck.draw_pile.len(), 10);
+        assert_eq!(deck.hand.len(), 0);
+    }
+
+    #[test]
+    fn test_draw_moves_cards_to_hand() {
+        let mut deck = make_deck(10);
+        deck.draw(5);
+        assert_eq!(deck.hand.len(), 5);
+        assert_eq!(deck.draw_pile.len(), 5);
+        assert_eq!(deck.total_cards(), 10);
+    }
+
+    #[test]
+    fn test_discard_hand_moves_to_discard() {
+        let mut deck = make_deck(10);
+        deck.draw(5);
+        deck.discard_hand();
+        assert_eq!(deck.hand.len(), 0);
+        assert_eq!(deck.discard.len(), 5);
+    }
+
+    #[test]
+    fn test_draw_reshuffles_discard_when_draw_empty() {
+        let mut deck = make_deck(10);
+        deck.draw(5);
+        deck.discard_hand(); // 5 in discard, 5 in draw
+        deck.draw(7);        // draws 5 from draw, reshuffles 5 from discard, draws 2 more
+        assert_eq!(deck.hand.len(), 7);
+        assert_eq!(deck.total_cards(), 10); // no cards lost
+    }
 }
 ```
 
+</details>
+
+Run with `cargo test deck` to run only the deck tests.
+
+> [!warning] Common Mistake: Using a value after moving it
+> If you try to read `draw_pile` after calling `append(&mut self.discard)`, you might expect the discard pile to still have its old contents. It doesn't — `append` *moves* all elements out of `self.discard` into `self.draw_pile`, leaving `self.discard` empty. This is ownership in action.
+>
+> ```rust
+> self.draw_pile.append(&mut self.discard);
+> println!("{}", self.discard.len()); // prints 0, not the old length!
+> ```
+>
+> In Python, `list.extend(other)` copies elements. In Rust, `Vec::append` moves them. The source vec is left empty.
+
+> [!tip] Extend it
+> Add a `peek_draw(&self, count: usize) -> Vec<&Card>` method that lets you look at the top N cards of the draw pile without removing them. This will be useful later for card-preview effects. Note the return type uses `&Card` (references) — you're borrowing, not moving.
+
 > [!check] Checkpoint
-> Create a 10-card deck, draw 5, verify hand has 5 cards and draw pile has 5. Discard hand, verify discard has 5. Draw 6 more — verify the discard shuffles back in. Stage 3 complete.
+> All deck tests pass. You understand ownership: cards move between piles, they can't be in two places at once. You understand `&mut self` vs `&self`. Stage 3 complete.
+
 
 ---
 
@@ -354,17 +661,19 @@ fn main() {
 
 > *Difficulty: Medium — Energy check, effect resolution, and the play cycle.*
 
-Drawing cards is passive. Playing them is where the game happens. This stage builds the play logic: check if you have enough energy, resolve each effect in order, move the card to the discard pile (or exhaust pile if it has `Exhaust`).
+*~55 min*
+
+Drawing cards is passive. Playing them is where the game happens. This stage builds the play logic: check if you have enough energy, resolve each effect in order, move the card to the discard pile (or exhaust pile if it has `Exhaust`). This is also where we introduce proper error handling.
 
 > [!tip] What You'll Learn
 > - Energy as a resource (3 per turn, spent by playing cards)
 > - Resolving a `Vec<Effect>` in sequence
-> - The play → resolve → discard cycle
+> - `Result<T, E>` and the `?` operator — replacing `.unwrap()`
 > - Why effect resolution order matters
 
 ### 4.1 — Player state
 
-Create `src/player.rs`:
+Create `src/player.rs` and add `mod player;` to `main.rs`:
 
 ```rust
 pub struct Player {
@@ -373,7 +682,6 @@ pub struct Player {
     pub block: i32,
     pub energy: i32,
     pub max_energy: i32,
-    // Status effects
     pub strength: i32,
     pub vulnerable: i32,  // turns remaining
     pub weak: i32,        // turns remaining
@@ -390,12 +698,9 @@ impl Player {
 
     /// Take damage (reduced by block first).
     pub fn take_damage(&mut self, mut amount: i32) {
-        // Vulnerable: take 50% more damage
         if self.vulnerable > 0 {
             amount = (amount as f32 * 1.5) as i32;
         }
-
-        // Block absorbs damage first
         if self.block > 0 {
             if self.block >= amount {
                 self.block -= amount;
@@ -404,7 +709,6 @@ impl Player {
             amount -= self.block;
             self.block = 0;
         }
-
         self.hp = (self.hp - amount).max(0);
     }
 
@@ -429,95 +733,172 @@ impl Player {
 
 Block resets every turn — this is a core StS mechanic. You can't stockpile block across turns (without specific relics). This forces you to make defensive decisions every turn.
 
-### 4.2 — Play a card
+### Concept: Error Handling with `Result`
+
+Up to now we've used `.unwrap()` — which panics (crashes) if something goes wrong. That's fine for quick tests, but real code should handle errors gracefully.
+
+Rust uses `Result<T, E>` instead of exceptions:
 
 ```rust
-use crate::card::Card;
-use crate::effect::{Effect, StatusType};
+// Python: raise ValueError("not enough energy")
+// Rust:   return Err(PlayError::NotEnoughEnergy)
+```
 
-/// Result of attempting to play a card.
-pub enum PlayResult {
-    Success,
-    NotEnoughEnergy,
+```rust
+enum Result<T, E> {
+    Ok(T),    // success, carrying a value
+    Err(E),   // failure, carrying an error
+}
+```
+
+The `?` operator is the magic: it unwraps `Ok` values and returns `Err` values early. It replaces the `try/except` pattern:
+
+```python
+# Python
+try:
+    result = do_something()
+except SomeError as e:
+    return handle(e)
+```
+
+```rust
+// Rust — the ? does the same thing in one character
+let result = do_something()?;
+```
+
+### 4.2 — Play errors
+
+Define what can go wrong when playing a card:
+
+```rust
+use std::fmt;
+
+#[derive(Debug)]
+pub enum PlayError {
+    NotEnoughEnergy { cost: i32, available: i32 },
     InvalidTarget,
+    CardNotInHand,
 }
 
-/// Play a card from hand, resolving its effects.
+impl fmt::Display for PlayError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            PlayError::NotEnoughEnergy { cost, available } =>
+                write!(f, "Not enough energy: card costs {} but you have {}", cost, available),
+            PlayError::InvalidTarget => write!(f, "Invalid target for this card"),
+            PlayError::CardNotInHand => write!(f, "Card not found in hand"),
+        }
+    }
+}
+```
+
+### 4.3 — Play a card
+
+Now implement the play function. It returns `Result<(), PlayError>` — success carries no data (`()`), failure carries a `PlayError`.
+
+Try implementing this yourself. The function should:
+1. Check if the player has enough energy. Return `Err(PlayError::NotEnoughEnergy { ... })` if not.
+2. Subtract the energy cost.
+3. Iterate through `card.effects` and apply each one (for now, just handle `Damage`, `Block`, `GainEnergy`, and `Exhaust` — we'll handle the rest in Act 2).
+4. Return `Ok(())`.
+
+<details>
+<summary>Solution</summary>
+
+```rust
+/// Play a card, resolving its effects.
 pub fn play_card(
     card: &Card,
     player: &mut Player,
-    target_enemy: Option<&mut Enemy>,
-    all_enemies: &mut [Enemy],
-) -> PlayResult {
+    // We'll add enemy parameters in Act 2
+) -> Result<(), PlayError> {
     if player.energy < card.cost {
-        return PlayResult::NotEnoughEnergy;
+        return Err(PlayError::NotEnoughEnergy {
+            cost: card.cost,
+            available: player.energy,
+        });
     }
 
     player.energy -= card.cost;
 
     for effect in &card.effects {
         match effect {
-            Effect::Damage(base) => {
-                if let Some(enemy) = target_enemy.as_deref_mut() {
-                    let dmg = player.calc_damage(*base);
-                    enemy.take_damage(dmg);
-                }
-            }
-            Effect::DamageAll(base) => {
-                let dmg = player.calc_damage(*base);
-                for enemy in all_enemies.iter_mut() {
-                    enemy.take_damage(dmg);
-                }
-            }
             Effect::Block(amount) => {
                 player.block += amount;
-            }
-            Effect::DrawCards(n) => {
-                // We'll wire this to the deck in Act 2
             }
             Effect::GainEnergy(n) => {
                 player.energy += n;
             }
-            Effect::ApplyStatus(status, stacks) => {
-                if let Some(enemy) = target_enemy.as_deref_mut() {
-                    enemy.apply_status(*status, *stacks);
-                }
+            // Damage effects need an enemy target — we'll wire this in Act 2
+            Effect::Damage(_) | Effect::DamageAll(_) | Effect::DamageMulti(_, _) => {
+                // TODO: resolve against enemy target in Act 2
             }
-            Effect::ApplySelfStatus(status, stacks) => {
-                match status {
-                    StatusType::Strength => player.strength += stacks,
-                    StatusType::Vulnerable => player.vulnerable += stacks,
-                    StatusType::Weak => player.weak += stacks,
-                    _ => {}
-                }
+            Effect::ApplyStatus(_, _) | Effect::ApplySelfStatus(_, _) => {
+                // TODO: resolve status effects in Act 2
             }
-            Effect::DamageMulti(base, times) => {
-                if let Some(enemy) = target_enemy.as_deref_mut() {
-                    for _ in 0..*times {
-                        let dmg = player.calc_damage(*base);
-                        enemy.take_damage(dmg);
-                    }
-                }
+            Effect::DrawCards(_) => {
+                // TODO: wire to deck.draw() in Act 2
             }
             Effect::Exhaust => {
-                // Handled by the caller (move to exhaust pile instead of discard)
+                // Handled by caller — move to exhaust pile instead of discard
             }
         }
     }
 
-    PlayResult::Success
+    Ok(())
 }
 ```
 
-The resolver iterates through `card.effects` and applies each one. This is the payoff of the data-driven design — one function handles every card in the game. Adding a new card never requires changing this function (unless you add a new `Effect` variant).
+</details>
 
-> [!warning] Common Mistake
-> **Resolving effects in the wrong order.** "Deal 8 damage. Apply Vulnerable" is different from "Apply Vulnerable. Deal 8 damage" — the second version would deal 12 damage (50% bonus from Vulnerable). Effects resolve left to right, so the card definition order matters.
+> [!warning] Common Mistake: Resolving effects in the wrong order
+> "Deal 8 damage. Apply Vulnerable" is different from "Apply Vulnerable. Deal 8 damage" — the second version would deal 12 damage (50% bonus from Vulnerable). Effects resolve left to right, so the card definition order matters.
+>
+> This is a real bug in card game implementations. If you accidentally apply Vulnerable before dealing damage on Bash, the damage is wrong. The `Vec<Effect>` order is the source of truth.
 
-We can play cards, but status effects just set numbers — they don't tick or expire. Next stage.
+### 4.4 — Test play logic
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::card::*;
+    use crate::effect::*;
+
+    #[test]
+    fn test_play_card_spends_energy() {
+        let mut player = Player::new(80);
+        let defend = Card::new("Defend", CardType::Skill, Rarity::Starter, 1,
+            Target::Player, vec![Effect::Block(5)], "Gain 5 block.");
+
+        let result = play_card(&defend, &mut player);
+        assert!(result.is_ok());
+        assert_eq!(player.energy, 2); // 3 - 1
+        assert_eq!(player.block, 5);
+    }
+
+    #[test]
+    fn test_play_card_not_enough_energy() {
+        let mut player = Player::new(80);
+        player.energy = 0;
+        let strike = Card::new("Strike", CardType::Attack, Rarity::Starter, 1,
+            Target::SingleEnemy, vec![Effect::Damage(6)], "Deal 6 damage.");
+
+        let result = play_card(&strike, &mut player);
+        assert!(result.is_err());
+    }
+}
+```
+
+> [!note] From now on: use `Result` and `?`
+> Every function that can fail should return `Result`. When you see `.unwrap()` in later stages, it should have a comment: `// TODO: replace with ? in Stage N`. We'll progressively eliminate unwraps as the codebase grows.
+
+> [!tip] Extend it
+> Add a `play_card_from_hand` function that takes a `&mut Deck`, a hand index, and a `&mut Player`. It should remove the card from the hand, call `play_card`, and move the card to either the discard pile or the exhaust pile (if the card has `Effect::Exhaust`). Return `Result<(), PlayError>` — return `Err(PlayError::CardNotInHand)` if the index is out of bounds.
 
 > [!check] Checkpoint
-> Play Strike (cost 1, deal 6). Verify energy decreases by 1 and the target takes 6 damage. Play with insufficient energy and verify it's rejected. Stage 4 complete.
+> Playing a card spends energy and resolves effects. Insufficient energy returns an error instead of panicking. Tests pass. You understand `Result`, `Err`, and why `.unwrap()` is a development shortcut. Stage 4 complete.
+
 
 ---
 
@@ -525,19 +906,22 @@ We can play cards, but status effects just set numbers — they don't tick or ex
 
 > *Difficulty: Medium — Vulnerable, Weak, Strength, Poison — the modifiers that make combat deep.*
 
+*~60 min*
+
 Raw damage and block are boring. Status effects create strategy: Vulnerable makes the enemy take 50% more damage for 2 turns, so you play Bash *before* your big attacks. Weak reduces the enemy's damage by 25%, buying you time. Strength permanently increases your damage. These interactions are what make deckbuilders strategic.
 
 > [!tip] What You'll Learn
 > - Status effects as turn-based counters
 > - Multiplicative vs additive modifiers
 > - Ticking and expiring statuses at turn boundaries
-> - Why status effects create strategic depth
+> - Extracting shared behavior into a standalone struct
 
 ### 5.1 — Status tracking
 
-Both players and enemies track statuses. Add to a shared trait or duplicate on both:
+Both players and enemies will track statuses. Rather than duplicating fields on both, extract a shared struct. Create this in `src/effect.rs` (it uses `StatusType` from the same file):
 
 ```rust
+#[derive(Debug, Clone)]
 pub struct StatusEffects {
     pub vulnerable: i32,  // turns remaining
     pub weak: i32,        // turns remaining
@@ -575,7 +959,18 @@ impl StatusEffects {
 }
 ```
 
-### 5.2 — Integrate with damage calculation
+### 5.2 — Damage calculation with statuses
+
+Now implement the standalone damage calculation function. This replaces the simpler `calc_damage` on `Player` — it takes attacker and defender statuses as parameters so it works for both player-attacks-enemy and enemy-attacks-player.
+
+Try implementing this yourself. The formula is:
+1. Start with `base + attacker.strength`
+2. If attacker is Weak, multiply by 0.75
+3. If defender is Vulnerable, multiply by 1.5
+4. Floor at 0 (damage can't be negative)
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 /// Calculate outgoing damage with status modifiers.
@@ -596,30 +991,160 @@ pub fn calc_damage(base: i32, attacker: &StatusEffects, defender: &StatusEffects
 }
 ```
 
+</details>
+
 The damage formula: `(base + strength) × weak_modifier × vulnerable_modifier`. Strength is additive (applied first), Weak and Vulnerable are multiplicative (applied after). This ordering matters — it's how StS calculates damage.
+
+> [!warning] Common Mistake: Integer truncation with `as`
+> `(7.5 as f32) as i32` gives `7`, not `8`. Rust truncates toward zero when casting float to int. This matches StS behavior (damage rounds down), but if you expected rounding, you'd need `.round() as i32`.
+>
+> ```rust
+> let dmg = 5; // base damage
+> let weak_dmg = (dmg as f32 * 0.75) as i32; // 3.75 → 3, not 4
+> ```
+>
+> This is a real source of off-by-one bugs in card game implementations. Know your rounding rules.
 
 ### 5.3 — Test interactions
 
 ```rust
-// Bash (8 damage + 2 Vulnerable) followed by Strike (6 damage)
-// Without Vulnerable: 8 + 6 = 14 total
-// With Vulnerable: 8 + 9 (6 × 1.5) = 17 total
-// The 3 extra damage is why you play Bash first
+#[cfg(test)]
+mod status_tests {
+    use super::*;
+
+    #[test]
+    fn test_vulnerable_increases_damage() {
+        let attacker = StatusEffects::new();
+        let mut defender = StatusEffects::new();
+        defender.vulnerable = 2;
+
+        assert_eq!(calc_damage(6, &attacker, &defender), 9); // 6 × 1.5 = 9
+    }
+
+    #[test]
+    fn test_weak_reduces_damage() {
+        let mut attacker = StatusEffects::new();
+        attacker.weak = 2;
+        let defender = StatusEffects::new();
+
+        assert_eq!(calc_damage(8, &attacker, &defender), 6); // 8 × 0.75 = 6
+    }
+
+    #[test]
+    fn test_strength_adds_to_base() {
+        let mut attacker = StatusEffects::new();
+        attacker.strength = 3;
+        let defender = StatusEffects::new();
+
+        assert_eq!(calc_damage(6, &attacker, &defender), 9); // 6 + 3 = 9
+    }
+
+    #[test]
+    fn test_bash_then_strike_combo() {
+        // Bash (8 damage + 2 Vulnerable) followed by Strike (6 damage)
+        // Without Vulnerable: 8 + 6 = 14 total
+        // With Vulnerable: 8 + 9 (6 × 1.5) = 17 total
+        let attacker = StatusEffects::new();
+        let mut defender = StatusEffects::new();
+
+        let bash_dmg = calc_damage(8, &attacker, &defender);
+        assert_eq!(bash_dmg, 8);
+
+        defender.vulnerable = 2; // Bash applied Vulnerable
+
+        let strike_dmg = calc_damage(6, &attacker, &defender);
+        assert_eq!(strike_dmg, 9); // 6 × 1.5 = 9
+    }
+
+    #[test]
+    fn test_poison_ticks_and_decreases() {
+        let mut statuses = StatusEffects::new();
+        statuses.poison = 3;
+
+        let dmg1 = statuses.end_of_turn();
+        assert_eq!(dmg1, 3);
+        assert_eq!(statuses.poison, 2);
+
+        let dmg2 = statuses.end_of_turn();
+        assert_eq!(dmg2, 2);
+        assert_eq!(statuses.poison, 1);
+    }
+
+    #[test]
+    fn test_ritual_grants_strength() {
+        let mut statuses = StatusEffects::new();
+        statuses.ritual = 2;
+
+        statuses.end_of_turn();
+        assert_eq!(statuses.strength, 2);
+
+        statuses.end_of_turn();
+        assert_eq!(statuses.strength, 4); // cumulative
+    }
+}
 ```
 
 > [!note] Why this creates strategy
 > Without status effects, the optimal play is always "play your highest damage cards." With Vulnerable, the optimal play is "apply Vulnerable first, then play damage cards." With Weak, the optimal play changes based on whether you're attacking or defending this turn. Status effects create *sequencing decisions* — the order you play cards matters.
 
-Cards interact through statuses. Now let's define the starting deck.
+### 5.4 — Refactor Player to use StatusEffects
+
+Now update `Player` in `src/player.rs` to use the shared `StatusEffects` struct instead of individual fields:
+
+```rust
+use crate::effect::StatusEffects;
+
+pub struct Player {
+    pub hp: i32,
+    pub max_hp: i32,
+    pub block: i32,
+    pub energy: i32,
+    pub max_energy: i32,
+    pub statuses: StatusEffects,
+}
+
+impl Player {
+    pub fn new(max_hp: i32) -> Self {
+        Player {
+            hp: max_hp, max_hp, block: 0,
+            energy: 3, max_energy: 3,
+            statuses: StatusEffects::new(),
+        }
+    }
+
+    pub fn take_damage(&mut self, amount: i32) {
+        let mut dmg = amount;
+        if self.block > 0 {
+            if self.block >= dmg { self.block -= dmg; return; }
+            dmg -= self.block;
+            self.block = 0;
+        }
+        self.hp = (self.hp - dmg).max(0);
+    }
+
+    pub fn start_turn(&mut self) {
+        self.energy = self.max_energy;
+        self.block = 0;
+    }
+}
+```
+
+The `take_damage` method no longer checks Vulnerable directly — that's handled by `calc_damage()` before calling this method. Separation of concerns: `calc_damage` computes the number, `take_damage` applies it.
+
+> [!tip] Extend it
+> Add a `has_debuffs(&self) -> bool` method to `StatusEffects` that returns `true` if the entity has any negative statuses (Vulnerable, Weak, or Poison > 0). Write a test for it. This will be useful later for conditional card effects like "deal extra damage if the enemy has a debuff."
 
 > [!check] Checkpoint
-> Apply Vulnerable to an enemy, then deal damage. Verify the damage is 50% higher. Apply Weak to yourself, verify your damage is 25% lower. Verify statuses tick down at end of turn. Stage 5 complete.
+> Vulnerable increases incoming damage by 50%. Weak reduces outgoing damage by 25%. Strength adds flat damage. Poison ticks and decreases. Ritual grants cumulative Strength. All tests pass. Stage 5 complete.
+
 
 ---
 
 ## Stage 6 — The Starter Deck
 
 > *Difficulty: Easy — The 10 cards every run begins with.*
+
+*~35 min*
 
 Every Slay the Spire run starts with the same deck: 5 Strikes, 4 Defends, 1 Bash. It's deliberately mediocre — strong enough to beat early enemies, weak enough that you need to improve it. This stage defines the starter deck and tests a full draw-play-discard cycle.
 
@@ -630,7 +1155,7 @@ Every Slay the Spire run starts with the same deck: 5 Strikes, 4 Defends, 1 Bash
 
 ### 6.1 — Card definitions
 
-Create `src/cards.rs`:
+Create `src/cards.rs` (plural — the catalog) and add `mod cards;` to `main.rs`:
 
 ```rust
 use crate::card::*;
@@ -663,39 +1188,90 @@ pub fn starter_deck() -> Vec<Card> {
 
 10 cards. 5 Strikes for damage, 4 Defends for survival, 1 Bash for the Vulnerable combo. With 3 energy per turn and 5 cards drawn, you can play 3 cards (all cost 1 except Bash which costs 2).
 
+> [!warning] Common Mistake: `for item in vec` consumes the vec
+> ```rust
+> let cards = starter_deck();
+> for card in cards {
+>     println!("{}", card.name);
+> }
+> // ERROR: cards has been moved!
+> println!("{}", cards.len()); // won't compile
+> ```
+> ```
+> error[E0382]: borrow of moved value: `cards`
+>   --> src/main.rs:6:20
+>   |
+> 3 | for card in cards {
+>   |             ----- `cards` moved due to this implicit call to `.into_iter()`
+> ...
+> 6 | println!("{}", cards.len());
+>   |                ^^^^^ value borrowed here after move
+> ```
+> `for card in cards` takes ownership of the vec and each card. After the loop, `cards` is gone. Use `for card in &cards` to borrow instead — each `card` will be a `&Card` reference, and `cards` survives the loop.
+
 ### 6.2 — Test the full cycle
 
+Write a test that exercises the complete draw → play → discard → reshuffle cycle:
+
 ```rust
-fn main() {
-    let mut deck = Deck::new(starter_deck());
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::deck::Deck;
 
-    // Turn 1: draw 5
-    deck.draw(5);
-    println!("Hand: {:?}", deck.hand.iter().map(|c| format!("{} ({})", c.name, c.cost)).collect::<Vec<_>>());
+    #[test]
+    fn test_starter_deck_has_10_cards() {
+        let deck = starter_deck();
+        assert_eq!(deck.len(), 10);
+    }
 
-    // Play first card
-    let card = deck.hand.remove(0);
-    println!("Playing: {}", card.name);
-    deck.discard.push(card);
+    #[test]
+    fn test_full_draw_play_discard_cycle() {
+        let mut deck = Deck::new(starter_deck());
 
-    // End turn: discard remaining hand
-    deck.discard_hand();
-    println!("Discard pile: {}", deck.discard.len());
+        // Turn 1: draw 5
+        deck.draw(5);
+        assert_eq!(deck.hand.len(), 5);
+        assert_eq!(deck.draw_pile.len(), 5);
 
-    // Turn 2: draw 5 more
-    deck.draw(5);
-    println!("Hand: {:?}", deck.hand.iter().map(|c| &c.name).collect::<Vec<_>>());
+        // Play first card (move to discard)
+        let card = deck.hand.remove(0);
+        deck.discard.push(card);
+        assert_eq!(deck.hand.len(), 4);
+
+        // End turn: discard remaining hand
+        deck.discard_hand();
+        assert_eq!(deck.discard.len(), 5); // 1 played + 4 discarded
+        assert_eq!(deck.hand.len(), 0);
+
+        // Turn 2: draw 5 (uses remaining 5 in draw pile)
+        deck.draw(5);
+        assert_eq!(deck.hand.len(), 5);
+        assert_eq!(deck.draw_pile.len(), 0);
+
+        // Turn 3: draw 5 — triggers reshuffle from discard
+        deck.discard_hand();
+        deck.draw(5);
+        assert_eq!(deck.hand.len(), 5);
+        assert_eq!(deck.total_cards(), 10); // no cards lost
+    }
 }
 ```
 
+> [!tip] Extend it
+> Add a `deck_composition` function that takes a `&[Card]` and returns a summary string like `"5 Attack, 4 Skill, 1 Power"`. Use `.iter().filter()` to count each type. Write a test that verifies the starter deck is `"6 Attack, 4 Skill"` (5 Strikes + 1 Bash = 6 Attacks).
+
 > [!check] Checkpoint
-> Create the starter deck, draw 5, play some cards, discard, draw again. Verify the shuffle-on-empty works when the draw pile runs out. Stage 6 complete.
+> The starter deck has 10 cards with the right composition. The full draw-play-discard-reshuffle cycle works. You understand `for item in vec` vs `for item in &vec`. Stage 6 complete.
+
 
 ---
 
 ## Stage 7 — Card Catalog
 
 > *Difficulty: Medium — 30+ cards defined as data.*
+
+*~55 min*
 
 The starter deck is boring by design. The fun comes from card rewards — choosing new cards to add to your deck. This stage defines 30+ cards across all types and rarities, creating the pool that rewards draw from.
 
@@ -706,6 +1282,13 @@ The starter deck is boring by design. The fun comes from card rewards — choosi
 > - Why variety matters for replayability
 
 ### 7.1 — Common cards
+
+Add these to `src/cards.rs`. Try defining the first few yourself — pick a name, a cost, and a combination of effects. Then compare with the solutions.
+
+For each card, think about: what's the tradeoff? A card that does two things (damage + block) does each one worse than a specialist card. A card that draws more cards costs energy now for options later.
+
+<details>
+<summary>Common card definitions</summary>
 
 ```rust
 pub fn cleave() -> Card {
@@ -740,7 +1323,11 @@ pub fn armaments() -> Card {
 }
 ```
 
+</details>
+
 ### 7.2 — Uncommon cards
+
+Uncommon cards are more powerful but have bigger tradeoffs:
 
 ```rust
 pub fn inflame() -> Card {
@@ -791,7 +1378,7 @@ pub fn offering() -> Card {
 }
 ```
 
-### 7.4 — The card pool
+### 7.4 — The card pool and rewards
 
 ```rust
 pub fn all_cards() -> Vec<Card> {
@@ -812,26 +1399,73 @@ pub fn all_cards() -> Vec<Card> {
         offering(),
         // Rare powers
         demon_form(),
-        // ... add more to reach 30+
     ]
 }
 
-/// Get N random card rewards of the given rarity distribution.
+/// Get N random card rewards, weighted by rarity.
 pub fn random_rewards(count: usize) -> Vec<Card> {
     use rand::seq::SliceRandom;
     let pool = all_cards();
     let mut rng = rand::thread_rng();
-    pool.choose_multiple(&mut rng, count).cloned().collect()
+    pool.choose_multiple(&mut rng, count.min(pool.len())).cloned().collect()
 }
 ```
 
 > [!note] Card design philosophy
 > Good cards have tradeoffs. Offering is incredibly powerful (2 energy + 3 cards for free) but costs 6 HP and exhausts. Bloodletting gives energy but costs HP. Demon Form is game-winning but costs 3 energy (your entire turn). The best deckbuilders make every card choice a meaningful decision.
 
-We have cards, a deck, and a play system. Next act: enemies, turns, and combat.
+### 7.5 — Test the catalog
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_all_cards_nonempty() {
+        let cards = all_cards();
+        assert!(cards.len() >= 14, "Expected at least 14 cards, got {}", cards.len());
+    }
+
+    #[test]
+    fn test_all_cards_have_effects() {
+        for card in all_cards() {
+            assert!(!card.effects.is_empty(),
+                "Card '{}' has no effects", card.name);
+        }
+    }
+
+    #[test]
+    fn test_random_rewards_returns_requested_count() {
+        let rewards = random_rewards(3);
+        assert_eq!(rewards.len(), 3);
+    }
+
+    #[test]
+    fn test_starter_cards_are_starter_rarity() {
+        assert_eq!(strike().rarity, Rarity::Starter);
+        assert_eq!(defend().rarity, Rarity::Starter);
+        assert_eq!(bash().rarity, Rarity::Starter);
+    }
+}
+```
+
+> [!warning] Common Mistake: Numeric type mismatches
+> If you write `count.min(pool.len())` and `count` is `usize` but you accidentally declared it as `u32` somewhere, you'll get:
+> ```
+> error[E0308]: mismatched types
+>   --> src/cards.rs:80:26
+>    |
+> 80 |     pool.choose_multiple(&mut rng, count.min(pool.len()))
+>    |                                    ^^^^^^^^^^^^^^^^^^^^^ expected `usize`, found `u32`
+> ```
+> Rust doesn't implicitly convert between numeric types. Use `count as usize` or better, declare `count: usize` from the start. Collection sizes in Rust are always `usize`.
+
+> [!tip] Extend it
+> Define 5 more cards of your own design. At least one should be a Power (permanent effect), and at least one should use `DamageMulti` (multi-hit). Add them to `all_cards()` and write a test that verifies the total count increased. Think about what makes each card interesting — what's the tradeoff?
 
 > [!check] Checkpoint
-> Define 15+ cards across Common, Uncommon, and Rare. Verify `random_rewards(3)` returns 3 different cards. Stage 7 complete.
+> 14+ cards defined across Common, Uncommon, and Rare. `random_rewards(3)` returns 3 cards. All catalog tests pass. Stage 7 complete.
 
 ---
 
@@ -853,19 +1487,26 @@ flowchart TD
 
 | Component | What it does |
 |-----------|-------------|
-| `Effect` enum | 10 variants describing every possible card action |
+| `Effect` enum | 9 variants describing every possible card action |
 | `Card` struct | Name, cost, type, rarity, target, effects list |
 | `Deck` | Three-pile system with shuffle-on-empty |
-| `play_card` | Energy check → resolve effects → discard |
+| `play_card` | Energy check → resolve effects → `Result` error handling |
 | `StatusEffects` | Turn-based counters with tick/expire logic |
-| Card catalog | 30+ cards defined as data, reward pool |
+| `calc_damage` | Full damage pipeline: base → strength → weak → vulnerable |
+| Card catalog | 14+ cards defined as data, reward pool |
 
 | Rust Concept | Where You Used It |
 |-------------|-------------------|
 | Enums with data | `Effect`, `CardType`, `Rarity`, `StatusType` |
 | `Vec<Effect>` | Composable card effects |
-| Pattern matching | Effect resolution, status application |
+| Pattern matching | Effect resolution, status application, damage calc |
 | Structs | `Card`, `Deck`, `Player`, `StatusEffects` |
+| Ownership | Cards move between deck piles, `for in` vs `for in &` |
+| `String` vs `&str` | Owned data in structs, borrowed params in constructors |
+| `&self` vs `&mut self` | Read-only vs mutable borrows on methods |
+| `Result<T, E>` | Error handling for card play, replacing `.unwrap()` |
+| `#[test]` | Unit tests for effects, deck, damage, statuses |
+| Module system | `mod`, `use`, `pub`, `crate::` paths |
 | `rand` | Shuffle, random rewards |
 
 **Next up — Act 2: The Battle.** Enemies with intents, turn phases, damage calculation, and the full combat loop.

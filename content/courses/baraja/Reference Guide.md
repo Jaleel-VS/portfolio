@@ -197,19 +197,115 @@ src/
 ├── main.rs        ← Entry point, TUI setup, TEA loop
 ├── card.rs        ← Card, CardType, Rarity, Target
 ├── cards.rs       ← Card catalog (30+ card definitions)
-├── effect.rs      ← Effect enum, StatusType, StatusEffects
+├── effect.rs      ← Effect enum, StatusType, StatusEffects, calc_damage
 ├── deck.rs        ← Draw/hand/discard piles, shuffle
 ├── player.rs      ← Player HP, block, energy, statuses
 ├── enemy.rs       ← Enemy HP, intents, move patterns
-├── combat.rs      ← Combat state, turn phases, play logic
+├── combat.rs      ← Combat state, turn phases, play logic, text combat loop
 ├── map.rs         ← Procedural map generation
 ├── relic.rs       ← Relic definitions and triggers
+├── run.rs         ← GameRun struct, full run loop
+├── shop.rs        ← Shop logic
 ├── ai.rs          ← MCTS tree, random playout, UCB1
 ├── tui/
-│   ├── app.rs     ← App state, Message, Screen
+│   ├── mod.rs     ← TUI module root
+│   ├── app.rs     ← App state, Message, Screen, update/view/input
 │   ├── card_widget.rs  ← Custom CardWidget
 │   ├── battle.rs  ← Battle screen rendering
 │   ├── hand.rs    ← Hand rendering and navigation
-│   └── map.rs     ← Map screen rendering
-└── shop.rs        ← Shop logic
+│   └── map_screen.rs  ← Map screen rendering
+```
+
+---
+
+## Module System Quick Reference
+
+```rust
+// In main.rs — declare modules:
+mod card;       // loads src/card.rs
+mod effect;     // loads src/effect.rs
+mod tui;        // loads src/tui/mod.rs
+
+// In any file — import from other modules:
+use crate::card::Card;           // absolute path from crate root
+use crate::effect::{Effect, StatusType};  // multiple items
+
+// In src/tui/mod.rs — declare submodules:
+pub mod app;
+pub mod card_widget;
+pub mod battle;
+```
+
+Key rules:
+- `mod name;` declares a module (connects the file). Required in the parent.
+- `use path::Item;` imports an item. Optional but convenient.
+- `pub` makes items visible outside their module. Without it, items are private.
+- `crate::` is the absolute path to the crate root.
+
+---
+
+## Testing Patterns
+
+```rust
+// In any source file — tests go at the bottom:
+#[cfg(test)]
+mod tests {
+    use super::*;  // import everything from the parent module
+
+    #[test]
+    fn test_something() {
+        assert_eq!(1 + 1, 2);
+    }
+
+    #[test]
+    fn test_result_is_ok() {
+        let result: Result<i32, String> = Ok(42);
+        assert!(result.is_ok());
+    }
+
+    #[test]
+    fn test_pattern_matching() {
+        let intent = Intent::Attack(11);
+        assert!(matches!(intent, Intent::Attack(11)));
+    }
+}
+```
+
+Commands:
+```bash
+cargo test                    # run all tests
+cargo test deck               # run tests with "deck" in the name
+cargo test effect::tests      # run tests in a specific module
+cargo test -- --nocapture     # show println! output during tests
+```
+
+---
+
+## Error Handling Patterns
+
+```rust
+// Define error types:
+#[derive(Debug)]
+pub enum PlayError {
+    NotEnoughEnergy { cost: i32, available: i32 },
+    InvalidTarget,
+}
+
+// Return Result from functions that can fail:
+pub fn play_card(card: &Card, player: &mut Player) -> Result<(), PlayError> {
+    if player.energy < card.cost {
+        return Err(PlayError::NotEnoughEnergy {
+            cost: card.cost, available: player.energy,
+        });
+    }
+    // ... success path ...
+    Ok(())
+}
+
+// Use ? to propagate errors:
+let result = play_card(&card, &mut player)?;
+
+// Use .unwrap() only in tests or with a TODO comment:
+let json = serde_json::to_string(&card).unwrap(); // OK in tests
+let json = serde_json::to_string(&card).unwrap(); // TODO: replace with ? in Stage N
 ```

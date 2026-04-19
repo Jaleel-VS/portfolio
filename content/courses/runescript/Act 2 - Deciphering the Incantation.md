@@ -31,8 +31,17 @@ Getting that tree right — making `*` bind tighter than `+` — is the central 
 > - Pratt parsing — the elegant algorithm for operator precedence
 > - Error recovery — reporting multiple parse errors without stopping at the first one
 
+```mermaid
+flowchart LR
+    S8["Stage 8\nThe Spell Tree"] --> S9["Stage 9\nLiterals & Names"]
+    S9 --> S10["Stage 10\nBinding Power"]
+    S10 --> S11["Stage 11\nUnary & Grouping"]
+    S11 --> S12["Stage 12\nDeclarations"]
+    S12 --> S13["Stage 13\nControl Flow"]
+    S13 --> S14["Stage 14\nError Recovery"]
+```
 
-**Estimated time:** 5–8 hours across Stages 8–14.
+**Estimated time:** 10–14 hours across Stages 8–14.
 
 **Prerequisites:** A working lexer from Act 1. Your project at `~/juk/runescript/` with `src/token.rs`, `src/lexer.rs`, and `src/main.rs`.
 
@@ -76,6 +85,47 @@ Python objects are always heap-allocated and accessed through references. The `l
 
 Rust is different. An `enum` variant's data is stored *inline* — not behind a pointer. If `Binary` contained two `Expr` values directly, the compiler would need to know the size of `Expr` to lay out `Binary`, but `Expr`'s size depends on `Binary`'s size... infinite recursion. `Box<Expr>` breaks the cycle: a `Box` is always pointer-sized (8 bytes on 64-bit), regardless of what it points to.
 
+### Concept: Box<T> — Heap Allocation for Recursive Types
+
+`Box<T>` is Rust's simplest smart pointer. It allocates data on the heap and owns it.
+
+| Python | Rust without Box | Rust with Box |
+|--------|-----------------|---------------|
+| `left: Expr` (always a pointer) | `left: Expr` (inline, infinite size!) | `left: Box<Expr>` (8-byte pointer) |
+
+What happens if you try without `Box`?
+
+```rust
+pub enum Expr {
+    IntLit(i64),
+    Binary(BinOp, Expr, Expr),  // ERROR!
+}
+```
+
+The compiler says:
+
+```
+error[E0072]: recursive type `Expr` has infinite size
+ --> src/ast.rs:5:1
+  |
+5 | pub enum Expr {
+  | ^^^^^^^^^^^^^
+6 |     IntLit(i64),
+7 |     Binary(BinOp, Expr, Expr),
+  |                   ----  ---- recursive without indirection
+  |
+help: insert some indirection (e.g., a `Box`, `Rc`, or `&`) to break the cycle
+  |
+7 |     Binary(BinOp, Box<Expr>, Box<Expr>),
+  |                   ++++    +  ++++    +
+```
+
+The fix: `Box<Expr>` is always 8 bytes (one pointer), regardless of what `Expr` variant it points to. The actual data lives on the heap.
+
+- **Creating:** `Box::new(Expr::IntLit(42))` — allocates on the heap, returns a pointer
+- **Reading:** Rust auto-derefs — `my_box.some_method()` works without `*`
+- **Ownership:** `Box` *owns* its data. When the `Box` is dropped, the heap memory is freed. No garbage collector.
+
 ### The Code
 
 Create `src/ast.rs`:
@@ -84,11 +134,7 @@ Create `src/ast.rs`:
 // src/ast.rs
 // The spell tree — abstract syntax tree nodes for Runescript.
 // Every node the parser can produce is defined here (§4).
-```
 
-First, the operator types. These are simple enums with no data:
-
-```rust
 /// Unary operators: negation and logical NOT (§4).
 #[derive(Debug, Clone, PartialEq)]
 pub enum UnaryOp {
@@ -105,11 +151,7 @@ pub enum BinOp {
 }
 ```
 
-Nothing new here — these are plain enums like `TokenKind` but smaller. Each variant carries no data.
-
-Right now we have a flat stream of tokens, but no way to represent *structure* — which operands belong to which operator, what nests inside what. We need types that can hold a tree of expressions, where each node may contain child expressions.
-
-Now the expression enum — this is where `Box` enters:
+Now the expression enum:
 
 ```rust
 /// An expression — anything that produces a value (§4).
@@ -146,30 +188,15 @@ pub enum Expr {
 }
 ```
 
-Let's unpack `Box<T>`:
-
-- **What it is:** A smart pointer that allocates data on the heap. `Box<Expr>` means "a pointer to an `Expr` that lives on the heap." The `Box` itself is always 8 bytes (one pointer).
-- **Why we need it:** Without `Box`, `Binary(BinOp, Expr, Expr)` would mean "store two full `Expr` values inline." But `Expr` can be a `Binary` which contains two more `Expr`s, which can be `Binary`s... the size is infinite. `Box` breaks the recursion: `Binary(BinOp, Box<Expr>, Box<Expr>)` means "store two 8-byte pointers inline, and the actual `Expr` data lives on the heap."
-- **Python comparison:** In Python, `left: Expr` is already a reference (pointer) to a heap object. `Box<Expr>` is Rust's explicit version of the same thing. The difference: Rust's `Box` is *owned* — when the `Box` is dropped, the heap memory is freed. No garbage collector needed.
-- **Creating a Box:** `Box::new(Expr::IntLit(42))` allocates an `IntLit(42)` on the heap and returns a pointer to it.
-- **Reading from a Box:** You can use `*my_box` to dereference it, but usually Rust auto-derefs for you — `my_box.some_method()` works without explicit `*`.
-
 Which variants need `Box` and which don't?
 
 | Variant | Needs Box? | Why |
 |---------|-----------|-----|
 | `IntLit(i64)` | No | `i64` is 8 bytes, not recursive |
 | `StringLit(String)` | No | `String` is already a heap pointer internally |
-| `BoolLit(bool)` | No | `bool` is 1 byte |
-| `NilLit` | No | No data at all |
-| `Ident(String)` | No | `String` is already heap-allocated |
 | `Array(Vec<Expr>)` | No | `Vec` is already a heap pointer to its elements |
-| `Index(Box<Expr>, Box<Expr>)` | Yes | Contains `Expr` recursively |
-| `Unary(UnaryOp, Box<Expr>)` | Yes | Contains `Expr` recursively |
 | `Binary(BinOp, Box<Expr>, Box<Expr>)` | Yes | Contains `Expr` recursively |
 | `Call(Box<Expr>, Vec<Expr>)` | Yes for callee | The callee is an `Expr` (could be `Ident` or `FieldAccess`) |
-| `FieldAccess(Box<Expr>, String)` | Yes | The object is an `Expr` |
-| `Assign(Box<Expr>, Box<Expr>)` | Yes | Both target and value are `Expr`s |
 
 The rule: if a field's type is `Expr` (self-referential), wrap it in `Box`. If it's `Vec<Expr>`, no `Box` needed — `Vec` already stores its elements on the heap.
 
@@ -177,9 +204,6 @@ Now the statement enum:
 
 ```rust
 /// A statement — anything that causes an effect (§4).
-///
-/// Statements don't produce values (unlike expressions).
-/// They declare variables, define functions, control flow, etc.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Stmt {
     /// Expression used as a statement: print("hello")
@@ -201,26 +225,19 @@ pub enum Stmt {
 }
 ```
 
-Notice that `Stmt` doesn't need `Box` for its `Expr` fields. Why? Because `Stmt` contains `Expr`, not `Stmt`. There's no self-referential cycle in `Stmt` through `Expr` — `Expr` never contains a `Stmt`. The recursion in `Stmt` is through `Vec<Stmt>` (in `FnDecl`, `If`, `While`, `For`, `Block`), and `Vec` is already heap-allocated.
+`Stmt` doesn't need `Box` for its `Expr` fields because `Stmt` contains `Expr`, not `Stmt` — no self-referential cycle. The recursion in `Stmt` is through `Vec<Stmt>` (in `FnDecl`, `If`, `While`, `For`, `Block`), and `Vec` is already heap-allocated.
 
-`Option<Vec<Stmt>>` in the `If` variant represents the optional `else` branch. `Some(stmts)` means there's an else block; `None` means there isn't. `Option<Expr>` in `Return` handles `return` with or without a value.
+`Option<Vec<Stmt>>` in `If` represents the optional `else` branch. `Some(stmts)` means there's an else block; `None` means there isn't.
 
-Now register the module. Add to `src/main.rs`:
+Register the module in `src/main.rs`:
 
 ```rust
 mod token;
 mod lexer;
 mod ast;  // new
 
-use lexer::Lexer;
-```
-
-And let's write a quick test in `main.rs` to prove we can build AST nodes by hand:
-
-```rust
 fn main() {
     // Build the AST for: 1 + 2 * 3
-    // This is what the parser will produce automatically in Stage 10.
     use ast::{Expr, BinOp};
 
     let tree = Expr::Binary(
@@ -238,19 +255,21 @@ fn main() {
 ```
 
 - `Box::new(...)` — allocates the inner value on the heap and returns a `Box` pointer.
-- `{:#?}` — the "pretty-print Debug" format. `#` adds indentation and newlines, making nested structures readable. Without `#`, everything prints on one line.
-- The nesting shows the tree structure: `Add` has `IntLit(1)` on the left and `Mul(IntLit(2), IntLit(3))` on the right. This means `*` binds tighter than `+` — exactly what the precedence table (§5.1) requires.
+- `{:#?}` — the "pretty-print Debug" format. `#` adds indentation and newlines.
+- The nesting shows the tree structure: `Add` has `IntLit(1)` on the left and `Mul(IntLit(2), IntLit(3))` on the right — `*` binds tighter than `+`.
 
 > [!warning] Common Mistakes
-> - **Forgetting `Box::new(...)` when constructing recursive variants** — you can't write `Expr::Binary(BinOp::Add, Expr::IntLit(1), ...)`. The type expects `Box<Expr>`, not `Expr`. The compiler says: "expected `Box<Expr>`, found `Expr`."
-> - **Trying to put `Stmt` inside `Expr`** — the spec keeps these separate. Expressions produce values; statements don't. If you need a block that produces a value, that's a design decision for a future language version (§12).
-> - **Forgetting `mod ast;` in `main.rs`** — same as every new module.
-> - **Confusing `Box<Expr>` with `&Expr`** — `Box` *owns* the data (it's freed when the Box is dropped). `&Expr` *borrows* it (someone else owns it). In the AST, nodes own their children, so we use `Box`.
+> **Forgetting `Box::new(...)` when constructing recursive variants:**
+> ```
+> error[E0308]: mismatched types
+>   expected `Box<Expr>`, found `Expr`
+> ```
+>
+> **Confusing `Box<Expr>` with `&Expr`** — `Box` *owns* the data (freed when dropped). `&Expr` *borrows* it (someone else owns it). AST nodes own their children, so we use `Box`.
 
 ### Verify it works
 
 ```bash
-cd ~/juk/runescript
 cargo run
 ```
 
@@ -274,9 +293,9 @@ Spell tree: Binary(
 )
 ```
 
-The tree correctly nests `Mul` inside `Add`, showing that `2 * 3` is computed first, then added to `1`.
+### Extend it
 
-The spell tree's shape is defined — every possible node the parser can produce has a home. Now we need the parser itself: a struct that walks the token stream and assembles these nodes into a tree, starting with the simplest expressions.
+Build the AST for `if hp > 0 { heal(10) }` by hand using `Stmt::If`, `Expr::Binary`, `Expr::Call`, etc. Print it with `{:#?}`. This gets you comfortable constructing nested AST nodes before the parser does it automatically.
 
 > [!check] Checkpoint
 > **`src/ast.rs`** (complete):
@@ -323,30 +342,7 @@ The spell tree's shape is defined — every possible node the parser can produce
 >     Block(Vec<Stmt>),
 > }
 > ```
->
-> **`src/main.rs`** (updated):
->
-> ```rust
-> mod token;
-> mod lexer;
-> mod ast;
->
-> fn main() {
->     use ast::{Expr, BinOp};
->
->     let tree = Expr::Binary(
->         BinOp::Add,
->         Box::new(Expr::IntLit(1)),
->         Box::new(Expr::Binary(
->             BinOp::Mul,
->             Box::new(Expr::IntLit(2)),
->             Box::new(Expr::IntLit(3)),
->         )),
->     );
->
->     println!("Spell tree: {:#?}", tree);
-> }
-> ```
+
 
 ---
 
@@ -354,9 +350,9 @@ The spell tree's shape is defined — every possible node the parser can produce
 
 *Difficulty: Easy*
 
-**Goal:** Build the `Parser` struct with peek/advance over tokens, and parse the simplest expressions: integer literals, string literals, booleans, nil, and identifiers. This is the `primary` rule from the grammar.
+**Goal:** Build the `Parser` struct with peek/advance over tokens, and parse the simplest expressions: integer literals, string literals, booleans, nil, and identifiers.
 
-**Spec reference:** §5 (`primary` rule in BNF), §4 (`IntLit`, `StringLit`, `BoolLit`, `NilLit`, `Ident` nodes), §5.2 (parsing strategy)
+**Spec reference:** §5 (`primary` rule in BNF), §4 (`IntLit`, `StringLit`, `BoolLit`, `NilLit`, `Ident` nodes)
 
 **New Rust concept(s):** Consuming a `Vec<Token>` by index, `Result` with custom error strings, `match` on enum variants with data extraction, the `clone()` cost
 
@@ -364,92 +360,34 @@ The spell tree's shape is defined — every possible node the parser can produce
 
 The parser mirrors the lexer's architecture: a struct with a cursor, `peek()` to look ahead, `advance()` to consume. But instead of characters, it operates on tokens. And instead of producing tokens, it produces AST nodes.
 
-We start with the **primary** rule — the bottom of the grammar (§5). Primary expressions are the atoms: literals and variable names. They don't contain sub-expressions, so there's no recursion yet. This lets us get the parser skeleton working before tackling the hard stuff (operators, precedence).
-
-Every parser function corresponds to a grammar rule. The call stack mirrors the grammar's nesting. This is **recursive descent** — the most intuitive parsing technique.
-
-### Python equivalent
-
-```python
-class Parser:
-    def __init__(self, tokens: list[Token]):
-        self.tokens = tokens
-        self.pos = 0
-
-    def peek(self) -> Token:
-        return self.tokens[self.pos]
-
-    def advance(self) -> Token:
-        tok = self.tokens[self.pos]
-        self.pos += 1
-        return tok
-
-    def parse_primary(self) -> Expr:
-        tok = self.advance()
-        if tok.kind == INT_LIT:
-            return IntLit(tok.value)
-        elif tok.kind == STRING_LIT:
-            return StringLit(tok.value)
-        elif tok.kind == TRUE:
-            return BoolLit(True)
-        # ...
-        else:
-            raise ParseError(f"Expected expression, got {tok}")
-```
-
-The Rust version is structurally identical. The main difference: Rust's `match` on `TokenKind` destructures the variant and extracts the data in one step.
+We start with the **primary** rule — the bottom of the grammar (§5). Primary expressions are the atoms: literals and variable names. They don't contain sub-expressions, so there's no recursion yet.
 
 ### The Code
 
-Create `src/parser.rs`:
+Create `src/parser.rs`. The parser struct and core methods:
 
 ```rust
-// src/parser.rs
-// The decipherer — transforms a token stream into a spell tree (AST).
-// Uses recursive descent for statements and Pratt parsing for expressions (§5.2).
-
 use crate::token::{Token, TokenKind, Span};
 use crate::ast::{Expr, Stmt, BinOp, UnaryOp};
-```
 
-The parser struct:
-
-Right now we have AST types but no machinery to *build* them from tokens. We need a struct that mirrors the lexer's architecture — a cursor over a sequence, with peek and advance — but operating on tokens instead of characters.
-
-```rust
-/// The decipherer. Holds the token stream and a cursor position.
 pub struct Parser {
-    /// The complete token stream from the lexer (including Eof).
     tokens: Vec<Token>,
-    /// Current position in the token stream (0-based).
     pos: usize,
 }
-```
 
-This is simpler than the lexer — no line/col tracking because each token already carries its `Span`. The parser just reads tokens by position.
-
-The core methods:
-
-```rust
 impl Parser {
-    /// Create a new parser from a token stream.
     pub fn new(tokens: Vec<Token>) -> Self {
         Parser { tokens, pos: 0 }
     }
 
-    /// Look at the current token without consuming it.
     fn peek(&self) -> &Token {
-        // Safe because the lexer always ends with Eof,
-        // so we never go past the end.
         &self.tokens[self.pos]
     }
 
-    /// Look at just the kind of the current token.
     fn peek_kind(&self) -> &TokenKind {
         &self.tokens[self.pos].kind
     }
 
-    /// Consume the current token and return it.
     fn advance(&mut self) -> &Token {
         let tok = &self.tokens[self.pos];
         if self.pos < self.tokens.len() - 1 {
@@ -458,8 +396,6 @@ impl Parser {
         tok
     }
 
-    /// If the current token matches `expected`, consume it and return true.
-    /// Otherwise, leave the cursor where it is and return false.
     fn match_kind(&mut self, expected: &TokenKind) -> bool {
         if self.peek_kind() == expected {
             self.advance();
@@ -469,8 +405,6 @@ impl Parser {
         }
     }
 
-    /// Consume the current token if it matches `expected`.
-    /// If it doesn't match, return a parse error with a helpful message.
     fn expect(&mut self, expected: &TokenKind, context: &str) -> Result<(), String> {
         if self.peek_kind() == expected {
             self.advance();
@@ -484,46 +418,49 @@ impl Parser {
         }
     }
 
-    /// Get the span of the current token (for error messages).
     fn current_span(&self) -> Span {
         self.peek().span.clone()
     }
 ```
 
-Key differences from the lexer's peek/advance:
+Key differences from the lexer:
 
-- `peek()` returns `&Token` (a reference), not `Option<Token>`. There's no `None` case because the lexer always appends `Eof` — the parser always has something to look at.
-- `advance()` returns `&Token` — a reference to the consumed token. We don't move the token out of the vector; we just return a reference and bump the position. The `if self.pos < self.tokens.len() - 1` guard prevents advancing past `Eof`.
-- `expect()` is new — it's the "consume or error" pattern. The parser uses this constantly: "I expect a `(` here; if it's not there, that's a parse error." The `context` parameter makes error messages helpful: "Expected `)` to close function arguments" vs just "Expected `)`."
-- `match_kind()` is the token-level equivalent of the lexer's `match_char()` — peek and conditionally consume.
+- `peek()` returns `&Token`, not `Option<Token>`. No `None` case because the lexer always appends `Eof`.
+- `advance()` returns `&Token` — a reference to the consumed token. The `if self.pos < self.tokens.len() - 1` guard prevents advancing past `Eof`.
+- `expect()` is the "consume or error" pattern — "I expect a `(` here; if it's not there, that's a parse error."
 
-Now the primary expression parser — the `primary` rule from §5:
+Now **implement `parse_primary` yourself.** It should:
 
 ```rust
-    /// Parse a primary expression (§5, `primary` rule).
-    /// primary ::= INT | STRING | "true" | "false" | "nil" | IDENT
-    ///           | "(" expression ")" | "[" arguments? "]"
+fn parse_primary(&mut self) -> Result<Expr, String>
+```
+
+1. Advance to get the current token (clone it to release the borrow)
+2. Match on the token's kind:
+   - `IntLit(n)` → `Ok(Expr::IntLit(n))`
+   - `StringLit(s)` → `Ok(Expr::StringLit(s.clone()))`
+   - `True` → `Ok(Expr::BoolLit(true))`
+   - `False` → `Ok(Expr::BoolLit(false))`
+   - `Nil` → `Ok(Expr::NilLit)`
+   - `Ident(name)` → `Ok(Expr::Ident(name.clone()))`
+   - Anything else → `Err("Expected expression, found ...")`
+
+Hint: use `let token = self.advance().clone();` to clone the token and release the borrow on `self`.
+
+<details>
+<summary>Solution: parse_primary</summary>
+
+```rust
     fn parse_primary(&mut self) -> Result<Expr, String> {
         let token = self.advance().clone();
 
         match token.kind {
-            // Integer literal: 42
             TokenKind::IntLit(n) => Ok(Expr::IntLit(n)),
-
-            // String literal: "hello {name}"
             TokenKind::StringLit(ref s) => Ok(Expr::StringLit(s.clone())),
-
-            // Boolean literals: true, false
             TokenKind::True => Ok(Expr::BoolLit(true)),
             TokenKind::False => Ok(Expr::BoolLit(false)),
-
-            // Nil literal
             TokenKind::Nil => Ok(Expr::NilLit),
-
-            // Identifier (variable name): hp, trap_armed
             TokenKind::Ident(ref name) => Ok(Expr::Ident(name.clone())),
-
-            // Anything else is an error
             _ => Err(format!(
                 "[line {}, col {}] Expected expression, found {:?}",
                 token.span.line, token.span.col, token.kind
@@ -532,33 +469,52 @@ Now the primary expression parser — the `primary` rule from §5:
     }
 ```
 
-Let's unpack the new patterns:
+</details>
 
-- `let token = self.advance().clone()` — we advance and **clone** the token. Why clone? Because `advance()` returns `&Token` — a reference into `self.tokens`. If we kept that reference alive while calling other `&mut self` methods, Rust's borrow checker would complain: you can't have a shared reference (`&Token`) and a mutable reference (`&mut self`) at the same time. Cloning gives us an owned copy, freeing the borrow. This costs a small allocation for `String` variants but keeps the code simple.
-- `TokenKind::IntLit(n)` — pattern matching destructures the variant and binds the inner `i64` to `n`. This is like Python's `if isinstance(tok, IntLit): n = tok.value` but done in one step.
-- `TokenKind::StringLit(ref s)` — the `ref` keyword borrows the string inside the token instead of moving it out. We then `.clone()` it to create an owned copy for the AST node. Without `ref`, the match would try to move the `String` out of the cloned token, which works too — but `ref` + `clone` is a common pattern you'll see in Rust codebases.
-- `TokenKind::Ident(ref name)` — same pattern as `StringLit`.
-- Every arm returns `Ok(Expr::...)` — the parser returns `Result<Expr, String>` so it can report errors.
+Key patterns:
 
-Now a public entry point to parse a single expression (we'll expand this later):
+- `let token = self.advance().clone()` — we clone because `advance()` returns `&Token` (a borrow of `self`). If we kept that reference while calling other `&mut self` methods, the borrow checker would complain. Cloning gives us an owned copy.
+- `TokenKind::IntLit(n)` — destructures the variant and binds the inner `i64` to `n`.
+- `TokenKind::StringLit(ref s)` — `ref` borrows the string inside the cloned token. We then `.clone()` it for the AST node.
+
+> [!warning] The Borrow Checker Wall: Why We Clone
+> Without the clone, you'd write:
+> ```rust
+> let token = self.advance(); // &Token — borrows self
+> // ... later ...
+> let rhs = self.parse_expr_bp(0)?; // &mut self — ERROR!
+> ```
+> The compiler says:
+> ```
+> error[E0502]: cannot borrow `*self` as mutable because it is also borrowed as immutable
+>   --> src/parser.rs:45:19
+>    |
+> 42 |         let token = self.advance();
+>    |                     ---- immutable borrow occurs here
+> ...
+> 45 |         let rhs = self.parse_expr_bp(0)?;
+>    |                   ^^^^ mutable borrow occurs here
+> ```
+> **What's happening:** `self.advance()` returns `&Token` — a shared reference into `self.tokens`. While that reference exists, you can't call any `&mut self` method because Rust forbids simultaneous shared and mutable borrows.
+>
+> **The fix:** `.clone()` copies the token into a local variable, ending the borrow immediately. Now `self` is free for mutable calls.
+
+Add a public entry point and register the module:
 
 ```rust
-    /// Parse a single expression. Entry point for expression parsing.
     pub fn parse_expression(&mut self) -> Result<Expr, String> {
         self.parse_primary()
     }
 }
 ```
 
-For now, `parse_expression` just delegates to `parse_primary`. In Stage 10, we'll add Pratt parsing between them.
-
-Register the module in `main.rs` and test it:
+In `src/main.rs`:
 
 ```rust
 mod token;
 mod lexer;
 mod ast;
-mod parser;  // new
+mod parser;
 
 use lexer::Lexer;
 use parser::Parser;
@@ -573,7 +529,7 @@ fn main() {
 }
 ```
 
-Add tests to `src/parser.rs`:
+Add tests:
 
 ```rust
 #[cfg(test)]
@@ -581,7 +537,6 @@ mod tests {
     use super::*;
     use crate::lexer::Lexer;
 
-    /// Helper: lex source text and create a parser.
     fn parser_for(source: &str) -> Parser {
         let mut lexer = Lexer::new(source);
         let tokens = lexer.scan_tokens().unwrap();
@@ -591,250 +546,50 @@ mod tests {
     #[test]
     fn parse_int_literal() {
         let mut p = parser_for("42");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::IntLit(42));
+        assert_eq!(p.parse_expression().unwrap(), Expr::IntLit(42));
     }
 
     #[test]
     fn parse_string_literal() {
         let mut p = parser_for(r#""hello""#);
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::StringLit("hello".to_string()));
+        assert_eq!(p.parse_expression().unwrap(), Expr::StringLit("hello".to_string()));
     }
 
     #[test]
-    fn parse_bool_true() {
-        let mut p = parser_for("true");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::BoolLit(true));
-    }
-
-    #[test]
-    fn parse_bool_false() {
-        let mut p = parser_for("false");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::BoolLit(false));
-    }
-
-    #[test]
-    fn parse_nil() {
-        let mut p = parser_for("nil");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::NilLit);
+    fn parse_booleans_and_nil() {
+        assert_eq!(parser_for("true").parse_expression().unwrap(), Expr::BoolLit(true));
+        assert_eq!(parser_for("false").parse_expression().unwrap(), Expr::BoolLit(false));
+        assert_eq!(parser_for("nil").parse_expression().unwrap(), Expr::NilLit);
     }
 
     #[test]
     fn parse_identifier() {
         let mut p = parser_for("hp");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::Ident("hp".to_string()));
+        assert_eq!(p.parse_expression().unwrap(), Expr::Ident("hp".to_string()));
     }
 
     #[test]
     fn parse_error_on_unexpected_token() {
-        let mut p = parser_for("+");
-        let result = p.parse_expression();
+        let result = parser_for("+").parse_expression();
         assert!(result.is_err());
         assert!(result.unwrap_err().contains("Expected expression"));
     }
 }
 ```
 
-The `parser_for` helper chains the lexer and parser together — lex the source, then create a parser from the tokens. We'll use this in every test.
-
-> [!warning] Common Mistakes
-> - **Not cloning the token from `advance()`** — if you hold a `&Token` reference while calling other `&mut self` methods, the borrow checker blocks you. Clone early to release the borrow.
-> - **Forgetting `ref` in match patterns** — `TokenKind::StringLit(s)` moves the `String` out. If you've cloned the token, this is fine. But if you're matching on a reference, you need `ref s` to borrow instead of move.
-> - **Advancing past `Eof`** — our `advance()` guards against this, but if you wrote it differently, you could index out of bounds. The `Eof` sentinel from Act 1 is crucial.
-> - **Returning `Expr` instead of `Result<Expr, String>`** — the parser must be able to report errors. Always return `Result`.
-
 ### Verify it works
 
 ```bash
-cd ~/juk/runescript
 cargo test
 ```
 
-Expected: all previous lexer tests pass, plus 7 new parser tests.
+### Extend it
 
-```bash
-cargo run
-```
-
-With `let source = "42";`, you should see:
-
-```
-Parsed: IntLit(
-    42,
-)
-```
-
-The parser can read atoms — the simplest building blocks of any expression. But `42` alone isn't very useful. Next comes the hard part: teaching the parser that `*` binds tighter than `+`, so `1 + 2 * 3` builds the right tree.
+Write a test that parses `"0"` and verifies it produces `IntLit(0)`, not an error. Then parse `"_underscore_var"` and verify it produces `Ident("_underscore_var")`. Edge cases matter.
 
 > [!check] Checkpoint
-> **`src/parser.rs`** — the complete file at this stage:
->
-> ```rust
-> use crate::token::{Token, TokenKind, Span};
-> use crate::ast::{Expr, Stmt, BinOp, UnaryOp};
->
-> pub struct Parser {
->     tokens: Vec<Token>,
->     pos: usize,
-> }
->
-> impl Parser {
->     pub fn new(tokens: Vec<Token>) -> Self {
->         Parser { tokens, pos: 0 }
->     }
->
->     fn peek(&self) -> &Token {
->         &self.tokens[self.pos]
->     }
->
->     fn peek_kind(&self) -> &TokenKind {
->         &self.tokens[self.pos].kind
->     }
->
->     fn advance(&mut self) -> &Token {
->         let tok = &self.tokens[self.pos];
->         if self.pos < self.tokens.len() - 1 {
->             self.pos += 1;
->         }
->         tok
->     }
->
->     fn match_kind(&mut self, expected: &TokenKind) -> bool {
->         if self.peek_kind() == expected {
->             self.advance();
->             true
->         } else {
->             false
->         }
->     }
->
->     fn expect(&mut self, expected: &TokenKind, context: &str) -> Result<(), String> {
->         if self.peek_kind() == expected {
->             self.advance();
->             Ok(())
->         } else {
->             let span = &self.peek().span;
->             Err(format!(
->                 "[line {}, col {}] Expected {:?} {}, found {:?}",
->                 span.line, span.col, expected, context, self.peek_kind()
->             ))
->         }
->     }
->
->     fn current_span(&self) -> Span {
->         self.peek().span.clone()
->     }
->
->     fn parse_primary(&mut self) -> Result<Expr, String> {
->         let token = self.advance().clone();
->
->         match token.kind {
->             TokenKind::IntLit(n) => Ok(Expr::IntLit(n)),
->             TokenKind::StringLit(ref s) => Ok(Expr::StringLit(s.clone())),
->             TokenKind::True => Ok(Expr::BoolLit(true)),
->             TokenKind::False => Ok(Expr::BoolLit(false)),
->             TokenKind::Nil => Ok(Expr::NilLit),
->             TokenKind::Ident(ref name) => Ok(Expr::Ident(name.clone())),
->             _ => Err(format!(
->                 "[line {}, col {}] Expected expression, found {:?}",
->                 token.span.line, token.span.col, token.kind
->             )),
->         }
->     }
->
->     pub fn parse_expression(&mut self) -> Result<Expr, String> {
->         self.parse_primary()
->     }
-> }
->
-> #[cfg(test)]
-> mod tests {
->     use super::*;
->     use crate::lexer::Lexer;
->
->     fn parser_for(source: &str) -> Parser {
->         let mut lexer = Lexer::new(source);
->         let tokens = lexer.scan_tokens().unwrap();
->         Parser::new(tokens)
->     }
->
->     #[test]
->     fn parse_int_literal() {
->         let mut p = parser_for("42");
->         let expr = p.parse_expression().unwrap();
->         assert_eq!(expr, Expr::IntLit(42));
->     }
->
->     #[test]
->     fn parse_string_literal() {
->         let mut p = parser_for(r#""hello""#);
->         let expr = p.parse_expression().unwrap();
->         assert_eq!(expr, Expr::StringLit("hello".to_string()));
->     }
->
->     #[test]
->     fn parse_bool_true() {
->         let mut p = parser_for("true");
->         let expr = p.parse_expression().unwrap();
->         assert_eq!(expr, Expr::BoolLit(true));
->     }
->
->     #[test]
->     fn parse_bool_false() {
->         let mut p = parser_for("false");
->         let expr = p.parse_expression().unwrap();
->         assert_eq!(expr, Expr::BoolLit(false));
->     }
->
->     #[test]
->     fn parse_nil() {
->         let mut p = parser_for("nil");
->         let expr = p.parse_expression().unwrap();
->         assert_eq!(expr, Expr::NilLit);
->     }
->
->     #[test]
->     fn parse_identifier() {
->         let mut p = parser_for("hp");
->         let expr = p.parse_expression().unwrap();
->         assert_eq!(expr, Expr::Ident("hp".to_string()));
->     }
->
->     #[test]
->     fn parse_error_on_unexpected_token() {
->         let mut p = parser_for("+");
->         let result = p.parse_expression();
->         assert!(result.is_err());
->         assert!(result.unwrap_err().contains("Expected expression"));
->     }
-> }
-> ```
->
-> **`src/main.rs`** (updated):
->
-> ```rust
-> mod token;
-> mod lexer;
-> mod ast;
-> mod parser;
->
-> use lexer::Lexer;
-> use parser::Parser;
->
-> fn main() {
->     let source = "42";
->     let mut lex = Lexer::new(source);
->     let tokens = lex.scan_tokens().unwrap();
->     let mut parser = Parser::new(tokens);
->     let expr = parser.parse_expression().unwrap();
->     println!("Parsed: {:#?}", expr);
-> }
-> ```
+> **`src/parser.rs`** contains: `Parser` struct, `new`, `peek`, `peek_kind`, `advance`, `match_kind`, `expect`, `current_span`, `parse_primary`, `parse_expression`, and 5 tests.
+
 
 ---
 
@@ -844,27 +599,23 @@ The parser can read atoms — the simplest building blocks of any expression. Bu
 
 **Goal:** Implement Pratt parsing for binary operators so that `1 + 2 * 3` correctly parses as `Add(1, Mul(2, 3))` — respecting the operator precedence table from the spec.
 
-**Spec reference:** §5.1 (Operator Precedence table), §5.2 (Pratt parsing strategy), §5 (grammar rules for `logic_or` through `multiplication`)
+**Spec reference:** §5.1 (Operator Precedence table), §5.2 (Pratt parsing strategy)
 
-**New Rust concept(s):** `u8` for binding power values, `loop` with conditional `break`, returning values from `match` arms that call `&mut self` methods, the Pratt parsing algorithm
+**New Rust concept(s):** `u8` for binding power values, `loop` with conditional `break`, the Pratt parsing algorithm
 
 ### Why this stage
 
-This is the hardest stage in the entire course. Not because the code is long — it's surprisingly short — but because the *idea* is subtle. How does the parser know that `*` binds tighter than `+`? How does it build the right tree shape?
+This is the hardest stage in the entire course. Not because the code is long — it's surprisingly short — but because the *idea* is subtle. How does the parser know that `*` binds tighter than `+`?
 
-The traditional approach (from the grammar in §5) is to write one function per precedence level: `parse_addition` calls `parse_multiplication`, which calls `parse_unary`, which calls `parse_primary`. Each level handles its operators and delegates "tighter" operators to the next level down. This works but creates a deep chain of functions — one per precedence level.
+**Pratt parsing** assigns a numeric **binding power** to each operator. Higher numbers mean tighter binding. The algorithm:
 
-**Pratt parsing** collapses all of that into a single function with a numeric parameter: the **minimum binding power**. Each operator has a binding power (a number). Higher numbers mean tighter binding. The algorithm:
-
-1. Parse a prefix expression (a literal, identifier, or unary operator).
+1. Parse a prefix expression (a literal or identifier).
 2. Look at the next token. If it's an infix operator whose binding power is *greater than* the minimum, consume it and parse the right-hand side recursively — but with the operator's binding power as the new minimum.
 3. Repeat step 2 until the next operator's binding power is too low.
 
-The result: operators with higher binding power "steal" operands from operators with lower binding power, naturally building the correct tree.
-
 ### The Precedence Table
 
-From §5.1, translated to binding power numbers. We use even numbers so there's room for right-associative operators (which use `bp - 1` for the right side):
+From §5.1, translated to binding power numbers:
 
 | Level | Operators | Binding Power (left, right) | Associativity |
 |-------|-----------|---------------------------|---------------|
@@ -876,108 +627,59 @@ From §5.1, translated to binding power numbers. We use even numbers so there's 
 | 6 | `+` `-` | (11, 12) | Left |
 | 7 | `*` `/` `%` | (13, 14) | Left |
 
-**Left-associative** operators have `right_bp = left_bp + 1`. This means `1 + 2 + 3` parses as `(1 + 2) + 3` — the left operand grabs as much as it can.
-
-**Right-associative** operators (just `=`) have `right_bp = left_bp - 1`. This means `a = b = 5` parses as `a = (b = 5)` — the right operand grabs as much as it can.
+**Left-associative:** `right_bp = left_bp + 1`. So `1 + 2 + 3` → `(1 + 2) + 3`.
+**Right-associative:** `right_bp = left_bp - 1`. So `a = b = 5` → `a = (b = 5)`.
 
 ### Walking Through `1 + 2 * 3`
 
-Let's trace the algorithm step by step. The token stream is: `IntLit(1)`, `Plus`, `IntLit(2)`, `Star`, `IntLit(3)`, `Eof`.
+Tokens: `IntLit(1)`, `Plus`, `IntLit(2)`, `Star`, `IntLit(3)`, `Eof`.
 
-**Call:** `parse_expression(min_bp=0)`
+**Call:** `parse_expr_bp(min_bp=0)`
 
-1. **Parse prefix:** consume `IntLit(1)` → `lhs = IntLit(1)`
-2. **Check infix:** peek is `Plus`. Binding power of `+` is `(11, 12)`. Is `11 > 0`? Yes.
-3. **Consume `Plus`.** Parse right side with `parse_expression(min_bp=12)`:
-   - **Parse prefix:** consume `IntLit(2)` → `lhs = IntLit(2)`
-   - **Check infix:** peek is `Star`. Binding power of `*` is `(13, 14)`. Is `13 > 12`? Yes.
-   - **Consume `Star`.** Parse right side with `parse_expression(min_bp=14)`:
-     - **Parse prefix:** consume `IntLit(3)` → `lhs = IntLit(3)`
-     - **Check infix:** peek is `Eof`. No binding power. Loop ends.
-     - **Return:** `IntLit(3)`
-   - **Build node:** `lhs = Binary(Mul, IntLit(2), IntLit(3))`
-   - **Check infix:** peek is `Eof`. Loop ends.
-   - **Return:** `Binary(Mul, IntLit(2), IntLit(3))`
-4. **Build node:** `lhs = Binary(Add, IntLit(1), Binary(Mul, IntLit(2), IntLit(3)))`
-5. **Check infix:** peek is `Eof`. Loop ends.
-6. **Return:** `Binary(Add, IntLit(1), Binary(Mul, IntLit(2), IntLit(3)))`
+1. Parse prefix: consume `IntLit(1)` → `lhs = IntLit(1)`
+2. Peek: `Plus`, bp=(11,12). Is `11 > 0`? Yes. Consume `Plus`.
+3. Recurse: `parse_expr_bp(min_bp=12)`:
+   - Parse prefix: consume `IntLit(2)` → `lhs = IntLit(2)`
+   - Peek: `Star`, bp=(13,14). Is `13 > 12`? Yes. Consume `Star`.
+   - Recurse: `parse_expr_bp(min_bp=14)`:
+     - Parse prefix: consume `IntLit(3)` → `lhs = IntLit(3)`
+     - Peek: `Eof`. No bp. Break. Return `IntLit(3)`.
+   - Build: `lhs = Binary(Mul, IntLit(2), IntLit(3))`
+   - Peek: `Eof`. Break. Return `Binary(Mul, IntLit(2), IntLit(3))`.
+4. Build: `lhs = Binary(Add, IntLit(1), Binary(Mul, IntLit(2), IntLit(3)))`
+5. Peek: `Eof`. Break. Return. ✓
 
-The resulting tree:
-
-```mermaid
-graph TD
-    A["Binary: Add"] --> B["IntLit: 1"]
-    A --> C["Binary: Mul"]
-    C --> D["IntLit: 2"]
-    C --> E["IntLit: 3"]
-```
-
-The key moment is step 3: when we're parsing the right side of `+` with `min_bp=12`, the `*` operator (left bp=13) is strong enough to steal `IntLit(2)` as its left operand. But if we were parsing `1 * 2 + 3`, the `+` (left bp=11) would NOT be strong enough (11 is not > 14), so `IntLit(2)` would stay with `*`.
-
-### Python equivalent
-
-```python
-def parse_expression(self, min_bp: int = 0) -> Expr:
-    lhs = self.parse_prefix()
-
-    while True:
-        op_bp = self.infix_binding_power(self.peek())
-        if op_bp is None:
-            break
-        left_bp, right_bp = op_bp
-        if left_bp < min_bp:
-            break
-
-        op_token = self.advance()
-        rhs = self.parse_expression(right_bp)
-        lhs = Binary(op_token_to_binop(op_token), lhs, rhs)
-
-    return lhs
-```
-
-The Rust version is the same algorithm. The only difference is that we return `Result` for error handling and use `Box::new()` for the recursive children.
+The key: when parsing the right side of `+` with `min_bp=12`, the `*` (left bp=13) is strong enough to steal `IntLit(2)`. But `+` (left bp=11) would NOT be strong enough if we were inside a `*` context.
 
 ### The Code
 
-Add these methods to the `impl Parser` block in `src/parser.rs`. First, the binding power lookup:
+**Implement the binding power lookup yourself.** Write a function that maps `TokenKind` to `Option<(u8, u8)>`:
 
 ```rust
-    /// Get the infix binding power for a token kind (§5.1).
-    /// Returns Some((left_bp, right_bp)) for infix operators, None for non-operators.
-    ///
-    /// Left-associative: right_bp = left_bp + 1
-    /// Right-associative: right_bp = left_bp - 1
+fn infix_binding_power(kind: &TokenKind) -> Option<(u8, u8)>
+```
+
+Use the table above. Return `None` for non-operators.
+
+<details>
+<summary>Solution: infix_binding_power and token_to_binop</summary>
+
+```rust
     fn infix_binding_power(kind: &TokenKind) -> Option<(u8, u8)> {
         match kind {
-            // Assignment — right-associative (§5.1, level 1)
-            TokenKind::Eq => Some((2, 1)),
-
-            // Logical OR (§5.1, level 2)
+            TokenKind::Eq => Some((2, 1)),                                    // right-assoc
             TokenKind::Or => Some((3, 4)),
-
-            // Logical AND (§5.1, level 3)
             TokenKind::And => Some((5, 6)),
-
-            // Equality (§5.1, level 4)
             TokenKind::EqEq | TokenKind::BangEq => Some((7, 8)),
-
-            // Comparison (§5.1, level 5)
             TokenKind::Lt | TokenKind::LtEq
             | TokenKind::Gt | TokenKind::GtEq => Some((9, 10)),
-
-            // Addition/subtraction (§5.1, level 6)
             TokenKind::Plus | TokenKind::Minus => Some((11, 12)),
-
-            // Multiplication/division/modulo (§5.1, level 7)
             TokenKind::Star | TokenKind::Slash
             | TokenKind::Percent => Some((13, 14)),
-
-            // Not an infix operator
             _ => None,
         }
     }
 
-    /// Convert a token kind to a BinOp for the AST.
     fn token_to_binop(kind: &TokenKind) -> Option<BinOp> {
         match kind {
             TokenKind::Plus => Some(BinOp::Add),
@@ -998,457 +700,21 @@ Add these methods to the `impl Parser` block in `src/parser.rs`. First, the bind
     }
 ```
 
-- `fn infix_binding_power(kind: &TokenKind)` — no `&self`, this is a pure function. Takes a reference to a `TokenKind` and returns the binding power pair.
-- `Option<(u8, u8)>` — returns `None` for non-operators (like `Eof`, `RParen`, etc.). The tuple `(u8, u8)` is `(left_bp, right_bp)`.
-- `u8` — unsigned 8-bit integer, range 0–255. More than enough for binding powers.
-- The `|` in match arms means "or" — `TokenKind::Lt | TokenKind::LtEq` matches either variant.
+</details>
 
 Now rewrite `parse_expression` to use Pratt parsing:
 
 ```rust
-    /// Parse an expression using Pratt parsing (§5.2).
-    ///
-    /// `min_bp` is the minimum binding power — operators with lower
-    /// binding power won't be consumed. Start with 0 to parse everything.
     pub fn parse_expression(&mut self) -> Result<Expr, String> {
         self.parse_expr_bp(0)
     }
 
-    /// The Pratt parsing core. Parses expressions with binding power >= min_bp.
     fn parse_expr_bp(&mut self, min_bp: u8) -> Result<Expr, String> {
-        // Step 1: Parse the prefix (left-hand side).
-        // For now, this is just a primary expression.
-        // Stage 11 will add unary operators here.
+        // Step 1: Parse prefix (just primary for now — Stage 11 adds unary)
         let mut lhs = self.parse_primary()?;
 
-        // Step 2: Loop over infix operators.
+        // Step 2: Loop over infix operators
         loop {
-            // Check if the next token is an infix operator.
-            let (left_bp, right_bp) = match Self::infix_binding_power(self.peek_kind()) {
-                Some(bp) => bp,
-                None => break, // not an operator — stop
-            };
-
-            // If this operator's left binding power is less than our minimum,
-            // it belongs to a caller higher up the call stack.
-            if left_bp < min_bp {
-                break;
-            }
-
-            // Consume the operator token and convert to BinOp.
-            let op_token = self.advance().clone();
-            let op = Self::token_to_binop(&op_token.kind).unwrap();
-
-            // Handle assignment specially — the left side must be an assignable target.
-            if matches!(op_token.kind, TokenKind::Eq) {
-                let rhs = self.parse_expr_bp(right_bp)?;
-                lhs = Expr::Assign(Box::new(lhs), Box::new(rhs));
-                continue;
-            }
-
-            // Parse the right-hand side with the right binding power as minimum.
-            let rhs = self.parse_expr_bp(right_bp)?;
-
-            // Build the Binary node.
-            lhs = Expr::Binary(op, Box::new(lhs), Box::new(rhs));
-        }
-
-        Ok(lhs)
-    }
-```
-
-Let's trace through the code with `1 + 2 * 3`:
-
-1. `parse_expr_bp(0)` is called.
-2. `parse_primary()` consumes `IntLit(1)` → `lhs = IntLit(1)`.
-3. Loop iteration 1: peek is `Plus`. `infix_binding_power(Plus)` returns `(11, 12)`. Is `11 < 0`? No. Consume `Plus`. Call `parse_expr_bp(12)`:
-   - `parse_primary()` consumes `IntLit(2)` → `lhs = IntLit(2)`.
-   - Loop: peek is `Star`. `infix_binding_power(Star)` returns `(13, 14)`. Is `13 < 12`? No. Consume `Star`. Call `parse_expr_bp(14)`:
-     - `parse_primary()` consumes `IntLit(3)` → `lhs = IntLit(3)`.
-     - Loop: peek is `Eof`. `infix_binding_power(Eof)` returns `None`. Break.
-     - Return `IntLit(3)`.
-   - Build: `lhs = Binary(Mul, IntLit(2), IntLit(3))`.
-   - Loop: peek is `Eof`. Break.
-   - Return `Binary(Mul, IntLit(2), IntLit(3))`.
-4. Build: `lhs = Binary(Add, IntLit(1), Binary(Mul, IntLit(2), IntLit(3)))`.
-5. Loop: peek is `Eof`. Break.
-6. Return the complete tree. ✓
-
-The assignment case (`TokenKind::Eq`) is handled specially because `=` produces `Expr::Assign` instead of `Expr::Binary`. It's right-associative (right_bp=1 < left_bp=2), so `a = b = 5` parses as `a = (b = 5)`.
-
-- `matches!(op_token.kind, TokenKind::Eq)` — the `matches!` macro is a convenient way to check if a value matches a pattern without destructuring. Returns `bool`. Like `isinstance()` in Python.
-
-Add tests:
-
-```rust
-    // --- Stage 10: Pratt parsing ---
-
-    #[test]
-    fn parse_simple_addition() {
-        let mut p = parser_for("1 + 2");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Binary(
-                BinOp::Add,
-                Box::new(Expr::IntLit(1)),
-                Box::new(Expr::IntLit(2)),
-            )
-        );
-    }
-
-    #[test]
-    fn parse_precedence_mul_over_add() {
-        // 1 + 2 * 3 should be Add(1, Mul(2, 3))
-        let mut p = parser_for("1 + 2 * 3");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Binary(
-                BinOp::Add,
-                Box::new(Expr::IntLit(1)),
-                Box::new(Expr::Binary(
-                    BinOp::Mul,
-                    Box::new(Expr::IntLit(2)),
-                    Box::new(Expr::IntLit(3)),
-                )),
-            )
-        );
-    }
-
-    #[test]
-    fn parse_left_associativity() {
-        // 1 - 2 - 3 should be Sub(Sub(1, 2), 3)
-        let mut p = parser_for("1 - 2 - 3");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Binary(
-                BinOp::Sub,
-                Box::new(Expr::Binary(
-                    BinOp::Sub,
-                    Box::new(Expr::IntLit(1)),
-                    Box::new(Expr::IntLit(2)),
-                )),
-                Box::new(Expr::IntLit(3)),
-            )
-        );
-    }
-
-    #[test]
-    fn parse_comparison_and_logic() {
-        // hp > 0 && alive
-        let mut p = parser_for("hp > 0 && alive");
-        let expr = p.parse_expression().unwrap();
-        // && binds looser than >, so: And(Gt(hp, 0), alive)
-        assert_eq!(
-            expr,
-            Expr::Binary(
-                BinOp::And,
-                Box::new(Expr::Binary(
-                    BinOp::Gt,
-                    Box::new(Expr::Ident("hp".to_string())),
-                    Box::new(Expr::IntLit(0)),
-                )),
-                Box::new(Expr::Ident("alive".to_string())),
-            )
-        );
-    }
-
-    #[test]
-    fn parse_assignment() {
-        // hp = 50
-        let mut p = parser_for("hp = 50");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Assign(
-                Box::new(Expr::Ident("hp".to_string())),
-                Box::new(Expr::IntLit(50)),
-            )
-        );
-    }
-
-    #[test]
-    fn parse_chained_assignment() {
-        // a = b = 5 should be Assign(a, Assign(b, 5)) — right-associative
-        let mut p = parser_for("a = b = 5");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Assign(
-                Box::new(Expr::Ident("a".to_string())),
-                Box::new(Expr::Assign(
-                    Box::new(Expr::Ident("b".to_string())),
-                    Box::new(Expr::IntLit(5)),
-                )),
-            )
-        );
-    }
-
-    #[test]
-    fn parse_complex_arithmetic() {
-        // 2 + 3 * 4 - 1 should be Sub(Add(2, Mul(3, 4)), 1)
-        let mut p = parser_for("2 + 3 * 4 - 1");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Binary(
-                BinOp::Sub,
-                Box::new(Expr::Binary(
-                    BinOp::Add,
-                    Box::new(Expr::IntLit(2)),
-                    Box::new(Expr::Binary(
-                        BinOp::Mul,
-                        Box::new(Expr::IntLit(3)),
-                        Box::new(Expr::IntLit(4)),
-                    )),
-                )),
-                Box::new(Expr::IntLit(1)),
-            )
-        );
-    }
-
-    #[test]
-    fn parse_equality() {
-        // x == 5
-        let mut p = parser_for("x == 5");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Binary(
-                BinOp::Eq,
-                Box::new(Expr::Ident("x".to_string())),
-                Box::new(Expr::IntLit(5)),
-            )
-        );
-    }
-```
-
-> [!warning] Common Mistakes
-> - **Using `>=` instead of `<` for the binding power check** — the condition is `if left_bp < min_bp { break }`. Using `<=` would break left-associativity: `1 + 2 + 3` would parse as `1 + (2 + 3)` instead of `(1 + 2) + 3`.
-> - **Forgetting to clone the operator token** — same borrow issue as in Stage 9. `self.advance()` returns `&Token`, but we need to call `self.parse_expr_bp()` next, which takes `&mut self`. Clone the token first.
-> - **Mixing up left_bp and right_bp** — `left_bp` is compared against `min_bp` to decide whether to consume the operator. `right_bp` is passed to the recursive call to set the minimum for the right-hand side.
-> - **Not handling `Eq` (assignment) separately** — `=` is an operator in the precedence table, but it produces `Assign` nodes, not `Binary` nodes. If you treat it like other operators, you'll get `Binary(Eq, ...)` which doesn't exist in the AST.
-
-### Verify it works
-
-```bash
-cargo test
-```
-
-Expected: all previous tests pass, plus 8 new Pratt parsing tests.
-
-Update `main.rs` to see the tree:
-
-```rust
-fn main() {
-    let source = "1 + 2 * 3";
-    let mut lex = Lexer::new(source);
-    let tokens = lex.scan_tokens().unwrap();
-    let mut parser = Parser::new(tokens);
-    let expr = parser.parse_expression().unwrap();
-    println!("Parsed: {:#?}", expr);
-}
-```
-
-```bash
-cargo run
-```
-
-You should see the correctly nested tree with `Mul` inside `Add`.
-
-Binary operators obey the precedence table now — the Pratt algorithm handles the binding power dance. But expressions also have prefix operators (`-x`, `!flag`), postfix operators (`print(args)`, `arr[0]`), and grouping (`(1 + 2) * 3`). Next, we complete the expression parser with all of these.
-
-> [!check] Checkpoint
-> Changes to `src/parser.rs`:
->
-> 1. Add `infix_binding_power()` and `token_to_binop()` associated functions.
-> 2. Replace `parse_expression()` with the two-method Pratt implementation (`parse_expression` + `parse_expr_bp`).
-> 3. Add 8 new tests.
->
-> The `parse_primary` method is unchanged from Stage 9.
-
----
-
-## Stage 11: Unary and Grouping — Medium
-
-*Difficulty: Medium*
-
-**Goal:** Parse unary operators (`-x`, `!flag`), parenthesized grouping (`(expr)`), array literals (`[1, 2, 3]`), function calls (`print("hi")`), field access (`hunter.hp`), and index access (`arr[0]`). Complete the expression parser.
-
-**Spec reference:** §5 (`unary`, `call`, `primary` rules), §5.1 (level 8: unary, level 9: `.` `()` `[]`), §4 (`Unary`, `Call`, `FieldAccess`, `Index`, `Array` nodes)
-
-**New Rust concept(s):** Prefix binding power in Pratt parsing, postfix/mixfix operators as infix with high binding power, parsing comma-separated lists
-
-### Why this stage
-
-Stage 10 handled infix binary operators — things that sit *between* two operands. But expressions also have:
-
-- **Prefix operators:** `-x` (negation), `!flag` (logical NOT) — they appear *before* their operand.
-- **Grouping:** `(1 + 2) * 3` — parentheses override precedence.
-- **Postfix-like operators:** `print(args)` (call), `hunter.hp` (field access), `arr[0]` (index) — they appear *after* an expression and bind very tightly (§5.1, level 9).
-- **Array literals:** `[1, 2, 3]` — a prefix construct that parses a comma-separated list.
-
-In Pratt parsing, prefix operators are handled in the "prefix" step (before the infix loop). Postfix operators like `.`, `()`, and `[]` are handled as infix operators with very high binding power — they always win.
-
-### Python equivalent
-
-```python
-def parse_prefix(self) -> Expr:
-    tok = self.peek()
-    if tok.kind == MINUS:
-        self.advance()
-        operand = self.parse_expression(PREFIX_BP)
-        return Unary(Neg, operand)
-    elif tok.kind == BANG:
-        self.advance()
-        operand = self.parse_expression(PREFIX_BP)
-        return Unary(Not, operand)
-    elif tok.kind == LPAREN:
-        self.advance()
-        expr = self.parse_expression(0)
-        self.expect(RPAREN)
-        return expr
-    elif tok.kind == LBRACKET:
-        self.advance()
-        elements = self.parse_comma_list(RBRACKET)
-        return Array(elements)
-    else:
-        return self.parse_primary()
-```
-
-### The Code
-
-We need to modify `parse_expr_bp` to handle prefix operators before the primary, and add postfix operators (call, field, index) to the infix loop.
-
-First, add a prefix binding power function:
-
-```rust
-    /// Get the prefix binding power for unary operators (§5.1, level 8).
-    /// Returns Some(right_bp) for prefix operators, None for non-prefix tokens.
-    fn prefix_binding_power(kind: &TokenKind) -> Option<u8> {
-        match kind {
-            TokenKind::Minus | TokenKind::Bang => Some(15),
-            // 15 is higher than any infix operator (max is 14 for * / %)
-            // so -x * y parses as (-x) * y, not -(x * y)
-            _ => None,
-        }
-    }
-```
-
-Unary operators have binding power 15 — higher than any binary operator. This means `-2 * 3` parses as `(-2) * 3`, not `-(2 * 3)`. The spec (§5.1) puts unary at level 8, above multiplication at level 7.
-
-Add a helper to parse comma-separated expression lists (used by arrays and function calls):
-
-```rust
-    /// Parse a comma-separated list of expressions, terminated by `end_token`.
-    /// Returns the list of parsed expressions.
-    fn parse_expr_list(&mut self, end_token: &TokenKind) -> Result<Vec<Expr>, String> {
-        let mut args = Vec::new();
-
-        if self.peek_kind() == end_token {
-            // Empty list
-            return Ok(args);
-        }
-
-        // Parse first expression
-        args.push(self.parse_expr_bp(0)?);
-
-        // Parse remaining expressions separated by commas
-        while self.match_kind(&TokenKind::Comma) {
-            args.push(self.parse_expr_bp(0)?);
-        }
-
-        Ok(args)
-    }
-```
-
-This pattern — "parse first, then loop on comma" — is the standard way to parse comma-separated lists. It handles empty lists (check for end token first), single-element lists (parse one, no comma follows), and multi-element lists (parse one, then comma + parse repeats).
-
-Now rewrite `parse_expr_bp` to integrate prefix operators and postfix operators. Replace the entire method:
-
-```rust
-    /// The Pratt parsing core. Parses expressions with binding power >= min_bp.
-    fn parse_expr_bp(&mut self, min_bp: u8) -> Result<Expr, String> {
-        // === Step 1: Parse prefix (unary operators, grouping, arrays, or primary) ===
-        let mut lhs = if let Some(right_bp) = Self::prefix_binding_power(self.peek_kind()) {
-            // Unary prefix operator: -x, !flag
-            let op_token = self.advance().clone();
-            let op = match op_token.kind {
-                TokenKind::Minus => UnaryOp::Neg,
-                TokenKind::Bang => UnaryOp::Not,
-                _ => unreachable!(),
-            };
-            let operand = self.parse_expr_bp(right_bp)?;
-            Expr::Unary(op, Box::new(operand))
-        } else if self.peek_kind() == &TokenKind::LParen {
-            // Parenthesized grouping: (expr)
-            self.advance(); // consume '('
-            let expr = self.parse_expr_bp(0)?; // reset binding power inside parens
-            self.expect(&TokenKind::RParen, "to close grouping")?;
-            expr
-        } else if self.peek_kind() == &TokenKind::LBracket {
-            // Array literal: [1, 2, 3]
-            self.advance(); // consume '['
-            let elements = self.parse_expr_list(&TokenKind::RBracket)?;
-            self.expect(&TokenKind::RBracket, "to close array literal")?;
-            Expr::Array(elements)
-        } else {
-            // Primary expression: literals, identifiers
-            self.parse_primary()?
-        };
-
-        // === Step 2: Loop over infix and postfix operators ===
-        loop {
-            // Check for postfix operators first (highest precedence, §5.1 level 9)
-            match self.peek_kind() {
-                // Function call: expr(args)
-                TokenKind::LParen => {
-                    // Binding power 17 — tighter than everything
-                    if 17 < min_bp {
-                        break;
-                    }
-                    self.advance(); // consume '('
-                    let args = self.parse_expr_list(&TokenKind::RParen)?;
-                    self.expect(&TokenKind::RParen, "to close function arguments")?;
-                    lhs = Expr::Call(Box::new(lhs), args);
-                    continue;
-                }
-                // Field access: expr.field
-                TokenKind::Dot => {
-                    if 17 < min_bp {
-                        break;
-                    }
-                    self.advance(); // consume '.'
-                    let field_token = self.advance().clone();
-                    let field_name = match field_token.kind {
-                        TokenKind::Ident(name) => name,
-                        _ => {
-                            return Err(format!(
-                                "[line {}, col {}] Expected field name after '.', found {:?}",
-                                field_token.span.line, field_token.span.col, field_token.kind
-                            ));
-                        }
-                    };
-                    lhs = Expr::FieldAccess(Box::new(lhs), field_name);
-                    continue;
-                }
-                // Index access: expr[index]
-                TokenKind::LBracket => {
-                    if 17 < min_bp {
-                        break;
-                    }
-                    self.advance(); // consume '['
-                    let index = self.parse_expr_bp(0)?;
-                    self.expect(&TokenKind::RBracket, "to close index access")?;
-                    lhs = Expr::Index(Box::new(lhs), Box::new(index));
-                    continue;
-                }
-                _ => {}
-            }
-
-            // Check for infix binary operators
             let (left_bp, right_bp) = match Self::infix_binding_power(self.peek_kind()) {
                 Some(bp) => bp,
                 None => break,
@@ -1460,7 +726,7 @@ Now rewrite `parse_expr_bp` to integrate prefix operators and postfix operators.
 
             let op_token = self.advance().clone();
 
-            // Handle assignment specially
+            // Assignment produces Assign, not Binary
             if matches!(op_token.kind, TokenKind::Eq) {
                 let rhs = self.parse_expr_bp(right_bp)?;
                 lhs = Expr::Assign(Box::new(lhs), Box::new(rhs));
@@ -1476,63 +742,298 @@ Now rewrite `parse_expr_bp` to integrate prefix operators and postfix operators.
     }
 ```
 
-The structure is the same as Stage 10, but with two additions:
-
-**Prefix handling (Step 1):** Before parsing a primary, we check if the current token is a prefix operator (`-`, `!`), a grouping `(`, or an array `[`. If so, we handle it specially. Otherwise, fall through to `parse_primary()`.
-
-- For unary operators: consume the operator, parse the operand with the prefix binding power (15), and wrap in `Expr::Unary`.
-- For grouping: consume `(`, parse the inner expression with binding power 0 (reset — anything goes inside parens), expect `)`.
-- For arrays: consume `[`, parse comma-separated expressions, expect `]`.
-
-**Postfix handling (Step 2):** At the top of the infix loop, we check for `(`, `.`, and `[` — the postfix operators from §5.1 level 9. They have binding power 17 (higher than everything else), so they always win. Each one transforms `lhs` into a new node:
-
-- `(` → `Call(lhs, args)` — `lhs` becomes the callee
-- `.` → `FieldAccess(lhs, field_name)` — `lhs` becomes the object
-- `[` → `Index(lhs, index_expr)` — `lhs` becomes the array
-
-The `continue` after each postfix case is important — it re-enters the loop to check for chained postfix operators like `arr[0].name` or `get_fn()(args)`.
-
-- `unreachable!()` — a macro that panics with "entered unreachable code." We use it in the unary match because `prefix_binding_power` already confirmed the token is `-` or `!`. If somehow another token gets here, it's a bug in our code, not a user error.
+- `matches!(op_token.kind, TokenKind::Eq)` — the `matches!` macro checks if a value matches a pattern. Returns `bool`. Like `isinstance()` in Python.
 
 Add tests:
 
 ```rust
-    // --- Stage 11: Unary, grouping, calls, fields, indexing ---
+    #[test]
+    fn parse_simple_addition() {
+        let mut p = parser_for("1 + 2");
+        assert_eq!(
+            p.parse_expression().unwrap(),
+            Expr::Binary(BinOp::Add, Box::new(Expr::IntLit(1)), Box::new(Expr::IntLit(2)))
+        );
+    }
 
     #[test]
-    fn parse_unary_negation() {
-        let mut p = parser_for("-42");
+    fn parse_precedence_mul_over_add() {
+        let mut p = parser_for("1 + 2 * 3");
+        assert_eq!(
+            p.parse_expression().unwrap(),
+            Expr::Binary(
+                BinOp::Add,
+                Box::new(Expr::IntLit(1)),
+                Box::new(Expr::Binary(BinOp::Mul, Box::new(Expr::IntLit(2)), Box::new(Expr::IntLit(3)))),
+            )
+        );
+    }
+
+    #[test]
+    fn parse_left_associativity() {
+        // 1 - 2 - 3 → Sub(Sub(1, 2), 3)
+        let mut p = parser_for("1 - 2 - 3");
+        assert_eq!(
+            p.parse_expression().unwrap(),
+            Expr::Binary(
+                BinOp::Sub,
+                Box::new(Expr::Binary(BinOp::Sub, Box::new(Expr::IntLit(1)), Box::new(Expr::IntLit(2)))),
+                Box::new(Expr::IntLit(3)),
+            )
+        );
+    }
+
+    #[test]
+    fn parse_right_associative_assignment() {
+        // a = b = 5 → Assign(a, Assign(b, 5))
+        let mut p = parser_for("a = b = 5");
+        assert_eq!(
+            p.parse_expression().unwrap(),
+            Expr::Assign(
+                Box::new(Expr::Ident("a".to_string())),
+                Box::new(Expr::Assign(
+                    Box::new(Expr::Ident("b".to_string())),
+                    Box::new(Expr::IntLit(5)),
+                )),
+            )
+        );
+    }
+
+    #[test]
+    fn parse_comparison_and_logic() {
+        // hp > 0 && alive → And(Gt(hp, 0), alive)
+        let mut p = parser_for("hp > 0 && alive");
+        assert_eq!(
+            p.parse_expression().unwrap(),
+            Expr::Binary(
+                BinOp::And,
+                Box::new(Expr::Binary(BinOp::Gt, Box::new(Expr::Ident("hp".to_string())), Box::new(Expr::IntLit(0)))),
+                Box::new(Expr::Ident("alive".to_string())),
+            )
+        );
+    }
+
+    #[test]
+    fn parse_complex_arithmetic() {
+        // 2 + 3 * 4 - 1 → Sub(Add(2, Mul(3, 4)), 1)
+        let mut p = parser_for("2 + 3 * 4 - 1");
         let expr = p.parse_expression().unwrap();
         assert_eq!(
             expr,
-            Expr::Unary(UnaryOp::Neg, Box::new(Expr::IntLit(42)))
+            Expr::Binary(
+                BinOp::Sub,
+                Box::new(Expr::Binary(
+                    BinOp::Add,
+                    Box::new(Expr::IntLit(2)),
+                    Box::new(Expr::Binary(BinOp::Mul, Box::new(Expr::IntLit(3)), Box::new(Expr::IntLit(4)))),
+                )),
+                Box::new(Expr::IntLit(1)),
+            )
         );
+    }
+```
+
+> [!warning] Common Mistakes
+> **Using `<=` instead of `<` for the binding power check** — `if left_bp <= min_bp` breaks left-associativity. `1 + 2 + 3` would parse as `1 + (2 + 3)` instead of `(1 + 2) + 3`. The condition must be `<`.
+>
+> **Mixing up left_bp and right_bp** — `left_bp` is compared against `min_bp`. `right_bp` is passed to the recursive call.
+
+### Verify it works
+
+```bash
+cargo test
+```
+
+### Extend it
+
+Write a test for `x == 5 || y != 3` and verify the tree shape. `||` (bp 3,4) should be the root, with `==` (bp 7,8) and `!=` (bp 7,8) as children. This tests that comparison binds tighter than logical OR.
+
+> [!check] Checkpoint
+> Added to `src/parser.rs`: `infix_binding_power`, `token_to_binop`, `parse_expr_bp`. Replaced `parse_expression` to delegate to `parse_expr_bp(0)`. 6 new tests.
+
+
+---
+
+## Stage 11: Unary and Grouping — Medium
+
+*Difficulty: Medium*
+
+**Goal:** Parse unary operators (`-x`, `!flag`), parenthesized grouping (`(expr)`), array literals (`[1, 2, 3]`), function calls (`print("hi")`), field access (`hunter.hp`), and index access (`arr[0]`).
+
+**Spec reference:** §5 (`unary`, `call`, `primary` rules), §5.1 (level 8: unary, level 9: `.` `()` `[]`)
+
+**New Rust concept(s):** Prefix binding power, postfix operators as high-bp infix, parsing comma-separated lists
+
+### Why this stage
+
+Stage 10 handled infix binary operators. But expressions also have:
+
+- **Prefix:** `-x`, `!flag` — before their operand
+- **Grouping:** `(1 + 2) * 3` — parentheses override precedence
+- **Postfix-like:** `print(args)`, `hunter.hp`, `arr[0]` — after an expression, bind very tightly
+- **Array literals:** `[1, 2, 3]` — a prefix construct
+
+In Pratt parsing, prefix operators are handled before the infix loop. Postfix operators are handled as infix with very high binding power (17) — they always win.
+
+### The Code
+
+Add a prefix binding power function and a comma-list helper:
+
+```rust
+    fn prefix_binding_power(kind: &TokenKind) -> Option<u8> {
+        match kind {
+            TokenKind::Minus | TokenKind::Bang => Some(15),
+            _ => None,
+        }
+    }
+
+    fn parse_expr_list(&mut self, end_token: &TokenKind) -> Result<Vec<Expr>, String> {
+        let mut args = Vec::new();
+        if self.peek_kind() == end_token {
+            return Ok(args);
+        }
+        args.push(self.parse_expr_bp(0)?);
+        while self.match_kind(&TokenKind::Comma) {
+            args.push(self.parse_expr_bp(0)?);
+        }
+        Ok(args)
+    }
+```
+
+Now **rewrite `parse_expr_bp` yourself** to handle all of these. The structure:
+
+**Step 1 (prefix):** Check the current token:
+- `-` or `!` → consume, parse operand with prefix bp (15), wrap in `Unary`
+- `(` → consume, parse inner expression with bp 0, expect `)`
+- `[` → consume, parse comma list, expect `]`, wrap in `Array`
+- Otherwise → `parse_primary()`
+
+**Step 2 (infix loop):** Before checking binary operators, check for postfix:
+- `(` → function call: parse args, expect `)`, wrap in `Call`
+- `.` → field access: consume, expect ident, wrap in `FieldAccess`
+- `[` → index: consume, parse index expr, expect `]`, wrap in `Index`
+
+All postfix operators use binding power 17 — check `if 17 < min_bp { break; }`.
+
+<details>
+<summary>Solution: complete parse_expr_bp</summary>
+
+```rust
+    fn parse_expr_bp(&mut self, min_bp: u8) -> Result<Expr, String> {
+        // Step 1: Prefix
+        let mut lhs = if let Some(right_bp) = Self::prefix_binding_power(self.peek_kind()) {
+            let op_token = self.advance().clone();
+            let op = match op_token.kind {
+                TokenKind::Minus => UnaryOp::Neg,
+                TokenKind::Bang => UnaryOp::Not,
+                _ => unreachable!(),
+            };
+            let operand = self.parse_expr_bp(right_bp)?;
+            Expr::Unary(op, Box::new(operand))
+        } else if self.peek_kind() == &TokenKind::LParen {
+            self.advance();
+            let expr = self.parse_expr_bp(0)?;
+            self.expect(&TokenKind::RParen, "to close grouping")?;
+            expr
+        } else if self.peek_kind() == &TokenKind::LBracket {
+            self.advance();
+            let elements = self.parse_expr_list(&TokenKind::RBracket)?;
+            self.expect(&TokenKind::RBracket, "to close array literal")?;
+            Expr::Array(elements)
+        } else {
+            self.parse_primary()?
+        };
+
+        // Step 2: Infix + postfix loop
+        loop {
+            // Postfix operators (bp 17)
+            match self.peek_kind() {
+                TokenKind::LParen => {
+                    if 17 < min_bp { break; }
+                    self.advance();
+                    let args = self.parse_expr_list(&TokenKind::RParen)?;
+                    self.expect(&TokenKind::RParen, "to close function arguments")?;
+                    lhs = Expr::Call(Box::new(lhs), args);
+                    continue;
+                }
+                TokenKind::Dot => {
+                    if 17 < min_bp { break; }
+                    self.advance();
+                    let field_token = self.advance().clone();
+                    let field_name = match field_token.kind {
+                        TokenKind::Ident(name) => name,
+                        _ => return Err(format!(
+                            "[line {}, col {}] Expected field name after '.', found {:?}",
+                            field_token.span.line, field_token.span.col, field_token.kind
+                        )),
+                    };
+                    lhs = Expr::FieldAccess(Box::new(lhs), field_name);
+                    continue;
+                }
+                TokenKind::LBracket => {
+                    if 17 < min_bp { break; }
+                    self.advance();
+                    let index = self.parse_expr_bp(0)?;
+                    self.expect(&TokenKind::RBracket, "to close index access")?;
+                    lhs = Expr::Index(Box::new(lhs), Box::new(index));
+                    continue;
+                }
+                _ => {}
+            }
+
+            // Infix binary operators
+            let (left_bp, right_bp) = match Self::infix_binding_power(self.peek_kind()) {
+                Some(bp) => bp,
+                None => break,
+            };
+            if left_bp < min_bp { break; }
+
+            let op_token = self.advance().clone();
+            if matches!(op_token.kind, TokenKind::Eq) {
+                let rhs = self.parse_expr_bp(right_bp)?;
+                lhs = Expr::Assign(Box::new(lhs), Box::new(rhs));
+                continue;
+            }
+
+            let op = Self::token_to_binop(&op_token.kind).unwrap();
+            let rhs = self.parse_expr_bp(right_bp)?;
+            lhs = Expr::Binary(op, Box::new(lhs), Box::new(rhs));
+        }
+
+        Ok(lhs)
+    }
+```
+
+</details>
+
+The `continue` after each postfix case re-enters the loop to allow chaining: `arr[0].name` → `FieldAccess(Index(arr, 0), "name")`.
+
+- `unreachable!()` — panics with "entered unreachable code." Used when a branch is logically impossible.
+
+Add tests:
+
+```rust
+    #[test]
+    fn parse_unary_negation() {
+        let mut p = parser_for("-42");
+        assert_eq!(p.parse_expression().unwrap(), Expr::Unary(UnaryOp::Neg, Box::new(Expr::IntLit(42))));
     }
 
     #[test]
     fn parse_unary_not() {
         let mut p = parser_for("!flag");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Unary(UnaryOp::Not, Box::new(Expr::Ident("flag".to_string())))
-        );
+        assert_eq!(p.parse_expression().unwrap(), Expr::Unary(UnaryOp::Not, Box::new(Expr::Ident("flag".to_string()))));
     }
 
     #[test]
-    fn parse_grouping() {
-        // (1 + 2) * 3 should be Mul(Add(1, 2), 3)
+    fn parse_grouping_overrides_precedence() {
+        // (1 + 2) * 3 → Mul(Add(1, 2), 3)
         let mut p = parser_for("(1 + 2) * 3");
-        let expr = p.parse_expression().unwrap();
         assert_eq!(
-            expr,
+            p.parse_expression().unwrap(),
             Expr::Binary(
                 BinOp::Mul,
-                Box::new(Expr::Binary(
-                    BinOp::Add,
-                    Box::new(Expr::IntLit(1)),
-                    Box::new(Expr::IntLit(2)),
-                )),
+                Box::new(Expr::Binary(BinOp::Add, Box::new(Expr::IntLit(1)), Box::new(Expr::IntLit(2)))),
                 Box::new(Expr::IntLit(3)),
             )
         );
@@ -1541,146 +1042,79 @@ Add tests:
     #[test]
     fn parse_array_literal() {
         let mut p = parser_for("[1, 2, 3]");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Array(vec![Expr::IntLit(1), Expr::IntLit(2), Expr::IntLit(3)])
-        );
+        assert_eq!(p.parse_expression().unwrap(), Expr::Array(vec![Expr::IntLit(1), Expr::IntLit(2), Expr::IntLit(3)]));
     }
 
     #[test]
     fn parse_empty_array() {
-        let mut p = parser_for("[]");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::Array(vec![]));
+        assert_eq!(parser_for("[]").parse_expression().unwrap(), Expr::Array(vec![]));
     }
 
     #[test]
     fn parse_function_call() {
         let mut p = parser_for(r#"print("hello")"#);
-        let expr = p.parse_expression().unwrap();
         assert_eq!(
-            expr,
-            Expr::Call(
-                Box::new(Expr::Ident("print".to_string())),
-                vec![Expr::StringLit("hello".to_string())],
-            )
-        );
-    }
-
-    #[test]
-    fn parse_call_multiple_args() {
-        let mut p = parser_for("damage(hunter, 15)");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Call(
-                Box::new(Expr::Ident("damage".to_string())),
-                vec![
-                    Expr::Ident("hunter".to_string()),
-                    Expr::IntLit(15),
-                ],
-            )
+            p.parse_expression().unwrap(),
+            Expr::Call(Box::new(Expr::Ident("print".to_string())), vec![Expr::StringLit("hello".to_string())])
         );
     }
 
     #[test]
     fn parse_call_no_args() {
-        let mut p = parser_for("get_hp()");
-        let expr = p.parse_expression().unwrap();
         assert_eq!(
-            expr,
-            Expr::Call(
-                Box::new(Expr::Ident("get_hp".to_string())),
-                vec![],
-            )
+            parser_for("get_hp()").parse_expression().unwrap(),
+            Expr::Call(Box::new(Expr::Ident("get_hp".to_string())), vec![])
         );
     }
 
     #[test]
     fn parse_field_access() {
-        let mut p = parser_for("hunter.hp");
-        let expr = p.parse_expression().unwrap();
         assert_eq!(
-            expr,
-            Expr::FieldAccess(
-                Box::new(Expr::Ident("hunter".to_string())),
-                "hp".to_string(),
-            )
+            parser_for("hunter.hp").parse_expression().unwrap(),
+            Expr::FieldAccess(Box::new(Expr::Ident("hunter".to_string())), "hp".to_string())
         );
     }
 
     #[test]
     fn parse_index_access() {
-        let mut p = parser_for("enemies[0]");
-        let expr = p.parse_expression().unwrap();
         assert_eq!(
-            expr,
-            Expr::Index(
-                Box::new(Expr::Ident("enemies".to_string())),
-                Box::new(Expr::IntLit(0)),
-            )
+            parser_for("enemies[0]").parse_expression().unwrap(),
+            Expr::Index(Box::new(Expr::Ident("enemies".to_string())), Box::new(Expr::IntLit(0)))
         );
     }
 
     #[test]
     fn parse_chained_postfix() {
-        // hunter.items[0] — field access then index
+        // hunter.items[0] → Index(FieldAccess(hunter, "items"), 0)
         let mut p = parser_for("hunter.items[0]");
-        let expr = p.parse_expression().unwrap();
         assert_eq!(
-            expr,
+            p.parse_expression().unwrap(),
             Expr::Index(
-                Box::new(Expr::FieldAccess(
-                    Box::new(Expr::Ident("hunter".to_string())),
-                    "items".to_string(),
-                )),
+                Box::new(Expr::FieldAccess(Box::new(Expr::Ident("hunter".to_string())), "items".to_string())),
                 Box::new(Expr::IntLit(0)),
             )
         );
     }
 
     #[test]
-    fn parse_negation_in_expression() {
-        // -x * 2 should be Mul(Neg(x), 2) — unary binds tighter than *
+    fn parse_negation_binds_tighter_than_mul() {
+        // -x * 2 → Mul(Neg(x), 2)
         let mut p = parser_for("-x * 2");
-        let expr = p.parse_expression().unwrap();
         assert_eq!(
-            expr,
+            p.parse_expression().unwrap(),
             Expr::Binary(
                 BinOp::Mul,
-                Box::new(Expr::Unary(
-                    UnaryOp::Neg,
-                    Box::new(Expr::Ident("x".to_string())),
-                )),
+                Box::new(Expr::Unary(UnaryOp::Neg, Box::new(Expr::Ident("x".to_string())))),
                 Box::new(Expr::IntLit(2)),
-            )
-        );
-    }
-
-    #[test]
-    fn parse_field_assignment() {
-        // hunter.hp = 80
-        let mut p = parser_for("hunter.hp = 80");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(
-            expr,
-            Expr::Assign(
-                Box::new(Expr::FieldAccess(
-                    Box::new(Expr::Ident("hunter".to_string())),
-                    "hp".to_string(),
-                )),
-                Box::new(Expr::IntLit(80)),
             )
         );
     }
 ```
 
 > [!warning] Common Mistakes
-> - **Forgetting `continue` after postfix operators** — without it, the code falls through to the infix binding power check, which returns `None` for `(`, `.`, `[`, and breaks the loop. You'd only get one postfix operator instead of allowing chains like `a.b[0](x)`.
-> - **Using the wrong binding power for prefix operators** — if prefix bp is too low (say 11, same as `+`), then `-1 + 2` would parse as `-(1 + 2)` instead of `(-1) + 2`. Prefix bp must be higher than all infix operators.
-> - **Not resetting binding power inside parentheses** — `parse_expr_bp(0)` inside the `(` handler means "parse any expression." If you passed `min_bp` instead, `(1 + 2)` inside a `*` context would fail because `+` has lower bp than `*`.
-> - **Forgetting to expect the closing delimiter** — `self.expect(&TokenKind::RParen, ...)` after parsing inside `()`. Without it, `(1 + 2` would silently succeed.
+> **Forgetting `continue` after postfix operators** — without it, the code falls through to the infix check, which returns `None` for `(`, `.`, `[`, and breaks the loop. Chaining like `a.b[0](x)` would fail.
+>
+> **Not resetting binding power inside parentheses** — `parse_expr_bp(0)` inside `(` means "parse any expression." If you passed `min_bp`, `(1 + 2)` inside a `*` context would fail because `+` has lower bp.
 
 ### Verify it works
 
@@ -1688,19 +1122,13 @@ Add tests:
 cargo test
 ```
 
-Expected: all previous tests pass, plus 13 new tests for unary, grouping, arrays, calls, fields, and indexing.
+### Extend it
 
-Every expression the language can produce is now parseable. But expressions alone don't make a program — we need statements: `let` declarations, `fn` definitions, and the glue that sequences them. Next, we add statement-level parsing.
+Write a test for `damage(hunter, -15)` — a function call with a negated argument. Verify the tree has `Call` at the root with `Unary(Neg, IntLit(15))` as the second argument.
 
 > [!check] Checkpoint
-> The expression parser is now complete. It handles:
-> - Literals and identifiers (Stage 9)
-> - All binary operators with correct precedence (Stage 10)
-> - Unary operators, grouping, arrays (Stage 11)
-> - Function calls, field access, index access (Stage 11)
-> - Assignment as a right-associative operator (Stage 10)
->
-> The `parse_primary`, `parse_expr_bp`, `parse_expression`, `infix_binding_power`, `prefix_binding_power`, `token_to_binop`, `parse_expr_list`, `expect`, `match_kind`, `peek`, `peek_kind`, `advance`, and `current_span` methods are all in `src/parser.rs`.
+> Added: `prefix_binding_power`, `parse_expr_list`. Rewrote `parse_expr_bp` with prefix + postfix handling. 11 new tests. The expression parser is now complete.
+
 
 ---
 
@@ -1708,60 +1136,37 @@ Every expression the language can produce is now parseable. But expressions alon
 
 *Difficulty: Medium*
 
-**Goal:** Parse `let` declarations and `fn` declarations. Introduce statement-level parsing with `parse_declaration` as the top-level entry point. Parse a complete program as a list of declarations.
+**Goal:** Parse `let` declarations, `fn` declarations, and expression statements. Parse a complete program as a list of declarations.
 
-**Spec reference:** §5 (`program`, `declaration`, `fn_decl`, `let_decl`, `expr_stmt` rules), §4 (`Let`, `FnDecl`, `ExprStmt` nodes)
+**Spec reference:** §5 (`program`, `declaration`, `fn_decl`, `let_decl`, `expr_stmt` rules)
 
-**New Rust concept(s):** Recursive descent for statements (each grammar rule = one function), parsing a sequence terminated by `Eof`, `Vec<String>` for parameter lists
+**New Rust concept(s):** Recursive descent for statements, parsing sequences terminated by `Eof`, `Vec<String>` for parameter lists
 
 ### Why this stage
 
-Expressions produce values. Statements cause effects. The spec (§5) defines the grammar hierarchy:
+Expressions produce values. Statements cause effects. A program is a sequence of declarations (§5):
 
 ```
-program        ::= declaration* EOF
-declaration    ::= fn_decl | let_decl | statement
+program     ::= declaration* EOF
+declaration ::= fn_decl | let_decl | statement
 ```
 
-A program is a sequence of declarations. A declaration is either a function definition, a variable binding, or a plain statement (which is just an expression used for its side effects, like `print("hello")`).
-
-This is **recursive descent** at the statement level — each grammar rule becomes a function. The parser peeks at the current token to decide which rule to apply:
-- See `let`? → parse a let declaration.
-- See `fn`? → parse a function declaration.
-- Anything else? → parse an expression statement.
-
-### Python equivalent
-
-```python
-def parse_declaration(self) -> Stmt:
-    if self.peek().kind == LET:
-        return self.parse_let()
-    elif self.peek().kind == FN:
-        return self.parse_fn_decl()
-    else:
-        return self.parse_statement()
-
-def parse_let(self) -> Stmt:
-    self.advance()  # consume 'let'
-    name = self.expect_ident()
-    self.expect(EQ)
-    value = self.parse_expression()
-    return Let(name, value)
-
-def parse_program(self) -> list[Stmt]:
-    stmts = []
-    while self.peek().kind != EOF:
-        stmts.append(self.parse_declaration())
-    return stmts
-```
+The parser peeks at the current token to decide which rule to apply: `let` → let declaration, `fn` → function declaration, anything else → expression statement.
 
 ### The Code
 
-Add a helper to extract an identifier name from the current token:
+Add helpers and statement parsers. **Implement `parse_let` yourself:**
 
 ```rust
-    /// Consume the current token and extract an identifier name.
-    /// Returns an error if the current token is not an identifier.
+fn parse_let(&mut self) -> Result<Stmt, String>
+```
+
+The `let` keyword has already been consumed. Parse: identifier name, `=`, expression. Return `Stmt::Let(name, value)`.
+
+<details>
+<summary>Solution: statement parsing methods</summary>
+
+```rust
     fn expect_ident(&mut self, context: &str) -> Result<String, String> {
         let token = self.advance().clone();
         match token.kind {
@@ -1772,117 +1177,55 @@ Add a helper to extract an identifier name from the current token:
             )),
         }
     }
-```
 
-Now the let declaration parser:
-
-```rust
-    /// Parse a let declaration (§5, `let_decl` rule).
-    /// let_decl ::= "let" IDENT "=" expression
     fn parse_let(&mut self) -> Result<Stmt, String> {
-        // 'let' has already been consumed by the caller
         let name = self.expect_ident("for variable name")?;
         self.expect(&TokenKind::Eq, "after variable name in let declaration")?;
         let value = self.parse_expr_bp(0)?;
         Ok(Stmt::Let(name, value))
     }
-```
 
-Simple: expect an identifier (the variable name), expect `=`, parse the value expression. The `let` keyword itself is consumed by the caller (`parse_declaration`).
-
-The function declaration parser:
-
-```rust
-    /// Parse a function declaration (§5, `fn_decl` rule).
-    /// fn_decl ::= "fn" IDENT "(" params? ")" block
     fn parse_fn_decl(&mut self) -> Result<Stmt, String> {
-        // 'fn' has already been consumed by the caller
         let name = self.expect_ident("for function name")?;
-
-        // Parse parameter list
         self.expect(&TokenKind::LParen, "after function name")?;
         let mut params = Vec::new();
         if self.peek_kind() != &TokenKind::RParen {
-            // First parameter
             params.push(self.expect_ident("for parameter name")?);
-            // Remaining parameters
             while self.match_kind(&TokenKind::Comma) {
                 params.push(self.expect_ident("for parameter name")?);
             }
         }
         self.expect(&TokenKind::RParen, "to close parameter list")?;
-
-        // Parse function body (a block)
         let body = self.parse_block()?;
-
         Ok(Stmt::FnDecl(name, params, body))
     }
-```
 
-The parameter list uses the same "first, then comma + repeat" pattern as `parse_expr_list`. But here we expect identifiers, not expressions.
-
-We need `parse_block` — a `{` followed by declarations, closed by `}`:
-
-```rust
-    /// Parse a block (§5, `block` rule).
-    /// block ::= "{" declaration* "}"
     fn parse_block(&mut self) -> Result<Vec<Stmt>, String> {
         self.expect(&TokenKind::LBrace, "to open block")?;
-
         let mut stmts = Vec::new();
         while self.peek_kind() != &TokenKind::RBrace
             && self.peek_kind() != &TokenKind::Eof
         {
             stmts.push(self.parse_declaration()?);
         }
-
         self.expect(&TokenKind::RBrace, "to close block")?;
         Ok(stmts)
     }
-```
 
-The `Eof` check prevents an infinite loop if the user forgets the closing `}`. Without it, the parser would loop forever looking for `}` that never comes.
-
-Now the declaration dispatcher — the heart of statement parsing:
-
-```rust
-    /// Parse a declaration (§5, `declaration` rule).
-    /// declaration ::= fn_decl | let_decl | statement
     fn parse_declaration(&mut self) -> Result<Stmt, String> {
         match self.peek_kind() {
-            TokenKind::Let => {
-                self.advance(); // consume 'let'
-                self.parse_let()
-            }
-            TokenKind::Fn => {
-                self.advance(); // consume 'fn'
-                self.parse_fn_decl()
-            }
+            TokenKind::Let => { self.advance(); self.parse_let() }
+            TokenKind::Fn => { self.advance(); self.parse_fn_decl() }
             _ => self.parse_statement(),
         }
     }
-```
 
-And `parse_statement` — for now, just expression statements (we'll add control flow in Stage 13):
-
-```rust
-    /// Parse a statement (§5, `statement` rule).
-    /// For now: just expression statements. Stage 13 adds if/while/for/return/block.
     fn parse_statement(&mut self) -> Result<Stmt, String> {
         let expr = self.parse_expr_bp(0)?;
-        // Optional semicolon (Runescript doesn't require them)
         self.match_kind(&TokenKind::Semicolon);
         Ok(Stmt::ExprStmt(expr))
     }
-```
 
-The optional semicolon is a nice touch — Runescript doesn't require semicolons (the spec examples don't use them), but they're allowed as statement terminators.
-
-Finally, the public entry point to parse a complete program:
-
-```rust
-    /// Parse a complete program (§5, `program` rule).
-    /// program ::= declaration* EOF
     pub fn parse_program(&mut self) -> Result<Vec<Stmt>, String> {
         let mut stmts = Vec::new();
         while self.peek_kind() != &TokenKind::Eof {
@@ -1892,94 +1235,31 @@ Finally, the public entry point to parse a complete program:
     }
 ```
 
-This is the top-level function. It loops until `Eof`, parsing one declaration at a time. The result is a `Vec<Stmt>` — the complete AST for the program.
+</details>
 
-Update `main.rs` to parse a multi-statement program:
+Key patterns:
 
-```rust
-fn main() {
-    let source = r#"
-let hp = 100
-let name = "Hunter"
-print("Hello")
-"#;
-    let mut lex = Lexer::new(source);
-    let tokens = lex.scan_tokens().unwrap();
-    let mut parser = Parser::new(tokens);
-    let program = parser.parse_program().unwrap();
-
-    for stmt in &program {
-        println!("{:#?}", stmt);
-    }
-}
-```
+- `parse_block` checks for `Eof` to prevent infinite loops on unclosed `{`.
+- `parse_statement` optionally consumes a semicolon — Runescript doesn't require them.
+- `parse_declaration` peeks at the keyword, consumes it, then calls the specific parser.
 
 Add tests:
 
 ```rust
-    // --- Stage 12: Declarations ---
-
     #[test]
     fn parse_let_declaration() {
         let mut p = parser_for("let hp = 100");
-        let program = p.parse_program().unwrap();
-        assert_eq!(
-            program,
-            vec![Stmt::Let("hp".to_string(), Expr::IntLit(100))]
-        );
-    }
-
-    #[test]
-    fn parse_let_with_expression() {
-        let mut p = parser_for("let damage = 10 + 5 * 2");
-        let program = p.parse_program().unwrap();
-        assert_eq!(
-            program,
-            vec![Stmt::Let(
-                "damage".to_string(),
-                Expr::Binary(
-                    BinOp::Add,
-                    Box::new(Expr::IntLit(10)),
-                    Box::new(Expr::Binary(
-                        BinOp::Mul,
-                        Box::new(Expr::IntLit(5)),
-                        Box::new(Expr::IntLit(2)),
-                    )),
-                ),
-            )]
-        );
+        assert_eq!(p.parse_program().unwrap(), vec![Stmt::Let("hp".to_string(), Expr::IntLit(100))]);
     }
 
     #[test]
     fn parse_fn_declaration() {
         let mut p = parser_for("fn heal(amount) { hp = hp + amount }");
         let program = p.parse_program().unwrap();
-        assert_eq!(
-            program,
-            vec![Stmt::FnDecl(
-                "heal".to_string(),
-                vec!["amount".to_string()],
-                vec![Stmt::ExprStmt(Expr::Assign(
-                    Box::new(Expr::Ident("hp".to_string())),
-                    Box::new(Expr::Binary(
-                        BinOp::Add,
-                        Box::new(Expr::Ident("hp".to_string())),
-                        Box::new(Expr::Ident("amount".to_string())),
-                    )),
-                ))],
-            )]
-        );
-    }
-
-    #[test]
-    fn parse_fn_no_params() {
-        let mut p = parser_for("fn greet() { print(42) }");
-        let program = p.parse_program().unwrap();
-        assert_eq!(program.len(), 1);
         match &program[0] {
             Stmt::FnDecl(name, params, body) => {
-                assert_eq!(name, "greet");
-                assert!(params.is_empty());
+                assert_eq!(name, "heal");
+                assert_eq!(params, &vec!["amount".to_string()]);
                 assert_eq!(body.len(), 1);
             }
             _ => panic!("Expected FnDecl"),
@@ -1987,14 +1267,10 @@ Add tests:
     }
 
     #[test]
-    fn parse_fn_multiple_params() {
-        let mut p = parser_for("fn add(a, b, c) { a + b + c }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::FnDecl(name, params, _) => {
-                assert_eq!(name, "add");
-                assert_eq!(params, &vec!["a".to_string(), "b".to_string(), "c".to_string()]);
-            }
+    fn parse_fn_no_params() {
+        let mut p = parser_for("fn greet() { print(42) }");
+        match &p.parse_program().unwrap()[0] {
+            Stmt::FnDecl(_, params, _) => assert!(params.is_empty()),
             _ => panic!("Expected FnDecl"),
         }
     }
@@ -2002,9 +1278,8 @@ Add tests:
     #[test]
     fn parse_expression_statement() {
         let mut p = parser_for(r#"print("hello")"#);
-        let program = p.parse_program().unwrap();
         assert_eq!(
-            program,
+            p.parse_program().unwrap(),
             vec![Stmt::ExprStmt(Expr::Call(
                 Box::new(Expr::Ident("print".to_string())),
                 vec![Expr::StringLit("hello".to_string())],
@@ -2017,25 +1292,19 @@ Add tests:
         let mut p = parser_for("let x = 1\nlet y = 2\nx + y");
         let program = p.parse_program().unwrap();
         assert_eq!(program.len(), 3);
-        assert!(matches!(&program[0], Stmt::Let(..)));
-        assert!(matches!(&program[1], Stmt::Let(..)));
-        assert!(matches!(&program[2], Stmt::ExprStmt(..)));
     }
 
     #[test]
     fn parse_let_missing_eq() {
-        let mut p = parser_for("let x 5");
-        let result = p.parse_program();
+        let result = parser_for("let x 5").parse_program();
         assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Expected"));
     }
 ```
 
 > [!warning] Common Mistakes
-> - **Forgetting to consume the keyword before calling the sub-parser** — `parse_let` expects `let` to already be consumed. If `parse_declaration` doesn't `self.advance()` before calling `parse_let`, the parser sees `let` again and tries to parse it as an identifier.
-> - **Infinite loop in `parse_block` without `Eof` check** — if the source is `{ let x = 1` (no closing `}`), the parser loops forever. Always check for `Eof` as a bail-out.
-> - **Not handling optional semicolons** — Runescript doesn't require semicolons, but if someone writes `let x = 1;`, the `;` would be parsed as the start of the next statement (an unexpected token). `self.match_kind(&TokenKind::Semicolon)` silently consumes it if present.
-> - **Calling `parse_expression` instead of `parse_expr_bp(0)` from statement parsers** — both work, but `parse_expression` is the public API. Internally, statement parsers can call `parse_expr_bp(0)` directly. Just be consistent.
+> **Forgetting to consume the keyword before calling the sub-parser** — `parse_let` expects `let` to already be consumed. If `parse_declaration` doesn't `self.advance()`, the parser sees `let` again and tries to parse it as an identifier.
+>
+> **Infinite loop in `parse_block` without `Eof` check** — if the source is `{ let x = 1` (no closing `}`), the parser loops forever.
 
 ### Verify it works
 
@@ -2043,25 +1312,9 @@ Add tests:
 cargo test
 ```
 
-Expected: all previous tests pass, plus 8 new declaration tests.
+### Extend it
 
-```bash
-cargo run
-```
-
-You should see three statements: two `Let` nodes and one `ExprStmt` with a `Call` inside.
-
-Declarations and expression statements parse cleanly, but the language is still a straight line — no branching, no loops. Next, we add `if`/`else`, `while`, `for-in`, and `return` to give the incantation its power to choose and repeat.
-
-> [!check] Checkpoint
-> New methods added to `src/parser.rs`:
-> - `expect_ident()` — extract identifier name or error
-> - `parse_let()` — let declaration
-> - `parse_fn_decl()` — function declaration with params and body
-> - `parse_block()` — `{` declarations `}`
-> - `parse_declaration()` — top-level dispatcher
-> - `parse_statement()` — expression statement (expanded in Stage 13)
-> - `parse_program()` — public entry point, parses until `Eof`
+Write a test that parses `fn add(a, b, c) { a + b + c }` and verifies the parameter list has 3 entries.
 
 ---
 
@@ -2069,48 +1322,35 @@ Declarations and expression statements parse cleanly, but the language is still 
 
 *Difficulty: Medium*
 
-**Goal:** Parse `if`/`else`, `while`, `for-in`, `return`, and standalone blocks. Complete the statement parser.
+**Goal:** Parse `if`/`else`, `while`, `for-in`, `return`, and standalone blocks.
 
-**Spec reference:** §5 (`if_stmt`, `while_stmt`, `for_stmt`, `return_stmt`, `block` rules), §4 (`If`, `While`, `For`, `Return`, `Block` nodes)
+**Spec reference:** §5 (`if_stmt`, `while_stmt`, `for_stmt`, `return_stmt`, `block` rules)
 
-**New Rust concept(s):** `Option<Vec<Stmt>>` for optional else branches, parsing keyword-initiated statements, nested blocks
+**New Rust concept(s):** `Option<Vec<Stmt>>` for optional else branches, nested blocks
 
 ### Why this stage
 
-Control flow statements follow a predictable pattern: a keyword, some expressions and/or identifiers, then a block body. The parser peeks at the keyword to decide which rule to apply, then follows the grammar mechanically.
-
-This is pure recursive descent — no Pratt parsing needed. Each statement type has its own function that consumes tokens in the exact order the grammar specifies.
-
-### Python equivalent
-
-```python
-def parse_if(self) -> Stmt:
-    # 'if' already consumed
-    condition = self.parse_expression()
-    then_body = self.parse_block()
-    else_body = None
-    if self.peek().kind == ELSE:
-        self.advance()
-        else_body = self.parse_block()
-    return If(condition, then_body, else_body)
-```
+Control flow statements follow a predictable pattern: a keyword, some expressions, then a block body. Each type has its own function that consumes tokens in the exact order the grammar specifies.
 
 ### The Code
 
-Add these methods to the `impl Parser` block:
+**Implement `parse_if` yourself.** The `if` keyword has already been consumed. Parse:
+1. Condition expression
+2. Then-body block
+3. Optional: if next token is `else`, consume it. If followed by `if`, recurse for `else if`. Otherwise parse an else block.
+
+Return `Stmt::If(condition, then_body, else_body)` where `else_body` is `Option<Vec<Stmt>>`.
+
+<details>
+<summary>Solution: control flow parsers</summary>
 
 ```rust
-    /// Parse an if statement (§5, `if_stmt` rule).
-    /// if_stmt ::= "if" expression block ( "else" block )?
     fn parse_if(&mut self) -> Result<Stmt, String> {
-        // 'if' has already been consumed by the caller
         let condition = self.parse_expr_bp(0)?;
         let then_body = self.parse_block()?;
-
         let else_body = if self.match_kind(&TokenKind::Else) {
-            // Check for "else if" — parse as a single If statement wrapped in a block
             if self.peek_kind() == &TokenKind::If {
-                self.advance(); // consume 'if'
+                self.advance();
                 let else_if = self.parse_if()?;
                 Some(vec![else_if])
             } else {
@@ -2119,33 +1359,16 @@ Add these methods to the `impl Parser` block:
         } else {
             None
         };
-
         Ok(Stmt::If(condition, then_body, else_body))
     }
-```
 
-The `else if` handling is elegant: when we see `else` followed by `if`, we parse the inner `if` recursively and wrap it in a single-element `Vec`. This means `if a { } else if b { } else { }` becomes:
-
-```
-If(a, [...], Some([If(b, [...], Some([...]))]))
-```
-
-The else branch contains one statement — another `If`. This is how most languages handle `else if` without a special `elif` keyword.
-
-```rust
-    /// Parse a while statement (§5, `while_stmt` rule).
-    /// while_stmt ::= "while" expression block
     fn parse_while(&mut self) -> Result<Stmt, String> {
-        // 'while' has already been consumed
         let condition = self.parse_expr_bp(0)?;
         let body = self.parse_block()?;
         Ok(Stmt::While(condition, body))
     }
 
-    /// Parse a for-in statement (§5, `for_stmt` rule).
-    /// for_stmt ::= "for" IDENT "in" expression block
     fn parse_for(&mut self) -> Result<Stmt, String> {
-        // 'for' has already been consumed
         let var_name = self.expect_ident("for loop variable")?;
         self.expect(&TokenKind::In, "after loop variable")?;
         let iterable = self.parse_expr_bp(0)?;
@@ -2153,55 +1376,35 @@ The else branch contains one statement — another `If`. This is how most langua
         Ok(Stmt::For(var_name, iterable, body))
     }
 
-    /// Parse a return statement (§5, `return_stmt` rule).
-    /// return_stmt ::= "return" expression?
     fn parse_return(&mut self) -> Result<Stmt, String> {
-        // 'return' has already been consumed
-
-        // Check if there's an expression to return.
-        // If the next token starts a new statement or closes a block,
-        // this is a bare "return" with no value.
         let value = match self.peek_kind() {
             TokenKind::RBrace | TokenKind::Eof => None,
             _ => Some(self.parse_expr_bp(0)?),
         };
-
         Ok(Stmt::Return(value))
     }
 ```
 
-The `parse_return` method needs to decide whether there's a return value. The trick: if the next token is `}` (end of block) or `Eof` (end of file), there's no value — it's a bare `return`. Otherwise, parse an expression. This is a common ambiguity in languages without mandatory semicolons.
+</details>
 
-Now update `parse_statement` to dispatch to these new parsers:
+The `else if` handling: when we see `else` followed by `if`, we parse the inner `if` recursively and wrap it in a single-element `Vec`. So `if a { } else if b { } else { }` becomes nested `If` nodes.
+
+The `parse_return` trick: if the next token is `}` or `Eof`, it's a bare `return` with no value. Otherwise, parse an expression.
+
+Now update `parse_statement` to dispatch all statement types:
 
 ```rust
-    /// Parse a statement (§5, `statement` rule).
-    /// statement ::= if_stmt | while_stmt | for_stmt | return_stmt
-    ///             | expr_stmt | block
     fn parse_statement(&mut self) -> Result<Stmt, String> {
         match self.peek_kind() {
-            TokenKind::If => {
-                self.advance();
-                self.parse_if()
-            }
-            TokenKind::While => {
-                self.advance();
-                self.parse_while()
-            }
-            TokenKind::For => {
-                self.advance();
-                self.parse_for()
-            }
-            TokenKind::Return => {
-                self.advance();
-                self.parse_return()
-            }
+            TokenKind::If => { self.advance(); self.parse_if() }
+            TokenKind::While => { self.advance(); self.parse_while() }
+            TokenKind::For => { self.advance(); self.parse_for() }
+            TokenKind::Return => { self.advance(); self.parse_return() }
             TokenKind::LBrace => {
                 let body = self.parse_block()?;
                 Ok(Stmt::Block(body))
             }
             _ => {
-                // Expression statement
                 let expr = self.parse_expr_bp(0)?;
                 self.match_kind(&TokenKind::Semicolon);
                 Ok(Stmt::ExprStmt(expr))
@@ -2210,211 +1413,108 @@ Now update `parse_statement` to dispatch to these new parsers:
     }
 ```
 
-The pattern is consistent: peek at the keyword, consume it, call the specific parser. The `LBrace` case handles standalone blocks — `{ let x = 1 }` is a valid statement that creates a new scope.
-
 Add tests:
 
 ```rust
-    // --- Stage 13: Control flow ---
-
     #[test]
     fn parse_if_statement() {
         let mut p = parser_for("if hp > 0 { print(hp) }");
-        let program = p.parse_program().unwrap();
-        assert_eq!(program.len(), 1);
-        match &program[0] {
-            Stmt::If(cond, then_body, else_body) => {
-                assert!(matches!(cond, Expr::Binary(BinOp::Gt, ..)));
+        match &p.parse_program().unwrap()[0] {
+            Stmt::If(_, then_body, else_body) => {
                 assert_eq!(then_body.len(), 1);
                 assert!(else_body.is_none());
             }
-            _ => panic!("Expected If statement"),
+            _ => panic!("Expected If"),
         }
     }
 
     #[test]
     fn parse_if_else() {
         let mut p = parser_for("if alive { heal(10) } else { print(0) }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::If(_, then_body, else_body) => {
-                assert_eq!(then_body.len(), 1);
-                assert!(else_body.is_some());
-                assert_eq!(else_body.as_ref().unwrap().len(), 1);
-            }
-            _ => panic!("Expected If statement"),
+        match &p.parse_program().unwrap()[0] {
+            Stmt::If(_, _, else_body) => assert!(else_body.is_some()),
+            _ => panic!("Expected If"),
         }
     }
 
     #[test]
     fn parse_else_if_chain() {
         let mut p = parser_for("if a { 1 } else if b { 2 } else { 3 }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
+        match &p.parse_program().unwrap()[0] {
             Stmt::If(_, _, Some(else_body)) => {
-                // The else body should contain a single If statement
-                assert_eq!(else_body.len(), 1);
                 assert!(matches!(&else_body[0], Stmt::If(..)));
             }
-            _ => panic!("Expected If with else-if chain"),
+            _ => panic!("Expected If with else-if"),
         }
     }
 
     #[test]
     fn parse_while_loop() {
         let mut p = parser_for("while hp > 0 { hp = hp - 1 }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::While(cond, body) => {
-                assert!(matches!(cond, Expr::Binary(BinOp::Gt, ..)));
-                assert_eq!(body.len(), 1);
-            }
-            _ => panic!("Expected While statement"),
-        }
+        assert!(matches!(&p.parse_program().unwrap()[0], Stmt::While(..)));
     }
 
     #[test]
     fn parse_for_in_loop() {
         let mut p = parser_for("for enemy in enemies { print(enemy) }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::For(var, iterable, body) => {
+        match &p.parse_program().unwrap()[0] {
+            Stmt::For(var, _, body) => {
                 assert_eq!(var, "enemy");
-                assert_eq!(*iterable, Expr::Ident("enemies".to_string()));
                 assert_eq!(body.len(), 1);
             }
-            _ => panic!("Expected For statement"),
-        }
-    }
-
-    #[test]
-    fn parse_for_in_array() {
-        let mut p = parser_for("for i in [1, 2, 3] { print(i) }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::For(var, iterable, _) => {
-                assert_eq!(var, "i");
-                assert!(matches!(iterable, Expr::Array(..)));
-            }
-            _ => panic!("Expected For statement"),
+            _ => panic!("Expected For"),
         }
     }
 
     #[test]
     fn parse_return_with_value() {
-        let mut p = parser_for("fn double(x) { return x * 2 }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::FnDecl(_, _, body) => {
-                match &body[0] {
-                    Stmt::Return(Some(expr)) => {
-                        assert!(matches!(expr, Expr::Binary(BinOp::Mul, ..)));
-                    }
-                    _ => panic!("Expected Return with value"),
-                }
-            }
+        let mut p = parser_for("fn f() { return 42 }");
+        match &p.parse_program().unwrap()[0] {
+            Stmt::FnDecl(_, _, body) => assert!(matches!(&body[0], Stmt::Return(Some(_)))),
             _ => panic!("Expected FnDecl"),
         }
     }
 
     #[test]
     fn parse_bare_return() {
-        let mut p = parser_for("fn stop() { return }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::FnDecl(_, _, body) => {
-                assert_eq!(body[0], Stmt::Return(None));
-            }
+        let mut p = parser_for("fn f() { return }");
+        match &p.parse_program().unwrap()[0] {
+            Stmt::FnDecl(_, _, body) => assert_eq!(body[0], Stmt::Return(None)),
             _ => panic!("Expected FnDecl"),
         }
     }
 
     #[test]
-    fn parse_standalone_block() {
-        let mut p = parser_for("{ let x = 1 }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::Block(stmts) => {
-                assert_eq!(stmts.len(), 1);
-                assert!(matches!(&stmts[0], Stmt::Let(..)));
-            }
-            _ => panic!("Expected Block"),
-        }
-    }
-
-    #[test]
-    fn parse_nested_blocks() {
-        let mut p = parser_for("if true { if false { 1 } }");
-        let program = p.parse_program().unwrap();
-        match &program[0] {
-            Stmt::If(_, then_body, _) => {
-                assert!(matches!(&then_body[0], Stmt::If(..)));
-            }
-            _ => panic!("Expected nested If"),
-        }
-    }
-
-    #[test]
-    fn parse_spec_example_variables() {
-        // From §10.2: a realistic multi-statement program
+    fn parse_spec_trap_room() {
+        // §10.5: complete program
         let source = r#"
-let hp = 100
-let max_hp = 100
-let weapon_damage = 25
-let enemy_hp = 80
-enemy_hp = enemy_hp - weapon_damage
-if enemy_hp <= 0 {
-    print("The enemy falls.")
-} else {
-    print("Still standing.")
-}
-"#;
-        let mut p = parser_for(source);
-        let program = p.parse_program().unwrap();
-        // 4 let declarations + 1 assignment expr + 1 if/else = 6 statements
-        assert_eq!(program.len(), 6);
-        assert!(matches!(&program[0], Stmt::Let(..)));
-        assert!(matches!(&program[4], Stmt::ExprStmt(Expr::Assign(..))));
-        assert!(matches!(&program[5], Stmt::If(..)));
-    }
-
-    #[test]
-    fn parse_spec_example_function() {
-        // From §10.3: function with control flow
-        let source = r#"
-fn heal(amount) {
-    if potions <= 0 {
-        return 0
-    }
-    potions = potions - 1
-    let new_hp = hp + amount
-    if new_hp > 100 {
-        new_hp = 100
-    }
-    hp = new_hp
-    return amount
-}
-"#;
-        let mut p = parser_for(source);
-        let program = p.parse_program().unwrap();
-        assert_eq!(program.len(), 1);
-        match &program[0] {
-            Stmt::FnDecl(name, params, body) => {
-                assert_eq!(name, "heal");
-                assert_eq!(params, &vec!["amount".to_string()]);
-                // Body: if, assignment, let, if, assignment, return = 6 statements
-                assert_eq!(body.len(), 6);
-            }
-            _ => panic!("Expected FnDecl"),
+let trap_armed = true
+let poison_ticks = 3
+fn on_enter(hunter) {
+    if trap_armed {
+        damage(hunter, 15)
+        trap_armed = false
+        let tick = 0
+        while tick < poison_ticks {
+            damage(hunter, 5)
+            tick = tick + 1
         }
+    } else {
+        show_text("The room is quiet.")
+    }
+}
+on_enter(hunter)
+"#;
+        let result = parser_for(source).parse_program();
+        assert!(result.is_ok(), "Spec example should parse: {:?}", result.err());
+        assert_eq!(result.unwrap().len(), 4);
     }
 ```
 
 > [!warning] Common Mistakes
-> - **Forgetting `else if` handling** — without it, `else if` would require the user to write `else { if ... { } }` with explicit nesting. The spec examples (§10.6) use `else if` freely.
-> - **Parsing `return` value when next token is `}`** — `return }` would try to parse `}` as an expression and fail. The `match self.peek_kind()` check for `RBrace` and `Eof` prevents this.
-> - **Not consuming the keyword before calling the sub-parser** — each `parse_*` method assumes its keyword has already been consumed. If `parse_statement` doesn't `self.advance()` before calling `parse_if()`, the parser sees `if` and tries to parse it as an expression.
-> - **Missing `Eof` guard in `parse_block`** — already handled in Stage 12, but worth repeating. Without it, an unclosed `{` causes an infinite loop.
+> **Parsing `return` value when next token is `}`** — `return }` would try to parse `}` as an expression. The `match self.peek_kind()` check for `RBrace` prevents this.
+>
+> **Not consuming the keyword before calling the sub-parser** — each `parse_*` method assumes its keyword has already been consumed.
 
 ### Verify it works
 
@@ -2422,28 +1522,10 @@ fn heal(amount) {
 cargo test
 ```
 
-Expected: all previous tests pass, plus 12 new control flow tests.
+### Extend it
 
-```bash
-cargo run
-```
+Write a test for the §10.6 boss encounter example (the most complex spec example). It should parse without errors.
 
-Try the spec example from §10.2 as the source string. You should see a clean AST with `Let`, `ExprStmt(Assign(...))`, and `If` nodes.
-
-The parser handles every construct in the Runescript grammar — but it stops at the first error. A single misplaced rune and the entire deciphering halts. Next, we add panic-mode error recovery so the parser reports *all* the errors it finds, not just the first.
-
-> [!check] Checkpoint
-> New/modified methods in `src/parser.rs`:
-> - `expect_ident()` — extract identifier or error
-> - `parse_if()` — if/else/else-if
-> - `parse_while()` — while loop
-> - `parse_for()` — for-in loop
-> - `parse_return()` — return with optional value
-> - `parse_statement()` — updated to dispatch all statement types
-> - `parse_declaration()` — unchanged from Stage 12
-> - `parse_program()` — unchanged from Stage 12
->
-> The parser can now handle every construct in the Runescript language. The only thing missing is graceful error recovery — Stage 14.
 
 ---
 
@@ -2451,11 +1533,11 @@ The parser handles every construct in the Runescript grammar — but it stops at
 
 *Difficulty: Hard*
 
-**Goal:** Implement panic-mode error recovery so the parser reports *multiple* errors per file instead of stopping at the first one. On a parse error, synchronize by advancing to the next statement boundary, then continue parsing.
+**Goal:** Implement panic-mode error recovery so the parser reports *multiple* errors per file instead of stopping at the first one.
 
-**Spec reference:** §8.3 (Error Recovery — panic mode, synchronize to statement boundary), §8.1 (`ParseError` with span), §8.2 (error examples)
+**Spec reference:** §8.3 (Error Recovery — panic mode, synchronize to statement boundary)
 
-**New Rust concept(s):** Collecting errors in a `Vec<String>`, the synchronize/panic-mode pattern, changing `Result` to accumulate errors, `is_err()` checks
+**New Rust concept(s):** Collecting errors in `Vec<String>`, the synchronize/panic-mode pattern
 
 ### Why this stage
 
@@ -2467,83 +1549,37 @@ let y = 5
 print(y)
 ```
 
-The parser reports "Expected expression, found `Let`" on line 2 and gives up. But the user would benefit from also hearing about any errors in the rest of the file. A good parser reports as many errors as it can in a single pass.
+The parser reports "Expected expression, found `Let`" and gives up. But the user would benefit from hearing about *all* errors in one pass.
 
-The technique is called **panic mode** (§8.3): when the parser encounters an error, it enters "panic mode" — it skips tokens until it finds a **synchronization point** (a token that likely starts a new statement). Then it exits panic mode and resumes normal parsing. Errors found during panic mode are suppressed to avoid cascading false positives.
+The technique is **panic mode** (§8.3): on error, skip tokens until a **synchronization point** (a token that likely starts a new statement), then resume normal parsing.
 
-Synchronization points for Runescript:
-- Keywords that start statements: `let`, `fn`, `if`, `while`, `for`, `return`
-- `}` — end of a block
-- `Eof` — end of input
-
-### Python equivalent
-
-```python
-def parse_program(self) -> tuple[list[Stmt], list[str]]:
-    stmts = []
-    errors = []
-    while self.peek().kind != EOF:
-        try:
-            stmts.append(self.parse_declaration())
-        except ParseError as e:
-            errors.append(str(e))
-            self.synchronize()
-    return stmts, errors
-
-def synchronize(self):
-    """Skip tokens until we find a statement boundary."""
-    while self.peek().kind != EOF:
-        if self.peek().kind in (LET, FN, IF, WHILE, FOR, RETURN):
-            return
-        if self.peek().kind == RBRACE:
-            return
-        self.advance()
-```
-
-Python uses exceptions for this. Rust doesn't have exceptions — we use `Result` and explicit synchronization.
+Synchronization points: `let`, `fn`, `if`, `while`, `for`, `return`, `}`, `Eof`.
 
 ### The Code
 
-The key change: `parse_program` catches errors from `parse_declaration`, records them, synchronizes, and continues. We change the return type to include both the AST and the error list.
-
-First, add the synchronize method:
+**Implement `synchronize` yourself:**
 
 ```rust
-    /// Panic-mode synchronization (§8.3).
-    /// Skip tokens until we find a likely statement boundary.
-    /// This allows the parser to recover from an error and continue
-    /// parsing the rest of the file.
+fn synchronize(&mut self)
+```
+
+Loop: peek at the current token. If it's a statement-starting keyword, `}`, or `Eof`, return. Otherwise, advance and keep going.
+
+<details>
+<summary>Solution: synchronize and updated parse_program</summary>
+
+```rust
     fn synchronize(&mut self) {
         loop {
             match self.peek_kind() {
-                // These tokens likely start a new statement
-                TokenKind::Let
-                | TokenKind::Fn
-                | TokenKind::If
-                | TokenKind::While
-                | TokenKind::For
-                | TokenKind::Return => return,
-
-                // End of block or file — stop
-                TokenKind::RBrace | TokenKind::Eof => return,
-
-                // Skip everything else
-                _ => {
-                    self.advance();
-                }
+                TokenKind::Let | TokenKind::Fn | TokenKind::If
+                | TokenKind::While | TokenKind::For | TokenKind::Return
+                | TokenKind::RBrace | TokenKind::Eof => return,
+                _ => { self.advance(); }
             }
         }
     }
-```
 
-The synchronize method is simple: keep advancing until we see a token that probably starts a new statement. We don't consume the synchronization token — we leave it for the next `parse_declaration` call.
-
-Now update `parse_program` to use error recovery:
-
-```rust
-    /// Parse a complete program with error recovery (§5, §8.3).
-    /// Returns the successfully parsed statements and any errors encountered.
-    /// Parsing continues past errors by synchronizing to statement boundaries.
     pub fn parse_program(&mut self) -> Result<Vec<Stmt>, Vec<String>> {
         let mut stmts = Vec::new();
         let mut errors: Vec<String> = Vec::new();
@@ -2566,17 +1602,13 @@ Now update `parse_program` to use error recovery:
     }
 ```
 
-The return type changed from `Result<Vec<Stmt>, String>` to `Result<Vec<Stmt>, Vec<String>>`. On success, you get all statements. On failure, you get *all* errors — not just the first one.
+</details>
 
-The logic:
-1. Try to parse a declaration.
-2. If it succeeds, add the statement to the list.
-3. If it fails, record the error and synchronize (skip to the next statement boundary).
-4. After the loop, if there were any errors, return them all. Otherwise, return the statements.
+The return type changed from `Result<Vec<Stmt>, String>` to `Result<Vec<Stmt>, Vec<String>>`. On failure, you get *all* errors.
 
-Note: we could return *both* the partial AST and the errors (some languages do this for IDE support). For simplicity, we return one or the other. The evaluator needs a complete, valid AST to run.
+The logic: try to parse a declaration. If it fails, record the error, synchronize to the next statement boundary, and continue. After the loop, return errors if any were collected.
 
-Update `main.rs` to display multiple errors:
+Update `main.rs`:
 
 ```rust
 fn main() {
@@ -2587,7 +1619,6 @@ let z = 20
 print(z +)
 let w = 5
 "#;
-
     let mut lex = Lexer::new(source);
     let tokens = lex.scan_tokens().unwrap();
     let mut parser = Parser::new(tokens);
@@ -2600,7 +1631,7 @@ let w = 5
             }
         }
         Err(errors) => {
-            eprintln!("Found {} miscast spell(s):", errors.len());
+            eprintln!("Found {} error(s):", errors.len());
             for err in &errors {
                 eprintln!("  {}", err);
             }
@@ -2609,98 +1640,37 @@ let w = 5
 }
 ```
 
-With the source above, you should see two errors:
-1. `let y =` — expected expression after `=`, found `Let`
-2. `print(z +)` — expected expression after `+`, found `)`
-
-And the parser recovers to parse `let w = 5` successfully (though it's not in the output since we return errors instead of partial results).
+You should see two errors: `let y =` (no value) and `print(z +)` (no right operand).
 
 Add tests:
 
 ```rust
-    // --- Stage 14: Error recovery ---
-
     #[test]
     fn recover_from_bad_let() {
-        // Two errors: "let y =" has no value, "let w =" has no value
-        // But "let x = 10" and "let z = 20" are fine
-        let mut p = parser_for("let x = 10\nlet y =\nlet z = 20\nlet w =\n");
-        let result = p.parse_program();
+        let result = parser_for("let x = 10\nlet y =\nlet z = 20\nlet w =\n").parse_program();
         assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert_eq!(errors.len(), 2, "Expected 2 errors, got: {:?}", errors);
-    }
-
-    #[test]
-    fn recover_multiple_errors() {
-        let source = "let a = 1\n+\nlet b = 2\n*\nlet c = 3";
-        let mut p = parser_for(source);
-        let result = p.parse_program();
-        // '+' and '*' at statement level are errors
-        // The parser should recover and find 'let b' and 'let c'
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(errors.len() >= 2, "Expected at least 2 errors, got: {:?}", errors);
+        assert_eq!(result.unwrap_err().len(), 2);
     }
 
     #[test]
     fn no_errors_returns_ok() {
-        let mut p = parser_for("let x = 1\nlet y = 2");
-        let result = p.parse_program();
+        let result = parser_for("let x = 1\nlet y = 2").parse_program();
         assert!(result.is_ok());
         assert_eq!(result.unwrap().len(), 2);
     }
 
     #[test]
     fn error_messages_have_line_numbers() {
-        let mut p = parser_for("let x =");
-        let result = p.parse_program();
-        assert!(result.is_err());
-        let errors = result.unwrap_err();
-        assert!(errors[0].contains("line"), "Error should contain line number: {}", errors[0]);
+        let errors = parser_for("let x =").parse_program().unwrap_err();
+        assert!(errors[0].contains("line"), "Error should have line number: {}", errors[0]);
     }
 
     #[test]
-    fn parse_full_spec_example() {
-        // §10.5: Dungeon trap room — a complete, valid program
+    fn parse_full_boss_encounter() {
+        // §10.6: the most complex spec example
         let source = r#"
-let trap_armed = true
-let poison_ticks = 3
-let poison_damage = 5
-
-fn on_enter(hunter) {
-    if trap_armed {
-        damage(hunter, 15)
-        trap_armed = false
-        let tick = 0
-        while tick < poison_ticks {
-            damage(hunter, poison_damage)
-            tick = tick + 1
-        }
-        spawn_enemy("Husk", 2)
-    } else {
-        show_text("The room is quiet.")
-    }
-}
-
-on_enter(hunter)
-"#;
-        let mut p = parser_for(source);
-        let result = p.parse_program();
-        assert!(result.is_ok(), "Spec example should parse without errors: {:?}", result.err());
-        let program = result.unwrap();
-        // 3 let declarations + 1 fn declaration + 1 expression statement = 5
-        assert_eq!(program.len(), 5);
-    }
-
-    #[test]
-    fn parse_full_spec_boss_encounter() {
-        // §10.6: Boss encounter — the most complex spec example
-        let source = r#"
-let boss_name = "The Hollow Knight"
 let boss_hp = 200
 let boss_phase = 1
-
 fn boss_attack(hunter) {
     let roll = random(1, 100)
     if boss_phase == 2 {
@@ -2715,20 +1685,16 @@ fn boss_attack(hunter) {
     } else {
         if roll <= 50 {
             damage(hunter, 20)
-        } else if roll <= 80 {
-            damage(hunter, 15)
         } else {
             print("pauses")
         }
     }
 }
-
 fn check_phase() {
     if boss_hp <= 100 && boss_phase == 1 {
         boss_phase = 2
     }
 }
-
 let round = 1
 while round <= 5 && boss_hp > 0 {
     let hunter_damage = random(15, 35)
@@ -2740,17 +1706,15 @@ while round <= 5 && boss_hp > 0 {
     round = round + 1
 }
 "#;
-        let mut p = parser_for(source);
-        let result = p.parse_program();
+        let result = parser_for(source).parse_program();
         assert!(result.is_ok(), "Boss encounter should parse: {:?}", result.err());
     }
 ```
 
 > [!warning] Common Mistakes
-> - **Synchronizing past the recovery point** — if `synchronize` consumes the keyword token (e.g., advances past `let`), the next `parse_declaration` call misses it. The method should stop *at* the synchronization token, not *after* it.
-> - **Cascading errors** — after a syntax error, the parser might be in a confusing state where the next few tokens produce false errors. Panic mode helps by skipping to a clean boundary, but some false positives are inevitable. This is why compilers say "fix the first error and recompile."
-> - **Returning `Result<Vec<Stmt>, String>` instead of `Result<Vec<Stmt>, Vec<String>>`** — the whole point is to collect multiple errors. A single `String` can only hold one.
-> - **Infinite loop if synchronize doesn't advance** — if the current token is already a synchronization point (like `let`), `synchronize` returns immediately without advancing. Then `parse_declaration` tries again, fails again, synchronizes again... infinite loop. This is handled because `parse_declaration` consumes the `let` keyword before calling `parse_let`, so even if `parse_let` fails, we've moved past `let`.
+> **Synchronizing past the recovery point** — `synchronize` should stop *at* the keyword token, not *after* it. The next `parse_declaration` call will consume it.
+>
+> **Cascading false errors** — after a syntax error, the next few tokens may produce false positives. Panic mode helps by skipping to a clean boundary, but some noise is inevitable.
 
 ### Verify it works
 
@@ -2758,51 +1722,31 @@ while round <= 5 && boss_hp > 0 {
 cargo test
 ```
 
-Expected: all tests pass, including the two full spec examples (§10.5 and §10.6) that exercise every parser feature.
-
-```bash
-cargo run
-```
-
-With the error-containing source, you should see multiple error messages — proof that the parser recovers and continues.
-
-> [!check] Checkpoint
-> Changes to `src/parser.rs`:
-> - Add `synchronize()` method
-> - Change `parse_program()` return type to `Result<Vec<Stmt>, Vec<String>>` and add recovery loop
-> - 6 new tests including full spec example validation
->
-> The parser is now complete.
+All tests should pass, including the full §10.6 boss encounter.
 
 ---
 
-## Act Complete — What's Next
+## Act Summary
 
-The decipherer is finished. You can feed any Runescript token stream into `Parser::new(tokens).parse_program()` and get back either a complete AST or a list of precise error messages.
+| Component Built | Description |
+|----------------|-------------|
+| `Expr` enum (12 variants) | Every expression type: literals, identifiers, arrays, unary, binary, call, field, index, assign |
+| `Stmt` enum (8 variants) | Every statement type: let, fn, if/else, while, for-in, return, block, expr-stmt |
+| Pratt parser | Binding power algorithm for correct operator precedence |
+| Recursive descent | Each grammar rule is a function: `parse_if`, `parse_while`, `parse_for`, etc. |
+| Postfix operators | Function calls, field access, index access — all chainable |
+| Error recovery | Panic-mode synchronization, multiple error reporting |
+| Test suite | ~40 tests including full spec examples (§10.5, §10.6) |
 
-**What you built:**
-- An AST type system with 12 expression variants and 8 statement variants (§4)
-- A Pratt parser for expressions with correct operator precedence (§5.1)
-- Recursive descent for statements: let, fn, if/else, while, for-in, return, blocks (§5)
-- Postfix operators: function calls, field access, index access
-- Prefix operators: negation, logical NOT
-- Parenthesized grouping and array literals
-- Panic-mode error recovery that reports multiple errors per file (§8.3)
-- Tests against the spec's own example programs (§10.5, §10.6)
+| Rust Concept | Where Introduced |
+|-------------|-----------------|
+| `Box<T>` for recursive types | Stage 8 |
+| `matches!()` macro | Stage 10 |
+| `unreachable!()` macro | Stage 11 |
+| Borrow checker: clone to release borrows | Stage 9 |
+| `Option<Vec<Stmt>>` for optional branches | Stage 13 |
+| `Result<T, Vec<String>>` for multiple errors | Stage 14 |
 
-**Rust concepts you learned:**
-- `Box<T>` for recursive data structures — why enums can't contain themselves
-- Pratt parsing — binding power, prefix vs infix, left vs right associativity
-- Recursive descent — each grammar rule becomes a function
-- Error recovery — synchronize to statement boundaries, collect multiple errors
-- `matches!()` macro for quick pattern checks
-- `unreachable!()` for impossible code paths
-
-**The parser in numbers:**
-- ~15 methods in the `Parser` struct
-- ~300 lines of parsing logic
-- ~50 tests covering every AST node type
-
-**In Act 3 — Casting the Spell**, you'll build the evaluator that walks this AST and executes it. Variables will hold values, functions will run, and `print("Hello, {name}")` will actually print. You'll implement the environment (scope chain / grimoire), runtime values, string interpolation, and built-in cantrips like `spawn_enemy` and `damage`.
+**In Act 3 — Casting the Spell**, you'll build the evaluator that walks this AST and executes it. Variables will hold values, functions will run, and `print("Hello, {name}")` will actually print. You'll implement the environment (scope chain), runtime values, string interpolation, and built-in functions like `damage` and `spawn_enemy`.
 
 The incantation is deciphered. Time to cast the spell.

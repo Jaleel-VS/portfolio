@@ -25,7 +25,18 @@ Source text (.rune file)
 > - Runtime string interpolation
 
 
-**Estimated time:** 6–10 hours across all 8 stages.
+**Estimated time:** 10–16 hours across all 8 stages.
+
+```mermaid
+flowchart LR
+    S15["Stage 15\nThe Grimoire"] --> S16["Stage 16\nSimple Incantations"]
+    S16 --> S17["Stage 17\nVariables"]
+    S17 --> S18["Stage 18\nTruth & Consequence"]
+    S18 --> S19["Stage 19\nThe Summoning"]
+    S19 --> S20["Stage 20\nCantrips"]
+    S20 --> S21["Stage 21\nArrays & Index"]
+    S21 --> S22["Stage 22\nInterpolation"]
+```
 
 **How tree-walking works:** The evaluator receives an AST node, looks at what kind it is, recursively evaluates its children, and produces a `Value`. An `IntLit(42)` node returns `Value::Int(42)`. A `Binary(Add, left, right)` node evaluates `left`, evaluates `right`, adds them, and returns the result. It's the most direct execution model possible — no bytecode, no compilation, just walking the tree.
 
@@ -470,6 +481,10 @@ All environment tests should pass. The `value.rs` and `ast.rs` files compile but
 
 The grimoire can store and retrieve names across nested scopes. Now we need the spell caster itself — the evaluator that walks the AST, starting with the simplest incantations: literals and arithmetic.
 
+### Extend it
+
+Add a `depth()` method to `Environment` that returns the number of scopes on the stack. Write a test that pushes 3 scopes, verifies `depth()` is 4 (including global), pops 2, and verifies `depth()` is 2. This reinforces the stack mental model.
+
 > [!check] Checkpoint
 > You now have three new files:
 > - **`src/ast.rs`** — AST node types from spec §4
@@ -657,7 +672,23 @@ Let's unpack the key patterns:
 - `eval_binary(op, &lhs, &rhs)` — we extract binary evaluation into a standalone function (below) to keep `eval_expr` readable.
 - `&[Stmt]` in `eval_program` — a **slice** reference. This accepts both `&Vec<Stmt>` and `&[Stmt]` — it's the idiomatic way to take a read-only list parameter in Rust.
 
-Now the binary operation evaluator — a standalone function outside the `impl` block:
+Now the binary operation evaluator — a standalone function outside the `impl` block. **Implement `eval_binary` yourself.** The signature:
+
+```rust
+fn eval_binary(op: &BinOp, lhs: &Value, rhs: &Value) -> Result<Value, RuneError>
+```
+
+Use `match (op, lhs, rhs)` to handle:
+- `(Add, Int(a), Int(b))` → `Int(a + b)` (same for Sub, Mul, Div, Mod)
+- `(Div, Int(_), Int(0))` → error "Division by zero"
+- `(Add, Str(a), Str(b))` → `Str(a + b)` (concatenation)
+- `(Lt, Int(a), Int(b))` → `Bool(a < b)` (same for LtEq, Gt, GtEq)
+- `(Eq, Int(a), Int(b))` → `Bool(a == b)` (same for Str, Bool, Nil)
+- Different types with `Eq` → `Bool(false)`
+- Everything else → error
+
+<details>
+<summary>Solution: eval_binary</summary>
 
 ```rust
 /// Evaluate a binary operation on two values.
@@ -730,6 +761,8 @@ fn type_name(val: &Value) -> &'static str {
     }
 }
 ```
+
+</details>
 
 Key patterns in `eval_binary`:
 
@@ -938,6 +971,10 @@ cargo test
 All evaluator tests should pass. You now have a working calculator that handles integers, booleans, strings, nil, arithmetic, comparisons, and equality.
 
 The spell caster can evaluate pure expressions — but every value is ephemeral, computed and forgotten. Next, we give the grimoire its purpose: variables that persist across statements.
+
+### Extend it
+
+Add a test for `10 % 3 == 1` — a nested expression that combines modulo and equality. The tree should be `Binary(Eq, Binary(Mod, 10, 3), 1)` and evaluate to `Bool(true)`. This tests that your recursive evaluation handles nesting correctly.
 
 > [!check] Checkpoint
 > New/updated files:
@@ -1199,6 +1236,10 @@ All tests should pass — the 17 from Stage 16 plus 6 new ones.
 
 Variables live in the grimoire and expressions can read them. But the spell caster still walks a straight path — it can't choose between branches or repeat an action. Next, we add truthiness, logical operators, and control flow.
 
+### Extend it
+
+Write a test that declares `let a = 10`, then `let b = a + 5`, and verifies `b` is `15`. This tests that the right-hand side of `let` can reference previously declared variables — a common pattern in real programs.
+
 > [!check] Checkpoint
 > Updated `src/evaluator.rs`:
 > - `eval_expr` now handles `Ident` and `Assign`
@@ -1266,11 +1307,19 @@ def eval_stmt(stmt, env):
 
 ### The Code
 
-First, add the `is_truthy` function to `src/evaluator.rs` (outside the `impl` block, near `type_name`):
+First, **implement the `is_truthy` function yourself.** Use the table above:
+
+```rust
+fn is_truthy(val: &Value) -> bool
+```
+
+Match on each `Value` variant and return the appropriate boolean.
+
+<details>
+<summary>Solution: is_truthy</summary>
 
 ```rust
 /// Determine if a Value is truthy (§6.4).
-/// Used by if/while conditions and logical operators.
 fn is_truthy(val: &Value) -> bool {
     match val {
         Value::Bool(b) => *b,
@@ -1284,7 +1333,9 @@ fn is_truthy(val: &Value) -> bool {
 }
 ```
 
-This is a pure function — no side effects, no mutation. It just inspects a value and returns a boolean. The `*b` and `*n` dereference the matched references (pattern matching on `&Value` gives references to the inner data).
+</details>
+
+This is a pure function — no side effects. The `*b` and `*n` dereference the matched references.
 
 Now update `eval_binary` to handle logical operators with **short-circuit evaluation**. Replace the `And`/`Or` placeholder:
 
@@ -1627,6 +1678,10 @@ cargo test
 All tests should pass — 17 from Stage 16, 6 from Stage 17, plus 10 new ones = 33 total.
 
 The spell caster can branch and loop — the dungeon's traps can trigger conditionally, poison can tick over multiple rounds. But all logic lives in one flat scope. Next comes the hardest stage: summoning functions, with parameter binding and the return-unwinding ritual.
+
+### Extend it
+
+Write a test for `if 0 { 1 } else { 2 }` — verifying that `0` is falsy and the else branch executes. Then test `if "" { 1 } else { 2 }` — empty string is also falsy. These edge cases verify your truthiness implementation matches §6.4.
 
 > [!check] Checkpoint
 > Updated `src/evaluator.rs`:
@@ -2163,6 +2218,10 @@ All tests should pass. This is the most complex stage — if the return unwindin
 
 Functions are summoned and return values unwind correctly through any depth of nesting. But user-defined functions can only call other user-defined functions — there's no `print`, no `len`, no way to interact with the world outside the script. Next, we forge the cantrips: built-in functions that bridge Rust and Runescript.
 
+### Extend it
+
+Write a test for a recursive function: `fn factorial(n) { if n <= 1 { return 1 } return n * factorial(n - 1) }`. Call `factorial(5)` and verify it returns `120`. This tests that function calls work recursively — each call gets its own scope with its own `n`.
+
 > [!check] Checkpoint
 > Updated files:
 > - **`src/error.rs`** — added `ControlFlow` enum with `Return(Value)` and `Error(RuneError)`, plus `From<RuneError>` impl
@@ -2652,6 +2711,10 @@ All tests should pass. The builtin tests verify that cantrips are callable from 
 
 The cantrips are forged — `print` speaks, `len` measures, `random` rolls the dice. But the language still lacks a fundamental data structure: arrays. Next, we add `[1, 2, 3]`, index access, and the `for-in` loop that iterates over them.
 
+### Extend it
+
+Add a `builtin_keys` function that takes an `Object` and returns an `Array` of its key names as strings. Register it as `"keys"`. Write a test: `keys(hunter)` should return an array containing `"name"`, `"hp"`, etc. This exercises both the builtin registration pattern and the Object/Array value types.
+
 > [!check] Checkpoint
 > New/updated files:
 > - **`src/value.rs`** — added `BuiltinFn` variant
@@ -2987,6 +3050,10 @@ cargo test
 All tests should pass.
 
 Arrays hold collections, indices reach into them, and `for-in` walks them one by one. One final piece of the evaluator remains: string interpolation and objects, so `"HP: {hp}"` resolves to `"HP: 85"` and `hunter.hp` reaches into the hunter's soul.
+
+### Extend it
+
+Write a test that builds an array with `push`: start with `let arr = []`, then `arr = push(arr, 1)`, `arr = push(arr, 2)`, `arr = push(arr, 3)`. Verify `len(arr)` is 3 and `arr[2]` is 3. This tests the push-and-reassign pattern that users must follow since our arrays are value-based.
 
 > [!check] Checkpoint
 > Updated `src/evaluator.rs`:
@@ -3325,6 +3392,10 @@ cargo test
 ```
 
 All tests should pass. You now have a complete evaluator that handles every node type in the Runescript AST.
+
+### Extend it
+
+Write a test that creates a hunter object, modifies `hunter.hp` via assignment, then uses string interpolation to verify: `let hp = hunter.hp` followed by `"HP: {hp}"` should produce `"HP: 80"` (or whatever you set it to). This exercises the full chain: object → field access → variable → interpolation.
 
 > [!check] Checkpoint
 > Updated `src/evaluator.rs`:

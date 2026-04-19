@@ -10,7 +10,7 @@ A progressive, project-based course where you build a complete interpreter from 
 
 ### Act 1: Carving the Runes — The Lexer
 **File:** [[Act 1 - Carving the Runes]]
-**Estimated time:** 4-6 hours
+**Estimated time:** 6-10 hours
 
 | Stage | Title | Difficulty | What you build |
 |-------|-------|-----------|----------------|
@@ -24,7 +24,7 @@ A progressive, project-based course where you build a complete interpreter from 
 
 ### Act 2: Deciphering the Incantation — The Parser
 **File:** [[Act 2 - Deciphering the Incantation]]
-**Estimated time:** 6-8 hours
+**Estimated time:** 10-14 hours
 
 | Stage | Title | Difficulty | What you build |
 |-------|-------|-----------|----------------|
@@ -38,7 +38,7 @@ A progressive, project-based course where you build a complete interpreter from 
 
 ### Act 3: Casting the Spell — The Evaluator
 **File:** [[Act 3 - Casting the Spell]]
-**Estimated time:** 6-8 hours
+**Estimated time:** 10-16 hours
 
 | Stage | Title | Difficulty | What you build |
 |-------|-------|-----------|----------------|
@@ -53,7 +53,7 @@ A progressive, project-based course where you build a complete interpreter from 
 
 ### Act 4: The Scrying Pool — REPL & File Execution
 **File:** [[Act 4 - The Scrying Pool]]
-**Estimated time:** 3-4 hours
+**Estimated time:** 5-7 hours
 
 | Stage | Title | Difficulty | What you build |
 |-------|-------|-----------|----------------|
@@ -64,7 +64,7 @@ A progressive, project-based course where you build a complete interpreter from 
 
 ### Act 5: The Binding — Game Engine Integration
 **File:** [[Act 5 - The Binding]]
-**Estimated time:** 3-4 hours
+**Estimated time:** 5-7 hours
 
 | Stage | Title | Difficulty | What you build |
 |-------|-------|-----------|----------------|
@@ -82,12 +82,12 @@ Rust cheat sheet, interpreter glossary, operator precedence table, BNF grammar, 
 
 | Act | Hours | Stages |
 |-----|-------|--------|
-| Act 1: The Lexer | 4-6 | 7 |
-| Act 2: The Parser | 6-8 | 7 |
-| Act 3: The Evaluator | 6-8 | 8 |
-| Act 4: The REPL | 3-4 | 4 |
-| Act 5: Integration | 3-4 | 4 |
-| **Total** | **22-30** | **30** |
+| Act 1: The Lexer | 6-10 | 7 |
+| Act 2: The Parser | 10-14 | 7 |
+| Act 3: The Evaluator | 10-16 | 8 |
+| Act 4: The REPL | 5-7 | 4 |
+| Act 5: Integration | 5-7 | 4 |
+| **Total** | **36-54** | **30** |
 
 ## Prerequisites
 
