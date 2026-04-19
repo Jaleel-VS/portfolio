@@ -20,33 +20,72 @@ flowchart LR
 
 > *Difficulty: Easy — Defining what "good" means.*
 
+*~40 min*
+
 The genetic algorithm needs a number that says how good each car is. We already have checkpoints — but raw checkpoint count is coarse (many cars tie at 0). A better fitness function adds partial credit: checkpoints passed + fraction of distance to the next checkpoint.
 
 > [!tip] What You'll Learn
 > - Fitness function design — the most important decision in evolutionary AI
 > - Partial credit for progress between checkpoints
 > - Why fitness function bugs cause bizarre evolved behavior
+> - Testing fitness ordering
 
 ### 15.1 — Improved fitness
+
+**Try it yourself.** Improve the `fitness()` method so that:
+1. Each checkpoint passed is worth 100 points (so checkpoint count dominates)
+2. A small time-alive bonus (0.1 per second) breaks ties between cars with the same checkpoint count
+3. A car with 1 checkpoint always beats a car with 0 checkpoints, regardless of time alive
+
+Think about why the 100× multiplier matters. What would happen if checkpoints were worth 1 point and time alive was worth 1 point per second?
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 impl Car {
     pub fn fitness(&self) -> f32 {
         let base = self.checkpoints_passed as f32 * 100.0;
-
-        // Partial credit: distance toward next checkpoint
-        // (we'd need to compute this from position — simplified here)
-        let time_bonus = self.time_alive * 0.1; // small bonus for surviving
-
+        let time_bonus = self.time_alive * 0.1;
         base + time_bonus
     }
 }
 ```
 
-The `* 100.0` on checkpoints ensures that passing a checkpoint is always worth more than surviving longer. A car that passes 1 checkpoint in 2 seconds beats a car that survives 10 seconds without passing any.
+</details>
+
+The `* 100.0` on checkpoints ensures that passing a checkpoint is always worth more than surviving longer. A car that passes 1 checkpoint in 2 seconds (fitness: 100.2) beats a car that survives 10 seconds without passing any (fitness: 1.0).
 
 > [!note] Fitness function bugs
-> If you accidentally reward time alive too much, the AI learns to drive in circles (infinite survival, zero progress). If you reward speed, it learns to accelerate into walls. The fitness function is the teacher — get it wrong and the AI learns the wrong lesson.
+> If you accidentally reward time alive too much, the AI learns to drive in circles (infinite survival, zero progress). If you reward speed, it learns to accelerate into walls. The fitness function is the teacher — get it wrong and the AI learns the wrong lesson. This is the single most common source of "my AI does something weird" bugs.
+
+### 15.2 — Test fitness ordering
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_checkpoint_beats_time() {
+        let mut car_a = Car::new(vec2(0.0, 0.0), 0.0, WHITE);
+        car_a.checkpoints_passed = 1;
+        car_a.time_alive = 2.0;
+
+        let mut car_b = Car::new(vec2(0.0, 0.0), 0.0, WHITE);
+        car_b.checkpoints_passed = 0;
+        car_b.time_alive = 100.0; // survived much longer
+
+        assert!(car_a.fitness() > car_b.fitness(),
+            "1 checkpoint ({}) should beat 0 checkpoints ({})",
+            car_a.fitness(), car_b.fitness());
+    }
+}
+```
+
+```bash
+cargo test
+```
 
 > [!check] Checkpoint
 > Verify fitness increases with checkpoints passed. Verify a car with 1 checkpoint always beats a car with 0 checkpoints regardless of time alive. Stage 15 complete.
@@ -57,19 +96,32 @@ The `* 100.0` on checkpoints ensures that passing a checkpoint is always worth m
 
 > *Difficulty: Medium — Choosing parents based on fitness.*
 
+*~45 min*
+
 Not all cars are equal. The ones that drove furthest should have more children. **Fitness-proportional selection** gives each car a probability of being chosen as a parent proportional to its fitness. The best car might be chosen 10 times. The worst might never be chosen.
 
 > [!tip] What You'll Learn
 > - Fitness-proportional (roulette wheel) selection
 > - Why randomness in selection matters (prevents premature convergence)
-> - Tournament selection as an alternative
+> - Creating a new module: `evolution.rs`
+> - Testing probabilistic functions
 
 ### 16.1 — Selection function
 
-Create `src/evolution.rs`:
+Create `src/evolution.rs` (and add `mod evolution;` to `main.rs`):
+
+**Try it yourself.** Write a `select_parent` function that:
+- Takes `fitnesses: &[f32]` — fitness values for all cars
+- Returns `usize` — the index of the selected parent
+- Uses fitness-proportional selection: sum all fitnesses, pick a random threshold, walk through the list subtracting each fitness until the threshold goes below zero
+- Handles the edge case where all fitnesses are zero (pick randomly)
+
+This is "roulette wheel" selection: imagine a wheel where each car's slice is proportional to its fitness. Spin the wheel — the bigger your slice, the more likely you're picked.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
-use crate::nn::NeuralNetwork;
 use macroquad::rand::gen_range;
 
 /// Select a parent index using fitness-proportional selection.
@@ -92,10 +144,48 @@ pub fn select_parent(fitnesses: &[f32]) -> usize {
 }
 ```
 
-This is "roulette wheel" selection: imagine a wheel where each car's slice is proportional to its fitness. Spin the wheel — the bigger your slice, the more likely you're picked.
+</details>
+
+### 16.2 — Test selection bias
+
+Testing randomness is tricky — you can't assert exact results. But you can run many trials and check the distribution:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_selection_favors_high_fitness() {
+        let fitnesses = vec![1.0, 1.0, 1.0, 100.0]; // index 3 is dominant
+
+        let mut counts = [0u32; 4];
+        for _ in 0..1000 {
+            let idx = select_parent(&fitnesses);
+            counts[idx] += 1;
+        }
+
+        // Index 3 has ~97% of total fitness — it should be selected most often
+        assert!(counts[3] > 800,
+            "Expected index 3 to be selected >800/1000 times, got {}", counts[3]);
+    }
+
+    #[test]
+    fn test_selection_handles_all_zero() {
+        let fitnesses = vec![0.0, 0.0, 0.0];
+        // Should not panic — returns a random index
+        let idx = select_parent(&fitnesses);
+        assert!(idx < 3);
+    }
+}
+```
+
+```bash
+cargo test
+```
 
 > [!check] Checkpoint
-> Verify that a car with fitness 100 is selected much more often than a car with fitness 1. Stage 16 complete.
+> Verify that a car with fitness 100 is selected much more often than a car with fitness 1. All tests pass. Stage 16 complete.
 
 ---
 
@@ -103,16 +193,28 @@ This is "roulette wheel" selection: imagine a wheel where each car's slice is pr
 
 > *Difficulty: Medium — Combining two parent networks into a child.*
 
+*~45 min*
+
 Sexual reproduction in neural networks: take two parent networks and combine their weights. The simplest approach: for each weight, randomly pick from parent A or parent B. The child inherits traits from both parents.
 
 > [!tip] What You'll Learn
 > - Uniform crossover — randomly pick each weight from either parent
-> - Why crossover helps (combines good traits from different parents)
 > - The `get_params` / `from_params` pattern for treating networks as flat vectors
+> - Why crossover helps (combines good traits from different parents)
+> - Ownership and `.clone()` — when you need a copy
 
 ### 17.1 — Flatten and unflatten
 
-Add to `NeuralNetwork`:
+To do crossover, we need to treat the network as a flat list of numbers. Add to `NeuralNetwork`:
+
+**Try it yourself.** Write two methods:
+- `get_params(&self) -> Vec<f32>` — extract all weights and biases into a single vector
+- `from_params(input_size, hidden_size, output_size, params: &[f32]) -> Self` — reconstruct a network from a flat vector
+
+The order must be consistent: weights_ih, biases_h, weights_ho, biases_o.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 impl NeuralNetwork {
@@ -141,11 +243,17 @@ impl NeuralNetwork {
 }
 ```
 
+</details>
+
 Flattening the network to a `Vec<f32>` makes crossover and mutation trivial — they operate on a flat list of numbers.
 
 ### 17.2 — Crossover function
 
+Add to `src/evolution.rs`:
+
 ```rust
+use crate::nn::NeuralNetwork;
+
 /// Uniform crossover: for each parameter, randomly pick from parent A or B.
 pub fn crossover(parent_a: &NeuralNetwork, parent_b: &NeuralNetwork) -> NeuralNetwork {
     let params_a = parent_a.get_params();
@@ -159,8 +267,38 @@ pub fn crossover(parent_a: &NeuralNetwork, parent_b: &NeuralNetwork) -> NeuralNe
 }
 ```
 
+### 17.3 — Test roundtrip
+
+```rust
+#[test]
+fn test_params_roundtrip() {
+    let nn = NeuralNetwork::random(5, 6, 2);
+    let params = nn.get_params();
+    let nn2 = NeuralNetwork::from_params(5, 6, 2, &params);
+    assert_eq!(nn.get_params(), nn2.get_params());
+}
+
+#[test]
+fn test_crossover_mixes_parents() {
+    let parent_a = NeuralNetwork::random(5, 6, 2);
+    let parent_b = NeuralNetwork::random(5, 6, 2);
+    let child = crossover(&parent_a, &parent_b);
+
+    let pa = parent_a.get_params();
+    let pb = parent_b.get_params();
+    let pc = child.get_params();
+
+    // Every child param should come from one parent or the other
+    for i in 0..pc.len() {
+        assert!(pc[i] == pa[i] || pc[i] == pb[i],
+            "Child param {} ({}) doesn't match either parent ({} or {})",
+            i, pc[i], pa[i], pb[i]);
+    }
+}
+```
+
 > [!check] Checkpoint
-> Cross two networks. Verify the child's parameters are a mix of both parents. Stage 17 complete.
+> Cross two networks. Verify the child's parameters are a mix of both parents. All tests pass. Stage 17 complete.
 
 ---
 
@@ -168,19 +306,31 @@ pub fn crossover(parent_a: &NeuralNetwork, parent_b: &NeuralNetwork) -> NeuralNe
 
 > *Difficulty: Medium — Random perturbations that create novelty.*
 
+*~40 min*
+
 Crossover combines existing traits. Mutation creates new ones. For each weight in the child network, there's a small chance (mutation rate) of adding random noise. This prevents the population from converging to a single solution and allows exploration of new strategies.
 
 > [!tip] What You'll Learn
 > - Mutation rate and magnitude
-> - Gaussian-ish noise with uniform random
 > - Why mutation is essential (without it, evolution stagnates)
 > - Tuning mutation parameters
+> - The exploration/exploitation tradeoff
 
 ### 18.1 — Mutation function
 
+**Try it yourself.** Write a `mutate` function that:
+- Takes `nn: &mut NeuralNetwork`
+- For each parameter, with probability `MUTATION_RATE` (0.1 = 10%), adds a random value in `[-MUTATION_MAGNITUDE, +MUTATION_MAGNITUDE]` (0.3)
+- Modifies the network in place
+
+Think about what 10% mutation rate means for 50 parameters: ~5 weights change each generation.
+
+<details>
+<summary>Solution</summary>
+
 ```rust
-const MUTATION_RATE: f32 = 0.1;     // 10% of weights mutated
-const MUTATION_MAGNITUDE: f32 = 0.3; // max change per mutation
+const MUTATION_RATE: f32 = 0.1;      // 10% of weights mutated
+const MUTATION_MAGNITUDE: f32 = 0.3;  // max change per mutation
 
 /// Mutate a network's parameters in place.
 pub fn mutate(nn: &mut NeuralNetwork) {
@@ -196,16 +346,54 @@ pub fn mutate(nn: &mut NeuralNetwork) {
 }
 ```
 
+</details>
+
 10% mutation rate means ~5 of the 50 parameters change each generation. 0.3 magnitude means each change is small — a weight of 0.5 might become 0.2 or 0.8, but not -5.0. Small mutations refine; large mutations explore.
 
+### Concept: `&mut NeuralNetwork` — Mutating in Place
+
+Notice `mutate` takes `&mut NeuralNetwork`, not `NeuralNetwork`. This means it modifies the network you pass in — it doesn't create a new one. The caller keeps ownership:
+
+```rust
+let mut child = crossover(&parent_a, &parent_b);
+mutate(&mut child);  // modifies child in place
+// child is still valid here, now with mutated weights
+```
+
+If `mutate` took `NeuralNetwork` (by value), it would *consume* the network — you couldn't use `child` afterward without getting it back as a return value. `&mut` is the Rust way of saying "I'll modify this and give it back."
+
+### 18.2 — Test mutation
+
+```rust
+#[test]
+fn test_mutation_changes_some_params() {
+    let original = NeuralNetwork::random(5, 6, 2);
+    let original_params = original.get_params();
+
+    let mut mutated = original.clone();
+    mutate(&mut mutated);
+    let mutated_params = mutated.get_params();
+
+    let changed = original_params.iter().zip(mutated_params.iter())
+        .filter(|(a, b)| a != b)
+        .count();
+
+    // With 10% rate and 50 params, expect ~5 changes (but randomness varies)
+    assert!(changed > 0, "Mutation should change at least some parameters");
+    assert!(changed < 50, "Mutation shouldn't change all parameters");
+}
+```
+
 > [!check] Checkpoint
-> Mutate a network. Verify ~10% of parameters changed by small amounts. Stage 18 complete.
+> Mutate a network. Verify ~10% of parameters changed by small amounts. All tests pass. Stage 18 complete.
 
 ---
 
 ## Stage 19 — The Generation Loop
 
 > *Difficulty: Medium — Select → crossover → mutate → run → repeat.*
+
+*~60 min*
 
 This is where it all comes together. After all cars crash (or a time limit expires), evaluate fitness, breed the next generation, and reset. The generation counter ticks up. Fitness climbs. Cars get better.
 
@@ -214,6 +402,28 @@ This is where it all comes together. After all cars crash (or a time limit expir
 > - Generation timeout (don't wait forever for slow cars)
 > - Resetting the simulation between generations
 > - Watching fitness improve over time
+> - `.clone()` — when you need to copy data the borrow checker won't let you share
+
+### Concept: Why `.clone()` Is Needed Here
+
+When breeding the next generation, we need to:
+1. Read each car's fitness (borrows `cars`)
+2. Read each car's brain (borrows `cars`)
+3. Create new brains from parents (needs the old brains)
+4. Replace all cars with new ones (needs `&mut cars`)
+
+Steps 1-3 need to read from `cars`, but step 4 needs to write to it. Rust won't let you do both at once. The solution: extract the data you need (fitnesses and brains) into separate `Vec`s *before* replacing the cars. The brains need `.clone()` because we're copying them out of the cars.
+
+```rust
+// Extract data before modifying cars
+let fitnesses: Vec<f32> = cars.iter().map(|c| c.fitness()).collect();
+let brains: Vec<NeuralNetwork> = cars.iter()
+    .map(|c| c.brain.clone().unwrap())  // clone each brain out
+    .collect();
+
+// Now we can breed and replace
+cars = spawn_population(start_pos, start_angle);
+```
 
 ### 19.1 — The generation loop
 
@@ -263,11 +473,12 @@ async fn main() {
                 best_ever_fitness = best_fitness;
             }
 
-            // Breed next generation
+            // Extract brains (clone out of cars before replacing them)
             let brains: Vec<NeuralNetwork> = cars.iter()
                 .map(|c| c.brain.clone().unwrap())
                 .collect();
 
+            // Breed next generation
             let mut new_brains = Vec::new();
             for _ in 0..POPULATION_SIZE {
                 let parent_a = evolution::select_parent(&fitnesses);
@@ -312,6 +523,21 @@ Watch the generations tick by. Generation 0: chaos. Generation 5: a few cars mak
 
 The fitness counter climbs. Each generation is slightly better than the last. Evolution is working.
 
+> [!warning] Common Mistake: `.unwrap()` on `Option`
+> The line `c.brain.clone().unwrap()` will panic if any car has `brain: None`. Right now all cars have brains, so this is safe. But it's a ticking time bomb — if you later add a keyboard-controlled car to the population, it will crash here.
+>
+> A safer approach:
+> ```rust
+> let brains: Vec<NeuralNetwork> = cars.iter()
+>     .filter_map(|c| c.brain.clone())  // skip cars without brains
+>     .collect();
+> ```
+> We'll keep `.unwrap()` for now since we control the population, but in a real application you'd use `filter_map` or return a `Result`. We'll address error handling more in Act 4.
+
+### Extend it
+
+Try changing `POPULATION_SIZE` to 100 and see if evolution is faster (more diversity) or slower (more computation per generation). Try `GEN_TIME_LIMIT = 30.0` — does giving cars more time help?
+
 > [!check] Checkpoint
 > Run for 20+ generations. Verify fitness increases over time. Verify cars visibly improve their driving. Stage 19 complete.
 
@@ -321,11 +547,14 @@ The fitness counter climbs. Each generation is slightly better than the last. Ev
 
 > *Difficulty: Easy — Always keep the best.*
 
+*~30 min*
+
 There's a problem: the best car from generation N might not survive into generation N+1. Crossover and mutation can destroy a good solution. **Elitism** fixes this: always copy the best car unchanged into the next generation. This guarantees fitness never decreases.
 
 > [!tip] What You'll Learn
 > - Elitism — preserving the best solution
 > - Why fitness can decrease without elitism
+> - `max_by` with `partial_cmp` — finding the best in a collection
 > - The exploration/exploitation tradeoff
 
 ### 20.1 — Add elitism
@@ -355,7 +584,14 @@ for _ in 1..POPULATION_SIZE {
 }
 ```
 
-One line change: the first car in each generation is the previous generation's champion, unmodified. The other 49 are bred normally.
+One change: the first car in each generation is the previous generation's champion, unmodified. The other 49 are bred normally.
+
+> [!note] Why `partial_cmp` instead of `cmp`?
+> `f32` doesn't implement `Ord` (total ordering) because `NaN != NaN`. It only implements `PartialOrd`. So you must use `partial_cmp` and handle the `None` case (which only happens with NaN). `.unwrap()` is safe here because our fitness function never produces NaN. In Python, `float('nan')` causes similar comparison issues — `max([1.0, float('nan')])` returns `nan`, which is probably not what you want.
+
+### Extend it
+
+Comment out the elitism line (make all 50 children bred normally) and run for 50 generations. Watch the "Best ever" counter — without elitism, the best fitness sometimes *decreases* between generations. A lucky mutation gets lost. With elitism, best fitness is monotonically non-decreasing.
 
 > [!check] Checkpoint
 > Verify that best fitness never decreases between generations. Stage 20 complete.
@@ -366,12 +602,15 @@ One line change: the first car in each generation is the previous generation's c
 
 > *Difficulty: Hard — Tuning until a car completes the full track.*
 
+*~75 min*
+
 This is the breakthrough stage. You have all the pieces — now tune the parameters until a car completes the full oval. This might require adjusting mutation rate, population size, generation time limit, fitness function, or even the track shape.
 
 > [!tip] What You'll Learn
 > - Hyperparameter tuning — the art of evolutionary AI
 > - Diagnosing stagnation (fitness plateaus)
 > - When to increase mutation (stuck) vs decrease it (oscillating)
+> - Drawing a fitness graph
 > - The satisfaction of watching your AI complete a lap
 
 ### Tuning guide
@@ -381,12 +620,17 @@ This is the breakthrough stage. You have all the pieces — now tune the paramet
 | Fitness stuck at 0 | Cars crash before any checkpoint | Widen the track or reduce speed |
 | Fitness plateaus early | Population converged too fast | Increase mutation rate or magnitude |
 | Fitness oscillates | Mutation too aggressive | Decrease mutation magnitude |
-| Cars drive in circles | Fitness rewards time alive too much | Increase checkpoint weight |
+| Cars drive in circles | Fitness rewards time alive too much | Increase checkpoint weight in `fitness()` |
 | Cars hug one wall | Sensors don't cover enough angles | Add more sensors or widen angles |
 
 ### 21.1 — Add a fitness graph
 
-Track best fitness per generation and draw a simple line graph:
+**Try it yourself.** Track `best_fitness` per generation in a `Vec<f32>`. After each generation, push the best fitness. Then draw a simple line graph in the bottom-left corner: x-axis = generation, y-axis = fitness, scaled to fit a 300×80 pixel box.
+
+Hint: for each pair of consecutive points, draw a line from `(gen_i / total * width, max_fitness - fitness_i / max * height)` to the next point.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 let mut fitness_history: Vec<f32> = Vec::new();
@@ -412,6 +656,8 @@ if fitness_history.len() > 1 {
 }
 ```
 
+</details>
+
 ### 21.2 — The moment
 
 Run it. Watch the fitness graph climb. At some point — maybe generation 30, maybe generation 80 — a car will complete the full oval. The fitness graph will spike. You'll see a single car smoothly navigating every corner while the others crash around it.
@@ -419,7 +665,7 @@ Run it. Watch the fitness graph climb. At some point — maybe generation 30, ma
 That car's brain — 50 numbers — encodes a driving strategy that emerged from random noise through selection pressure. You didn't program "turn left when the left wall is close." Evolution discovered it.
 
 > [!check] Checkpoint
-> A car completes the full oval track. The fitness graph shows clear improvement over generations. Stage 21 complete. Take a screenshot.
+> A car completes the full oval track. The fitness graph shows clear improvement over generations. Stage 21 complete. Take a screenshot — you earned it.
 
 ---
 
@@ -443,11 +689,20 @@ You built a genetic algorithm that evolves neural network drivers:
 
 | Component | What it does |
 |-----------|-------------|
-| Fitness | Checkpoints passed + time bonus |
+| Fitness | Checkpoints passed × 100 + time bonus |
 | Selection | Roulette wheel — better cars breed more |
 | Crossover | Uniform — randomly pick each weight from either parent |
 | Mutation | 10% of weights perturbed by ±0.3 |
 | Elitism | Best car copied unchanged to next generation |
 | Generation loop | 15-second rounds, breed after all crash or timeout |
+
+| Rust Concept | Where You Used It |
+|-------------|-------------------|
+| `.clone()` | Copying brains out of cars before replacing the population |
+| `&mut` parameter | `mutate(&mut nn)` — modify in place without taking ownership |
+| `Vec` as flat parameter storage | `get_params` / `from_params` for crossover and mutation |
+| `partial_cmp` | Comparing `f32` values (no total ordering due to NaN) |
+| Closures with iterators | `.map`, `.filter`, `.fold`, `.max_by`, `.enumerate` |
+| Testing randomness | Statistical assertions (selection bias, mutation count) |
 
 **Next up — Act 4: The Circuit.** Harder tracks, a track editor, save/load brains, and racing against your own AI.

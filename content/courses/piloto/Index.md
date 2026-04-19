@@ -55,13 +55,13 @@ Build the visual simulation: a track, a car with physics, and manual keyboard co
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 1 | The Window | macroquad setup, game loop, drawing shapes | Very Easy | 20 min |
-| 2 | The Track | Define a circuit as wall segments, draw it, collision detection with line segments | Easy | 40 min |
-| 3 | The Car | Position, angle, velocity. Draw a triangle. Keyboard controls: W/A/S/D | Easy | 35 min |
-| 4 | Car Physics | Acceleration, friction, turning radius at speed, speed cap | Medium | 40 min |
-| 5 | Wall Collision | Detect when the car hits a wall, mark it as crashed | Medium | 35 min |
-| 6 | The Sensors | 5 rays from the car's front, detect distance to nearest wall, draw them | Medium | 45 min |
-| 7 | The Checkpoint System | Gates along the track that measure progress — fitness = checkpoints passed | Medium | 35 min |
+| 1 | The Window | macroquad setup, game loop, drawing shapes | Very Easy | 30 min |
+| 2 | The Track | Define a circuit as wall segments, draw it; module system (`mod`, `pub`) | Easy | 60 min |
+| 3 | The Car | Position, angle, velocity. Draw a triangle. Keyboard controls; `&self` vs `&mut self` | Easy | 50 min |
+| 4 | Car Physics | Acceleration, friction, turning radius at speed; separating input from physics | Medium | 60 min |
+| 5 | Wall Collision | Detect when the car hits a wall; slice references `&[(Vec2, Vec2)]` | Medium | 50 min |
+| 6 | The Sensors | 5 rays from the car's front, detect distance to nearest wall; `Option<f32>` | Medium | 60 min |
+| 7 | The Checkpoint System | Gates along the track that measure progress; linear interpolation | Medium | 50 min |
 
 ### [[Act 2 - The Brain]] — Neural Networks From Scratch (Stages 8-14)
 
@@ -69,13 +69,13 @@ Build a feedforward neural network by hand — no ML libraries. Understand what 
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 8 | What Is a Neural Network? | Neurons, weights, biases — the conceptual model. No code yet | Easy | 25 min |
-| 9 | Matrix Math | Vectors and matrices in Rust. Dot products. Why neural networks are just matrix multiplications | Medium | 40 min |
-| 10 | The Forward Pass | Input → hidden → output. Multiply by weights, add bias, apply activation | Medium | 45 min |
-| 11 | Activation Functions | tanh for hidden layers (squash to -1..1), sigmoid for output (squash to 0..1) | Easy | 25 min |
-| 12 | Random Brains | Initialize a network with random weights. Connect sensors → brain → steering/throttle | Medium | 35 min |
-| 13 | 50 Cars at Once | Spawn 50 cars with random brains, run them simultaneously, watch the chaos | Medium | 40 min |
-| 14 | Visualizing the Brain | Draw the neural network alongside the car — show activations lighting up in real-time | Medium | 40 min |
+| 8 | What Is a Neural Network? | Neurons, weights, biases — the conceptual model. No code yet | Easy | 35 min |
+| 9 | Matrix Math | Vectors and matrices in Rust. Dot products; `#[test]` and `cargo test` | Medium | 60 min |
+| 10 | The Forward Pass | Input → hidden → output. Multiply by weights, add bias, apply activation | Medium | 60 min |
+| 11 | Activation Functions | tanh for hidden layers, sigmoid for output; testing output ranges | Easy | 35 min |
+| 12 | Random Brains | Initialize with random weights; `Option<NeuralNetwork>`, borrowing vs moving | Medium | 50 min |
+| 13 | 50 Cars at Once | Spawn 50 cars with random brains, run simultaneously; `&mut` iteration | Medium | 50 min |
+| 14 | Visualizing the Brain | Draw the neural network alongside the car — show activations in real-time | Medium | 50 min |
 
 ### [[Act 3 - The Evolution]] — Genetic Algorithm (Stages 15-21)
 
@@ -83,13 +83,13 @@ The core of the course. Build the genetic algorithm that breeds better drivers a
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 15 | Fitness | Measuring how good a car is — checkpoints passed, distance traveled, time alive | Easy | 30 min |
-| 16 | Selection | Fitness-proportional selection — better cars are more likely to be parents | Medium | 35 min |
-| 17 | Crossover | Combine two parent networks — take some weights from each | Medium | 35 min |
-| 18 | Mutation | Randomly perturb weights by small amounts. Mutation rate and magnitude | Medium | 30 min |
-| 19 | The Generation Loop | Select → crossover → mutate → run → repeat. Watch fitness climb | Medium | 40 min |
-| 20 | Elitism | Always keep the best performer unchanged. Prevents losing the best solution | Easy | 20 min |
-| 21 | The First Lap | Tune parameters until a car completes the full track. The breakthrough moment | Hard | 50 min |
+| 15 | Fitness | Measuring how good a car is — checkpoints passed, time alive; testing fitness ordering | Easy | 40 min |
+| 16 | Selection | Fitness-proportional selection — better cars are more likely to be parents | Medium | 45 min |
+| 17 | Crossover | Combine two parent networks — take some weights from each; `get_params`/`from_params` | Medium | 45 min |
+| 18 | Mutation | Randomly perturb weights; `&mut` parameters, mutation rate and magnitude | Medium | 40 min |
+| 19 | The Generation Loop | Select → crossover → mutate → run → repeat; `.clone()` and ownership | Medium | 60 min |
+| 20 | Elitism | Always keep the best performer unchanged; `partial_cmp` for floats | Easy | 30 min |
+| 21 | The First Lap | Tune parameters until a car completes the full track; fitness graph | Hard | 75 min |
 
 ### [[Act 4 - The Circuit]] — Advanced Tracks and Features (Stages 22-27)
 
@@ -97,16 +97,16 @@ The cars can drive one track. Now make them generalize: harder tracks, track edi
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 22 | Track Editor | Click to place wall points, save/load tracks as JSON | Medium | 45 min |
-| 23 | Harder Tracks | Tight corners, chicanes, varying width. Does the AI generalize? | Medium | 30 min |
-| 24 | Save and Load Brains | Serialize the best neural network to JSON. Load it later without retraining | Easy | 25 min |
-| 25 | Race Mode | You drive with keyboard, the AI drives alongside. Who's faster? | Medium | 35 min |
-| 26 | Species and Niches | NEAT-lite: group similar networks, protect innovation, prevent premature convergence | Hard | 50 min |
-| 27 | The Complete Piloto | Multiple tracks, generation counter, fitness graph, best-of-all-time replay | Medium | 40 min |
+| 22 | Track Editor | Click to place wall points, save/load tracks as JSON; `Result<T,E>` and `?` | Medium | 60 min |
+| 23 | Harder Tracks | Tight corners, chicanes, varying width; generalization and transfer learning | Medium | 45 min |
+| 24 | Save and Load Brains | Serialize the best neural network to JSON; serde derives | Easy | 35 min |
+| 25 | Race Mode | You drive with keyboard, the AI drives alongside; enum state machines | Medium | 50 min |
+| 26 | Species and Niches | Group similar networks, protect innovation, prevent premature convergence; `HashMap` | Hard | 75 min |
+| 27 | The Complete Piloto | Multiple tracks, generation counter, fitness graph, best-of-all-time replay | Medium | 60 min |
 
 ### [[Reference Guide]]
 
-Neural network math (forward pass, matrix multiplication), genetic algorithm operators (selection, crossover, mutation), macroquad drawing API, ray-line intersection formula, 2D physics formulas, trigonometry cheat sheet.
+Neural network math (forward pass, matrix multiplication), genetic algorithm operators (selection, crossover, mutation), macroquad drawing API, ray-line intersection formula, 2D physics formulas, trigonometry cheat sheet, module system reference, testing patterns, error handling patterns.
 
 ---
 
@@ -114,11 +114,11 @@ Neural network math (forward pass, matrix multiplication), genetic algorithm ope
 
 | Act | Stages | Est. Time |
 |---|---|---|
-| The Track | 7 | ~4 hrs |
-| The Brain | 7 | ~4 hrs |
-| The Evolution | 7 | ~4 hrs |
-| The Circuit | 6 | ~3.5 hrs |
-| **Total** | **27** | **~15.5 hrs** |
+| The Track | 7 | ~6 hrs |
+| The Brain | 7 | ~5.5 hrs |
+| The Evolution | 7 | ~5.5 hrs |
+| The Circuit | 6 | ~5.5 hrs |
+| **Total** | **27** | **~22.5 hrs** |
 
 ## Tech Stack
 

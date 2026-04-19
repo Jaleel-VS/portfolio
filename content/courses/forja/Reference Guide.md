@@ -672,7 +672,96 @@ path = "src/main.rs"
 
 ---
 
-## 6. Useful Crates
+## 6. Testing Patterns
+
+### Basic Test Structure
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;  // import everything from parent module
+
+    #[test]
+    fn test_something() {
+        assert_eq!(2 + 2, 4);
+    }
+
+    #[test]
+    fn test_with_result() -> Result<(), String> {
+        let value: u32 = "42".parse().map_err(|e| format!("{}", e))?;
+        assert_eq!(value, 42);
+        Ok(())
+    }
+
+    #[test]
+    #[should_panic(expected = "out of bounds")]
+    fn test_panic() {
+        let v = vec![1, 2, 3];
+        let _ = v[99];  // panics
+    }
+}
+```
+
+### Assertion Macros
+
+| Macro | Purpose | Example |
+|-------|---------|---------|
+| `assert!(expr)` | True check | `assert!(result.is_ok())` |
+| `assert_eq!(a, b)` | Equality | `assert_eq!(status, 200)` |
+| `assert_ne!(a, b)` | Inequality | `assert_ne!(body, "")` |
+| `assert!(expr, "msg")` | With message | `assert!(v.len() > 0, "empty vec")` |
+
+### Running Tests
+
+```bash
+cargo test                          # all tests
+cargo test test_router              # matching name
+cargo test -- --nocapture           # show println! output
+cargo test -- --test-threads=1      # run sequentially
+```
+
+### Test Helpers
+
+Create test fixtures to avoid repetition:
+
+```rust
+fn test_request(method: &str, path: &str) -> Request {
+    Request {
+        method: method.to_string(),
+        path: path.to_string(),
+        version: "HTTP/1.1".to_string(),
+        headers: HashMap::new(),
+        body: String::new(),
+        params: HashMap::new(),
+        query: HashMap::new(),
+        query_string: String::new(),
+    }
+}
+```
+
+### Error Handling in Tests
+
+```rust
+// Use unwrap() freely in tests — panics give clear failure messages
+#[test]
+fn test_parse() {
+    let result = parse_query_string("key=value");
+    assert_eq!(result.get("key").unwrap(), "value");
+}
+
+// Or use Result for cleaner error propagation
+#[test]
+fn test_json() -> Result<(), String> {
+    let json: serde_json::Value = serde_json::from_str(r#"{"a":1}"#)
+        .map_err(|e| e.to_string())?;
+    assert_eq!(json["a"], 1);
+    Ok(())
+}
+```
+
+---
+
+## 7. Useful Crates
 
 | Crate | Purpose | Python Equivalent |
 |-------|---------|------------------|
@@ -738,7 +827,7 @@ let args = Args::parse();
 
 ---
 
-## 7. Debugging & Troubleshooting
+## 8. Debugging & Troubleshooting
 
 ### Common Compiler Errors
 

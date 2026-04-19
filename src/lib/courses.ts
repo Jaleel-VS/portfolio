@@ -10,6 +10,13 @@ import rehypeAutolinkHeadings from "rehype-autolink-headings"
 import rehypeHighlight from "rehype-highlight"
 
 const COURSES_DIR = path.join(process.cwd(), "content/courses")
+const COURSES_CONFIG = path.join(COURSES_DIR, "courses.config.json")
+
+function getVisibleSlugs(): Set<string> | null {
+  if (!fs.existsSync(COURSES_CONFIG)) return null
+  const config = JSON.parse(fs.readFileSync(COURSES_CONFIG, "utf-8"))
+  return Array.isArray(config.visible) ? new Set(config.visible) : null
+}
 
 export type CourseTheme = {
   color: string
@@ -84,8 +91,10 @@ function extractTitle(content: string): string {
 }
 
 export function getCourses(): Course[] {
+  const visible = getVisibleSlugs()
   const slugs = fs.readdirSync(COURSES_DIR).filter((f) =>
     fs.statSync(path.join(COURSES_DIR, f)).isDirectory()
+      && (visible === null || visible.has(f))
   )
 
   return slugs.map((slug) => {

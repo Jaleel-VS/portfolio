@@ -39,3 +39,6 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# course rewrite prompt (internal tooling, not for publish)
+content/courses/COURSE-REWRITE-PROMPT.md

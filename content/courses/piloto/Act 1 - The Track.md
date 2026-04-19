@@ -26,6 +26,8 @@ flowchart LR
 
 > *Difficulty: Very Easy — macroquad setup and your first frame.*
 
+*~30 min*
+
 Every visual project starts the same way: get a window on screen and draw something. macroquad makes this absurdly simple — the entire setup is 5 lines. This stage gets you from nothing to a colored window with a shape in it.
 
 > [!tip] What You'll Learn
@@ -95,7 +97,9 @@ while running:
 
 Same pattern — clear, draw, flip. macroquad just uses `await` instead of `flip()`.
 
-### 1.4 — Run it
+### 1.4 — Try it yourself
+
+Before running, predict: what happens if you change `YELLOW` to `RED`? What if you add a second `draw_circle` call with different coordinates? Try both, then run:
 
 ```bash
 cargo run
@@ -103,11 +107,15 @@ cargo run
 
 A window appears with a dark background, a yellow circle, and an FPS counter. The circle sits in the center. The window is resizable.
 
-> [!warning] Common Mistake
-> **Forgetting `next_frame().await`.** Without it, the loop runs as fast as possible without ever displaying a frame. Your program will appear to hang (it's drawing but never showing). Always end the loop body with `next_frame().await`.
+> [!warning] Common Mistake: Forgetting `next_frame().await`
+> Without it, the loop runs as fast as possible without ever displaying a frame. Your program will appear to hang — it's drawing but never showing. You'll see this error pattern: the window opens but stays blank or frozen. Always end the loop body with `next_frame().await`.
 
-> [!warning] Common Mistake
-> **Coordinate confusion.** macroquad's origin is top-left. Y increases *downward*. If your car appears upside down later, you've probably flipped a Y axis somewhere.
+> [!warning] Common Mistake: Coordinate confusion
+> macroquad's origin is top-left. Y increases *downward*. If you draw at `(0, 0)`, it appears in the top-left corner, not the bottom-left like in math class. If your car appears upside down later, you've probably flipped a Y axis somewhere.
+
+### Extend it
+
+Add a `draw_line` call that draws a horizontal line across the middle of the screen. You'll need `screen_width()` and `screen_height()`. The signature is `draw_line(x1, y1, x2, y2, thickness, color)`.
 
 We have a window. Next stage, we'll draw the track — the walls that the cars will learn to navigate.
 
@@ -120,17 +128,60 @@ We have a window. Next stage, we'll draw the track — the walls that the cars w
 
 > *Difficulty: Easy — Define a circuit as wall segments and draw it.*
 
+*~60 min*
+
 The track is the environment the AI will learn to navigate. It's defined as two polygons — an inner wall and an outer wall — forming a circuit. The space between them is the road. This stage defines the track data, draws it, and sets up the collision geometry.
 
 > [!tip] What You'll Learn
 > - Representing a track as two polygons (inner and outer walls)
 > - Drawing lines between points
-> - `Vec<(f32, f32)>` for point lists
+> - `Vec<Vec2>` for point lists
+> - Rust's module system: `mod`, `pub`, and file organization
 > - Why the track is data, not code (we'll add a track editor in Act 4)
 
 ### Why two polygons?
 
 A racing track is a loop with width. The simplest representation: an outer boundary and an inner boundary. The drivable area is between them. Each boundary is a closed polygon — a list of points connected by line segments.
+
+### Concept: Rust's Module System
+
+This is the first time we create a second file. In Python, you'd just create `track.py` and `import track`. Rust requires an extra step: you must *declare* the module in your parent file.
+
+Here's how it works:
+
+1. Create the file `src/track.rs`
+2. In `src/main.rs`, add `mod track;` — this tells Rust "there's a module called `track`, find it in `src/track.rs`"
+3. Use `pub` on anything in `track.rs` that `main.rs` needs to access
+
+**What happens if you forget `mod track;`?** You get this compiler error:
+
+```
+error[E0432]: unresolved import `track`
+ --> src/main.rs:4:5
+  |
+4 | use track::Track;
+  |     ^^^^^ use of undeclared crate or module `track`
+```
+
+Rust doesn't auto-discover files. Every module must be explicitly declared. This is different from Python where any `.py` file in the directory is importable.
+
+| Python | Rust | Notes |
+|--------|------|-------|
+| `import track` | `mod track;` in `main.rs` | Rust requires explicit declaration |
+| Everything is public by default | Everything is private by default | Add `pub` to expose items |
+| `from track import Track` | `use track::Track;` | Same idea, different syntax |
+
+**What happens if you forget `pub`?** You get:
+
+```
+error[E0603]: struct `Track` is private
+ --> src/main.rs:4:13
+  |
+4 | use track::Track;
+  |             ^^^^^ private struct
+```
+
+In Rust, everything is private by default. You must explicitly mark structs, functions, and fields as `pub` if other modules need them.
 
 ### 2.1 — Track data
 
@@ -212,10 +263,11 @@ impl Track {
 
 | Code | Explanation |
 |------|-------------|
-| `Vec2` | macroquad's 2D vector type — `vec2(x, y)`. Has `.x`, `.y` fields and math operations. |
+| `Vec2` | macroquad's 2D vector type — `vec2(x, y)`. Has `.x`, `.y` fields and math operations. In Python, you'd use a tuple `(x, y)` or a numpy array. |
 | `std::f32::consts::TAU` | 2π — a full circle in radians. `TAU / segments` gives the angle between each point. |
 | `angle.cos()`, `angle.sin()` | Trigonometry — convert an angle to x/y coordinates on a circle. `cos` = horizontal, `sin` = vertical. |
 | `% self.outer.len()` | Wrap around to connect the last point back to the first (closed polygon). |
+| `pub` on struct and fields | Without `pub`, `main.rs` can't access `Track` or its fields. |
 
 ### 2.2 — Draw it
 
@@ -244,6 +296,8 @@ async fn main() {
 }
 ```
 
+Note the two lines at the top: `mod track;` declares the module, `use track::Track;` imports the struct. Both are required.
+
 ```bash
 cargo run
 ```
@@ -253,7 +307,9 @@ An oval track appears — two concentric ellipses forming a circuit. The road is
 > [!note] Why an oval?
 > The oval is the simplest closed track. It has no sharp corners, so even random drivers might survive a few frames. We'll add more complex tracks in Act 4. For now, the oval is enough to develop and test the AI.
 
-We have a track. Next, we need something to drive on it.
+### Extend it
+
+The `wall_segments` method returns `Vec<(Vec2, Vec2)>` — a new `Vec` allocated every time it's called. For now this is fine (we call it once at startup). But think about this: if we called it every frame for 50 cars, that's 50 allocations per frame. How might you avoid that? (Hint: compute it once and pass a reference. We'll do exactly this in Stage 5.)
 
 > [!check] Checkpoint
 > Run the program. Verify you see an oval track with inner and outer walls. Stage 2 complete.
@@ -264,6 +320,8 @@ We have a track. Next, we need something to drive on it.
 
 > *Difficulty: Easy — A triangle that moves with keyboard input.*
 
+*~50 min*
+
 The car is a triangle (pointing in its direction of travel) with position, angle, and velocity. This stage adds keyboard controls so you can drive it manually. The manual controls won't be used by the AI — they're for testing and for the race mode in Act 4.
 
 > [!tip] What You'll Learn
@@ -271,6 +329,21 @@ The car is a triangle (pointing in its direction of travel) with position, angle
 > - Drawing a rotated triangle
 > - Reading keyboard input with `is_key_down`
 > - Basic trigonometry: angle → direction vector
+> - `&self` vs `&mut self` — your first encounter with Rust's borrowing rules
+
+### Concept: `&self` vs `&mut self`
+
+Every method in Rust takes `self` in one of three ways:
+
+| Signature | Meaning | Python equivalent |
+|-----------|---------|-------------------|
+| `&self` | Read-only borrow — can look but not modify | `def method(self):` (by convention, doesn't modify) |
+| `&mut self` | Mutable borrow — can read and modify | `def method(self):` (modifies `self.x`) |
+| `self` | Takes ownership — consumes the value | No direct equivalent — the object is gone after the call |
+
+In Python, every method can modify `self` freely. Rust forces you to declare your intent. If a method only reads data (like `draw` or `direction`), use `&self`. If it changes the car's position or speed, use `&mut self`.
+
+**Why does Rust care?** Because it prevents data races at compile time. If two parts of your code hold `&self` references simultaneously, that's fine — they're both just reading. But Rust won't let you hold `&self` and `&mut self` at the same time, because the mutable reference might change data while the other is reading it. This matters when we have 50 cars in Act 2.
 
 ### 3.1 — The Car struct
 
@@ -319,7 +392,9 @@ impl Car {
 }
 ```
 
-The car is drawn as a triangle. The `direction()` method converts the angle to a unit vector using `cos` and `sin` — this is the fundamental trig operation you'll use throughout the course:
+Notice: `direction()` and `draw()` use `&self` — they only read the car's state. The update method below uses `&mut self` because it changes position and speed.
+
+The `direction()` method converts the angle to a unit vector using `cos` and `sin` — this is the fundamental trig operation you'll use throughout the course:
 
 ```
 angle = 0     → direction = (1, 0)   → pointing right
@@ -331,7 +406,17 @@ The perpendicular vector `(-dir.y, dir.x)` is rotated 90° — it gives the car'
 
 ### 3.2 — Keyboard controls
 
-Add a method for manual driving:
+**Try it yourself.** Before looking at the solution, write an `update_manual` method that:
+- Takes `&mut self` and `dt: f32` (delta time in seconds)
+- Checks `is_key_down(KeyCode::W)` for forward, `S` for backward, `A` for left, `D` for right
+- Adjusts `self.angle` for steering and `self.speed` for throttle
+- Applies friction: `self.speed *= 0.98`
+- Moves the car: `self.pos += self.direction() * self.speed * dt`
+
+Give it a try. The key insight: multiply all changes by `dt` so movement is frame-rate independent.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 impl Car {
@@ -369,12 +454,15 @@ impl Car {
 }
 ```
 
+</details>
+
 | Code | Explanation |
 |------|-------------|
+| `&mut self` | This method modifies the car's position, angle, and speed — it needs mutable access. |
 | `dt: f32` | Delta time — seconds since last frame. Multiplying by `dt` makes movement frame-rate independent. |
 | `is_key_down(KeyCode::W)` | Returns `true` if the key is currently held. macroquad handles the input polling. |
 | `self.speed *= 0.98` | Friction — speed decays by 2% per frame. Without this, the car would accelerate forever. |
-| `.clamp(-100.0, 300.0)` | Limit speed to a range. Negative = reversing. |
+| `.clamp(-100.0, 300.0)` | Limit speed to a range. Negative = reversing. In Python: `max(-100, min(300, speed))`. |
 
 ### 3.3 — Wire it up
 
@@ -415,6 +503,23 @@ async fn main() {
 }
 ```
 
+Note `let mut player` — because we call `update_manual(&mut self)`, the variable itself must be declared `mut`. If you forget:
+
+```
+error[E0596]: cannot borrow `player` as mutable, as it is not declared as mutable
+  --> src/main.rs:16:9
+   |
+16 |         player.update_manual(dt);
+   |         ^^^^^^ cannot borrow as mutable
+   |
+help: consider changing this to be mutable
+   |
+13 |     let mut player = Car::new(start_pos, start_angle, YELLOW);
+   |         +++
+```
+
+The compiler even tells you the fix. Get used to reading these — they're your best teacher.
+
 ### 3.4 — Test it
 
 ```bash
@@ -423,8 +528,8 @@ cargo run
 
 A yellow triangle appears on the track. WASD to drive. The car accelerates, steers, and slows down with friction. It can drive right through the walls — we'll fix that in Stage 5.
 
-> [!warning] Common Mistake
-> **Not multiplying by `dt`.** Without delta time, movement speed depends on frame rate. At 60 FPS the car moves normally; at 120 FPS it moves twice as fast. Always multiply velocities and rotations by `dt`.
+> [!warning] Common Mistake: Not multiplying by `dt`
+> Without delta time, movement speed depends on frame rate. At 60 FPS the car moves normally; at 120 FPS it moves twice as fast. If your car seems to teleport or crawl, check that every velocity and rotation change is multiplied by `dt`. The compiler won't catch this — it's a logic bug, not a type error.
 
 We can drive, but the car ignores walls. Next stage, we'll add proper physics — acceleration curves, turning radius, and speed-dependent handling.
 
@@ -437,11 +542,14 @@ We can drive, but the car ignores walls. Next stage, we'll add proper physics �
 
 > *Difficulty: Medium — Acceleration curves, turning radius, and speed-dependent handling.*
 
+*~60 min*
+
 The current physics are too simple — the car turns at the same rate regardless of speed, and acceleration is linear. Real cars (and good simulations) have speed-dependent turning: you can't turn sharply at high speed. This stage makes the physics feel right, which matters because the AI will exploit any unrealistic behavior.
 
 > [!tip] What You'll Learn
 > - Speed-dependent turn rate (faster = wider turns)
 > - Non-linear acceleration (diminishing returns at high speed)
+> - Separating control inputs from physics (key design for AI)
 > - Why physics matter for AI training (unrealistic physics → unrealistic driving)
 > - Tuning constants by feel
 
@@ -449,9 +557,18 @@ The current physics are too simple — the car turns at the same rate regardless
 
 If the car can turn 180° instantly at full speed, the AI will learn to do exactly that — and the resulting "driving" will look nothing like real driving. Realistic-ish physics constrain the AI to learn realistic-ish behavior. The constraints are the teacher.
 
-### 4.1 — Improved physics
+### 4.1 — Separating input from physics
 
-Replace `update_manual` with a two-step approach: first compute control inputs (steering, throttle), then apply physics. This separation matters because the AI will provide the same inputs — just from a neural network instead of a keyboard.
+This is a key design decision. We split the car's update into two parts:
+1. **Input** — where the control values come from (keyboard now, neural network later)
+2. **Physics** — how those control values affect the car
+
+This means the AI can use the exact same physics code — it just provides different inputs.
+
+**Try it yourself.** Define a `CarInput` struct with two fields: `throttle: f32` (-1.0 to 1.0) and `steering: f32` (-1.0 to 1.0). Then write a `keyboard_input()` function that reads WASD and returns a `CarInput`. This is a pure data struct — no methods needed.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 /// Control inputs — either from keyboard or neural network.
@@ -473,7 +590,21 @@ impl Car {
 
         CarInput { throttle, steering }
     }
+}
+```
 
+</details>
+
+### 4.2 — Improved physics
+
+Now write the `update` method that takes a `&CarInput` instead of reading the keyboard directly. The key improvements over `update_manual`:
+
+- **Diminishing acceleration:** The closer to max speed, the less acceleration you get. `factor = 1.0 - (speed / max_speed)`.
+- **Speed-dependent turning:** At high speed, turning is reduced. `speed_factor = 1.0 - (speed / max_speed * 0.6)`.
+- **Stronger braking than acceleration:** Braking at 400 units vs acceleration at 250 — stopping is easier than going.
+
+```rust
+impl Car {
     /// Apply physics given control inputs.
     pub fn update(&mut self, input: &CarInput, dt: f32) {
         if !self.alive {
@@ -514,9 +645,9 @@ impl Car {
 }
 ```
 
-The key improvement: `speed_factor` reduces turn rate at high speed. At 0 speed, you can turn freely. At max speed, turning is 80% slower. This forces the AI to learn to slow down for corners — which is real driving behavior.
+Notice `input: &CarInput` — a shared reference. The `update` method reads the input but doesn't modify it. This is Rust's borrowing in action: the caller keeps ownership of the `CarInput`, and `update` just borrows it for the duration of the call.
 
-### 4.2 — Update main loop
+### 4.3 — Update main loop
 
 ```rust
 // In the game loop:
@@ -524,7 +655,7 @@ let input = Car::keyboard_input();
 player.update(&input, dt);
 ```
 
-### 4.3 — Test it
+### 4.4 — Test it
 
 ```bash
 cargo run
@@ -534,6 +665,10 @@ The car now feels different: it accelerates quickly at low speed but struggles t
 
 > [!note] Tuning by feel
 > The constants (250.0 accel, 3.5 turn rate, 0.6 speed factor) were chosen by feel, not physics simulation. Adjust them until driving feels satisfying. The AI will adapt to whatever physics you set — the constants define the "rules of the world" that evolution operates within.
+
+### Extend it
+
+Try changing `max_speed` to 500.0 and see how the car handles. Then try `turn_rate = 1.0`. Notice how the physics constants completely change the "personality" of the car. The AI will evolve a different driving style for each set of constants.
 
 The car handles well but still phases through walls. Next stage, we fix that.
 
@@ -546,19 +681,47 @@ The car handles well but still phases through walls. Next stage, we fix that.
 
 > *Difficulty: Medium — Detecting when the car hits a wall.*
 
+*~50 min*
+
 The car drives through walls like a ghost. We need collision detection: check if the car's body intersects any wall segment, and if so, mark it as crashed. This is the "death" condition that the genetic algorithm will select against — cars that crash get low fitness.
 
 > [!tip] What You'll Learn
 > - Line segment intersection (the math behind all 2D collision)
-> - Checking a point's distance to a line segment
+> - Slice references: `&[(Vec2, Vec2)]` — borrowing data without copying
 > - Marking a car as "dead" on collision
 > - Why collision detection is the foundation of the fitness function
 
-### The math: line-segment intersection
+### Concept: Slice References — `&[(Vec2, Vec2)]`
 
-Two line segments intersect if and only if the endpoints of each segment are on opposite sides of the other segment's line. The standard algorithm uses cross products:
+The `wall_segments()` method returns `Vec<(Vec2, Vec2)>`. We could pass the whole `Vec` to the collision function, but that would either copy it (expensive) or move it (we'd lose it). Instead, we pass a **slice reference**: `&[(Vec2, Vec2)]`.
+
+A slice is a view into a contiguous sequence — it borrows the data without copying or taking ownership. Think of it like a Python list slice, except it's zero-cost (no new allocation).
 
 ```rust
+// This borrows the Vec's data — no copy, no move
+fn check_collision(&mut self, walls: &[(Vec2, Vec2)]) { ... }
+
+// Called like:
+let walls = track.wall_segments();  // Vec<(Vec2, Vec2)>
+player.check_collision(&walls);     // borrows as &[(Vec2, Vec2)]
+```
+
+In Python, you'd just pass the list. In Rust, the `&` makes the borrowing explicit — the compiler guarantees `walls` isn't modified or freed while `check_collision` is using it.
+
+### The math: line-segment intersection
+
+Two line segments intersect if and only if the endpoints of each segment are on opposite sides of the other segment's line. The standard algorithm uses cross products.
+
+Create `src/geometry.rs`:
+
+```rust
+use macroquad::prelude::*;
+
+/// 2D cross product: (b-a) × (c-a). Positive = c is left of a→b.
+fn cross_2d(a: Vec2, b: Vec2, c: Vec2) -> f32 {
+    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
+}
+
 /// Check if two line segments (p1→p2) and (p3→p4) intersect.
 pub fn segments_intersect(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2) -> bool {
     let d1 = cross_2d(p3, p4, p1);
@@ -574,14 +737,9 @@ pub fn segments_intersect(p1: Vec2, p2: Vec2, p3: Vec2, p4: Vec2) -> bool {
 
     false
 }
-
-/// 2D cross product: (b-a) × (c-a). Positive = c is left of a→b.
-fn cross_2d(a: Vec2, b: Vec2, c: Vec2) -> f32 {
-    (b.x - a.x) * (c.y - a.y) - (b.y - a.y) * (c.x - a.x)
-}
 ```
 
-Put this in a new file `src/geometry.rs`.
+Don't forget to add `mod geometry;` to `main.rs` — same pattern as `mod track;` and `mod car;`.
 
 **Python comparison:**
 ```python
@@ -593,6 +751,18 @@ Same math, just with tuples instead of `Vec2`.
 
 ### 5.1 — Check car against walls
 
+**Try it yourself.** Write a `check_collision` method on `Car` that:
+- Takes `&mut self` and `walls: &[(Vec2, Vec2)]`
+- Computes the car's front edge (a line segment from front-left to front-right, using `direction()` and the perpendicular)
+- Checks if the front edge intersects any wall segment using `geometry::segments_intersect`
+- Sets `self.alive = false` if any intersection is found
+- Also checks the left and right side edges
+
+Hint: the car's tip is at `self.pos + dir * size`, and the perpendicular is `vec2(-dir.y, dir.x)`.
+
+<details>
+<summary>Solution</summary>
+
 Add to `src/car.rs`:
 
 ```rust
@@ -600,7 +770,7 @@ use crate::geometry;
 
 impl Car {
     /// Check if the car collides with any wall segment.
-    /// Uses the car's front edge as a line segment.
+    /// Uses the car's front and side edges as line segments.
     pub fn check_collision(&mut self, walls: &[(Vec2, Vec2)]) {
         if !self.alive {
             return;
@@ -639,6 +809,10 @@ impl Car {
 }
 ```
 
+</details>
+
+Notice `for &(w1, w2) in walls` — the `&` destructures each borrowed tuple. Without it, `w1` and `w2` would be references to `Vec2` instead of `Vec2` values. Since `Vec2` implements `Copy` (it's just two floats), destructuring with `&` gives us copies, which is what we want for the math.
+
 ### 5.2 — Draw dead cars differently
 
 Update `draw` to show crashed cars as dim:
@@ -651,7 +825,16 @@ pub fn draw(&self) {
         Color::from_rgba(80, 80, 80, 100) // dim gray ghost
     };
 
-    // ... same triangle drawing with `color` ...
+    let dir = self.direction();
+    let perp = vec2(-dir.y, dir.x);
+    let size = 12.0;
+    let width = 6.0;
+
+    let tip = self.pos + dir * size;
+    let left = self.pos - dir * size * 0.3 + perp * width;
+    let right = self.pos - dir * size * 0.3 - perp * width;
+
+    draw_triangle(tip, left, right, color);
 }
 ```
 
@@ -672,8 +855,8 @@ cargo run
 
 Drive into a wall. The car stops and turns gray. It's dead. Restart the program to try again (we'll add a reset key later).
 
-> [!warning] Common Mistake
-> **Checking only the center point.** If you only check whether the car's center is past a wall, the car can clip through walls at an angle. Checking the car's edges (front, left, right) catches collisions properly.
+> [!warning] Common Mistake: Checking only the center point
+> If you only check whether the car's center is past a wall, the car can clip through walls at an angle — the center might never cross the wall line even though the corners do. Checking the car's edges (front, left, right) catches collisions properly. This is a common game dev bug.
 
 Cars can crash. Now they need eyes — sensors that detect how far away the walls are. That's what the neural network will use as input.
 
@@ -686,12 +869,16 @@ Cars can crash. Now they need eyes — sensors that detect how far away the wall
 
 > *Difficulty: Medium — Ray casting to detect wall distances.*
 
+*~60 min*
+
 The AI can't see the track — it needs sensors. Each sensor is a ray cast from the car in a specific direction. The ray detects the distance to the nearest wall. Five sensors (front, front-left, front-right, left, right) give the neural network enough information to steer.
 
 > [!tip] What You'll Learn
 > - Ray casting — finding where a ray hits a line segment
 > - The ray-segment intersection formula
+> - `Option<f32>` — Rust's way of saying "maybe there's a value, maybe not"
 > - Normalizing sensor values to 0..1 range
+> - Constants with `const` — compile-time values
 > - Why 5 sensors is enough (and what happens with more or fewer)
 
 ### Why 5 sensors?
@@ -700,7 +887,7 @@ The AI can't see the track — it needs sensors. Each sensor is a ray cast from 
         2   1   0
          \  |  /
           \ | /
-    3 ---- CAR ---- (no rear sensor — we don't care what's behind)
+    3 ---- CAR ---- 4
 ```
 
 - Sensor 0: front-right (45°)
@@ -710,6 +897,43 @@ The AI can't see the track — it needs sensors. Each sensor is a ray cast from 
 - Sensor 4: right (90°)
 
 Five sensors give the AI a 180° field of view. It can detect walls ahead and to the sides. No rear sensor — the AI should be driving forward, not looking back.
+
+### Concept: `Option<f32>` — Rust's Null Safety
+
+The ray might not hit any wall segment (it misses, or the wall is behind the ray). In Python, you'd return `None`. In Rust, you return `Option<f32>`:
+
+```rust
+fn ray_segment_intersection(...) -> Option<f32> {
+    if hit {
+        Some(distance)  // found a hit
+    } else {
+        None            // no hit
+    }
+}
+```
+
+`Option` forces you to handle both cases. You can't accidentally use a `None` as a number — the compiler won't let you. This is Rust's answer to Python's `NoneType has no attribute` errors.
+
+```rust
+// Handle it with `if let`:
+if let Some(dist) = ray_segment_intersection(...) {
+    // dist is a real f32 here
+    if dist < closest {
+        closest = dist;
+    }
+}
+// If it was None, this block is skipped — no crash, no error
+```
+
+**Python comparison:**
+```python
+result = ray_segment_intersection(...)
+if result is not None:
+    if result < closest:
+        closest = result
+```
+
+Same logic, but Rust enforces it at compile time. You literally cannot forget the `None` check.
 
 ### 6.1 — Ray-segment intersection
 
@@ -731,7 +955,7 @@ pub fn ray_segment_intersection(
 
     let dot = v2.dot(v3);
     if dot.abs() < 0.0001 {
-        return None; // parallel
+        return None; // parallel — ray and segment point the same way
     }
 
     let t1 = (v2.x * v1.y - v2.y * v1.x) / dot;
@@ -749,13 +973,16 @@ This is the standard ray-line intersection formula. `t1` is the distance along t
 
 ### 6.2 — Sensor system
 
-Add to `src/car.rs`:
+**Try it yourself.** Write a `read_sensors` method on `Car` that:
+- Returns `[f32; NUM_SENSORS]` — a fixed-size array of 5 floats
+- For each sensor angle, casts a ray from `self.pos` in the direction `self.angle + sensor_angle`
+- Finds the closest wall hit within `SENSOR_RANGE` (200.0)
+- Returns the distance normalized to 0..1 (0 = touching wall, 1 = max range)
 
+Constants you'll need:
 ```rust
 pub const NUM_SENSORS: usize = 5;
 const SENSOR_RANGE: f32 = 200.0;
-
-/// Sensor angles relative to the car's heading (in radians).
 const SENSOR_ANGLES: [f32; NUM_SENSORS] = [
     0.7854,   // 45° right
     0.0,      // straight ahead
@@ -763,7 +990,12 @@ const SENSOR_ANGLES: [f32; NUM_SENSORS] = [
     -1.5708,  // 90° left
     1.5708,   // 90° right
 ];
+```
 
+<details>
+<summary>Solution</summary>
+
+```rust
 impl Car {
     /// Cast sensor rays and return normalized distances (0 = wall touching, 1 = max range).
     pub fn read_sensors(&self, walls: &[(Vec2, Vec2)]) -> [f32; NUM_SENSORS] {
@@ -788,7 +1020,19 @@ impl Car {
 
         readings
     }
+}
+```
 
+</details>
+
+Sensors return normalized values: 0.0 = wall is touching the car, 1.0 = no wall within range. This normalization is important for the neural network — inputs should be in a consistent range. Without it, the network would need to learn the scale of raw pixel distances.
+
+### 6.3 — Visualize the sensors
+
+Add a `draw_sensors` method that draws each ray as a colored line — green when far from a wall, red when close:
+
+```rust
+impl Car {
     /// Draw sensor rays (for debugging / visualization).
     pub fn draw_sensors(&self, walls: &[(Vec2, Vec2)]) {
         if !self.alive {
@@ -815,11 +1059,7 @@ impl Car {
 }
 ```
 
-Sensors return normalized values: 0.0 = wall is touching the car, 1.0 = no wall within range. This normalization is important for the neural network — inputs should be in a consistent range.
-
-The visualization colors rays green (far from wall) to red (close to wall). This makes it easy to see what the AI "sees."
-
-### 6.3 — Test it
+### 6.4 — Test it
 
 ```rust
 // In the main loop, after drawing the car:
@@ -832,8 +1072,12 @@ cargo run
 
 Five colored rays extend from the car. As you drive toward a wall, the rays shorten and turn red. Drive parallel to a wall and the side sensors light up. The sensors are the car's eyes.
 
-> [!warning] Common Mistake
-> **Not normalizing sensor values.** Raw distances (0 to 200 pixels) would make the neural network's job harder — it would need to learn the scale. Normalizing to 0..1 means the network always works with the same range regardless of sensor distance.
+> [!warning] Common Mistake: Not normalizing sensor values
+> Raw distances (0 to 200 pixels) would make the neural network's job harder — it would need to learn the scale. Normalizing to 0..1 means the network always works with the same range regardless of `SENSOR_RANGE`. If you later change the range to 300, the network still gets 0..1 inputs. Always normalize inputs to neural networks.
+
+### Extend it
+
+Try changing `NUM_SENSORS` to 7 and adding two more angles (e.g., ±135° for rear-diagonal). How does the visualization change? More sensors give the AI more information but also increase the neural network size (more weights to evolve). There's a tradeoff between perception and learning speed.
 
 The car can see. Now it needs a way to measure progress — how far around the track has it gotten? That's the fitness function.
 
@@ -846,12 +1090,16 @@ The car can see. Now it needs a way to measure progress — how far around the t
 
 > *Difficulty: Medium — Gates that measure progress around the track.*
 
+*~50 min*
+
 The genetic algorithm needs a fitness function: how good is this car? "Time alive" is a bad metric — a car that drives in circles lives forever but makes no progress. "Distance from start" doesn't work for a circuit. The solution: invisible checkpoint gates placed around the track. Fitness = number of checkpoints passed.
 
 > [!tip] What You'll Learn
 > - Placing checkpoints as line segments across the track
 > - Detecting when a car crosses a checkpoint
 > - Fitness as checkpoint count (not time or distance)
+> - Linear interpolation with `.lerp()`
+> - Adding fields to an existing struct
 > - Why the fitness function is the most important design decision in evolutionary AI
 
 ### Why checkpoints?
@@ -861,6 +1109,18 @@ The fitness function defines what "good" means. If fitness = time alive, the AI 
 ### 7.1 — Generate checkpoints
 
 Add to `src/track.rs`:
+
+**Try it yourself.** Write a `generate_checkpoints` method that creates `count` line segments crossing the track at regular intervals. Each checkpoint connects a point on the outer wall to the corresponding point on the inner wall. You'll need `.lerp()` — linear interpolation between two `Vec2` values:
+
+```rust
+// lerp blends between two points: t=0 gives a, t=1 gives b, t=0.5 gives midpoint
+let point = a.lerp(b, 0.5); // halfway between a and b
+```
+
+The method signature: `pub fn generate_checkpoints(&self, count: usize) -> Vec<(Vec2, Vec2)>`
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 impl Track {
@@ -903,11 +1163,11 @@ impl Track {
 }
 ```
 
-`.lerp(other, t)` is linear interpolation — blend between two points. `t=0` gives the first point, `t=1` gives the second, `t=0.5` gives the midpoint.
+</details>
 
 ### 7.2 — Checkpoint tracking per car
 
-Add to `src/car.rs`:
+The `Car` struct needs new fields to track checkpoint progress. This means updating the struct definition and the `new()` constructor:
 
 ```rust
 pub struct Car {
@@ -928,7 +1188,22 @@ impl Car {
             next_checkpoint: 0, checkpoints_passed: 0, time_alive: 0.0,
         }
     }
+}
+```
 
+> [!warning] Common Mistake: Forgetting to update the constructor
+> When you add fields to a Rust struct, every place that creates that struct must include the new fields. Unlike Python's `__init__` where you can add `self.x = 0` anywhere, Rust requires all fields at construction time. If you forget, you'll see:
+> ```
+> error[E0063]: missing fields `next_checkpoint`, `checkpoints_passed`, `time_alive`
+>              in initializer of `Car`
+>   --> src/car.rs:15:9
+> ```
+> The compiler lists exactly which fields are missing — add them with default values.
+
+Now add the checkpoint crossing detection:
+
+```rust
+impl Car {
     /// Check if the car crossed the next checkpoint.
     pub fn check_checkpoints(&mut self, checkpoints: &[(Vec2, Vec2)]) {
         if !self.alive || checkpoints.is_empty() {
@@ -938,7 +1213,7 @@ impl Car {
         let (cp_a, cp_b) = checkpoints[self.next_checkpoint];
 
         // Check if the car's movement line crosses the checkpoint
-        let prev_pos = self.pos - self.direction() * self.speed.abs() * 0.016; // approximate previous position
+        let prev_pos = self.pos - self.direction() * self.speed.abs() * 0.016;
         if geometry::segments_intersect(prev_pos, self.pos, cp_a, cp_b) {
             self.checkpoints_passed += 1;
             self.next_checkpoint = (self.next_checkpoint + 1) % checkpoints.len();
@@ -1000,6 +1275,10 @@ Faint lines cross the track at regular intervals. The next checkpoint glows gree
 > [!note] Why fitness = checkpoints, not distance
 > Distance from start doesn't work for a loop — after one lap, you're back at the start with distance = 0. Checkpoints count monotonically: 1 lap = 20 checkpoints, 2 laps = 40, etc. The AI is rewarded for making progress, not for surviving.
 
+### Extend it
+
+Change the checkpoint count from 20 to 5. Drive around and notice how coarse the fitness becomes — many cars will tie at 0 or 1 checkpoint. Now try 50 checkpoints. More checkpoints = finer-grained fitness = smoother evolution. But too many checkpoints placed close together can cause detection issues. 20 is a good balance for the oval.
+
 > [!check] Checkpoint
 > Drive around the track. Verify the checkpoint counter increments as you cross each gate. Verify the next checkpoint glows green. Stage 7 complete.
 
@@ -1034,11 +1313,15 @@ You built a complete driving simulation:
 
 | Rust Concept | Where You Used It |
 |-------------|-------------------|
+| Module system | `mod track;`, `mod car;`, `mod geometry;`, `pub` visibility |
+| `&self` vs `&mut self` | Read-only methods (`draw`, `direction`) vs mutating methods (`update`, `check_collision`) |
+| Slice references `&[T]` | Passing wall segments and checkpoints without copying |
+| `Option<T>` | Ray-segment intersection returns `Some(distance)` or `None` |
+| `Vec<T>` and `[T; N]` | Dynamic lists (walls, checkpoints) and fixed arrays (sensor readings) |
+| `const` | Sensor count, range, angles — compile-time constants |
+| Structs with methods | `Car`, `Track`, `CarInput` |
 | macroquad | Window, drawing, input, game loop |
-| `Vec2` math | Position, direction, ray casting |
 | Trigonometry | `cos`/`sin` for direction, sensor angles |
 | Line intersection | Cross products for collision and ray casting |
-| Structs with methods | `Car`, `Track`, `CarInput` |
-| Constants | Sensor angles, physics tuning values |
 
 **What's missing:** The car is controlled by your keyboard. In Act 2, you'll replace the keyboard with a neural network — 5 sensor inputs go in, steering and throttle come out. The network starts with random weights (the car drives randomly), and in Act 3, the genetic algorithm evolves better weights across generations.

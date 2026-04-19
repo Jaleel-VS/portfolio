@@ -1,6 +1,6 @@
 # Reference Guide
 
-> *Quick reference for neural network math, genetic algorithm operators, macroquad API, and geometry formulas.*
+> *Quick reference for neural network math, genetic algorithm operators, macroquad API, geometry formulas, module system, testing, and error handling.*
 
 ---
 
@@ -121,6 +121,144 @@ let perpendicular = vec2(-dir.y, dir.x);
 
 ---
 
+## Module System
+
+### File → Module mapping
+
+```
+src/
+├── main.rs          ← declares: mod track; mod car; mod geometry; mod nn; mod evolution;
+├── track.rs         ← module `track`
+├── car.rs           ← module `car`
+├── geometry.rs      ← module `geometry`
+├── nn.rs            ← module `nn`
+└── evolution.rs     ← module `evolution`
+```
+
+### Rules
+
+| Rule | Example |
+|------|---------|
+| Declare module in parent | `mod track;` in `main.rs` |
+| Import specific items | `use track::Track;` |
+| Cross-module import | `use crate::geometry;` in `car.rs` |
+| Make items visible | `pub struct`, `pub fn`, `pub field` |
+| Everything private by default | Forget `pub` → compiler error |
+
+### Common errors
+
+```
+error[E0432]: unresolved import `track`     → forgot `mod track;` in main.rs
+error[E0603]: struct `Track` is private     → forgot `pub` on the struct
+error[E0603]: function `segments_intersect` is private → forgot `pub` on the function
+```
+
+---
+
+## Testing Patterns
+
+### Basic test structure
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_something() {
+        assert_eq!(actual, expected);
+    }
+}
+```
+
+### Running tests
+
+```bash
+cargo test                    # all tests
+cargo test test_name          # specific test
+cargo test nn::tests          # all tests in a module
+```
+
+### Assertions
+
+```rust
+assert_eq!(a, b);                           // equality
+assert_ne!(a, b);                           // inequality
+assert!(condition);                          // boolean
+assert!(condition, "msg: {}", val);          // with message
+assert!((a - b).abs() < 0.0001);            // float comparison (avoid assert_eq! with floats)
+```
+
+### Testing randomness
+
+```rust
+// Run many trials, check statistical properties
+let mut count = 0;
+for _ in 0..1000 {
+    if some_random_function() { count += 1; }
+}
+assert!(count > 800, "Expected >80%, got {}", count);
+```
+
+---
+
+## Error Handling
+
+### The `Result` pattern
+
+```rust
+fn load_file(path: &str) -> Result<Data, String> {
+    let text = std::fs::read_to_string(path)
+        .map_err(|e| format!("Can't read {path}: {e}"))?;
+    let data: Data = serde_json::from_str(&text)
+        .map_err(|e| format!("Bad JSON: {e}"))?;
+    Ok(data)
+}
+```
+
+### Handling results
+
+```rust
+// Pattern 1: match
+match load_file("data.json") {
+    Ok(data) => { /* use data */ }
+    Err(e) => eprintln!("Error: {e}"),
+}
+
+// Pattern 2: if let (when you only care about success)
+if let Ok(data) = load_file("data.json") {
+    /* use data */
+}
+
+// Pattern 3: unwrap (prototyping only — panics on error)
+let data = load_file("data.json").unwrap();
+```
+
+### When to use what
+
+| Situation | Use |
+|-----------|-----|
+| File I/O, network, parsing | `Result<T, E>` with `?` |
+| Value might not exist | `Option<T>` with `if let` or `match` |
+| Prototyping, tests | `.unwrap()` (acceptable) |
+| Production code | Never `.unwrap()` on user-facing operations |
+
+---
+
+## Ownership Quick Reference
+
+| Pattern | Meaning |
+|---------|---------|
+| `fn f(x: T)` | Takes ownership — caller can't use `x` after |
+| `fn f(x: &T)` | Borrows read-only — caller keeps ownership |
+| `fn f(x: &mut T)` | Borrows mutably — caller keeps ownership, `f` can modify |
+| `x.clone()` | Creates a deep copy — both original and clone are independent |
+| `for item in &vec` | Borrows each item — vec still usable after loop |
+| `for item in &mut vec` | Mutably borrows each item — can modify in place |
+| `for item in vec` | Consumes the vec — can't use it after the loop |
+
+---
+
 ## macroquad Cheat Sheet
 
 ### Window and loop
@@ -230,7 +368,7 @@ Three crates. Everything else is built from scratch.
 ```
 src/
 ├── main.rs          ← Game loop, mode switching, HUD
-├── track.rs         ← Track geometry, drawing, checkpoints
+├── track.rs         ← Track geometry, drawing, checkpoints, save/load
 ├── car.rs           ← Car physics, sensors, collision, brain interface
 ├── nn.rs            ← Matrix, NeuralNetwork, forward pass, visualization
 ├── evolution.rs     ← Selection, crossover, mutation, speciation

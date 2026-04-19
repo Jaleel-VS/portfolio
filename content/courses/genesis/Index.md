@@ -10,6 +10,9 @@ Inspired by Karl Sims' 1994 paper "Evolved Virtual Creatures" — one of the mos
 
 **What makes this different from Piloto:** Piloto evolved a fixed brain (neural network weights) for a fixed body (car). Génesis evolves the *body itself* — the number of segments, where they connect, which joints are muscles, and how those muscles contract. The creature's morphology and behavior co-evolve.
 
+> [!warning] This is a learning project
+> The physics simulation and genetic algorithm are simplified for teaching. For real-world evolutionary robotics, use established frameworks like [DEAP](https://github.com/DEAP/deap) (Python) or [evosax](https://github.com/RobertTLange/evosax) (JAX). Rolling your own evolutionary algorithm for production use requires careful benchmarking and validation.
+
 ---
 
 ## Design Decisions
@@ -54,13 +57,13 @@ Build the physics engine: points, constraints, Verlet integration, ground collis
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 1 | The Void | macroquad setup, a single point falling under gravity | Very Easy | 15 min |
-| 2 | Verlet Integration | Position-based physics — `new = pos + (pos - old) + accel * dt²` | Easy | 35 min |
-| 3 | The Ground | Floor collision, bounce, friction — creatures need something to push against | Easy | 25 min |
-| 4 | The Bone | Distance constraint between two points — rigid connections | Medium | 40 min |
-| 5 | Constraint Solving | Iterative relaxation — solve constraints multiple times per frame for stability | Medium | 35 min |
-| 6 | The Body | Multiple nodes + bones = a connected structure. Drop it and watch it settle | Medium | 40 min |
-| 7 | The Muscle | A bone that oscillates — expands and contracts on a sine wave | Medium | 40 min |
+| 1 | The Void | macroquad setup, a single point falling under gravity | Very Easy | 25 min |
+| 2 | Verlet Integration | Position-based physics, `Point` struct, module system | Easy | 50 min |
+| 3 | The Ground | Floor collision, bounce, friction | Easy | 40 min |
+| 4 | The Bone | Distance constraint, index-based references, borrow checker | Medium | 60 min |
+| 5 | Constraint Solving | Iterative relaxation, `Simulation` struct | Medium | 50 min |
+| 6 | The Body | Multiple nodes + bones = a connected structure | Medium | 60 min |
+| 7 | The Muscle | Oscillating constraints, sine waves, `#[test]` introduction | Medium | 60 min |
 
 ### [[Act 2 - The Creature]] — Morphology and Genome (Stages 8-13)
 
@@ -68,12 +71,12 @@ Define what a creature *is*: a genome that encodes body shape and muscle paramet
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 8 | The Genome | Flat `Vec<f32>` encoding: node count, positions, connections, muscle params | Medium | 40 min |
-| 9 | Decoding a Creature | Genome → nodes + bones + muscles. The mapping from numbers to body | Medium | 45 min |
-| 10 | Random Creatures | Generate random genomes, decode them, see what shapes emerge | Easy | 30 min |
-| 11 | The Simulation | Run a creature for 10 seconds: physics + muscles + ground. Measure distance | Medium | 40 min |
-| 12 | 20 Creatures at Once | Spawn a population, run them side by side, color by fitness | Medium | 35 min |
-| 13 | The Camera | Side-scrolling camera that follows the best creature. Zoom controls | Easy | 25 min |
+| 8 | The Genome | Flat `Vec<f32>` encoding, `#[derive]`, `Result` and error handling | Medium | 60 min |
+| 9 | Decoding a Creature | Genome → nodes + bones + muscles, `?` operator | Medium | 70 min |
+| 10 | Random Creatures | Generate random genomes, `filter_map`, see what shapes emerge | Easy | 40 min |
+| 11 | The Simulation | Run a creature for 10 seconds, measure distance, headless eval | Medium | 60 min |
+| 12 | 20 Creatures at Once | Population, fitness coloring, `partial_cmp` for float sorting | Medium | 50 min |
+| 13 | The Camera | Side-scrolling camera, smooth follow, zoom controls | Easy | 35 min |
 
 ### [[Act 3 - The Evolution]] — Genetic Algorithm (Stages 14-20)
 
@@ -81,13 +84,13 @@ The same evolutionary loop as Piloto — but now it's evolving body shapes, not 
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 14 | Fitness Evaluation | Run all creatures, rank by distance, visualize fitness distribution | Easy | 25 min |
-| 15 | Selection and Crossover | Fitness-proportional selection, uniform crossover on genomes | Medium | 35 min |
-| 16 | Mutation | Perturb muscle params (small), add/remove nodes (rare, large) | Medium | 40 min |
-| 17 | Structural Mutation | Add a segment, remove a segment, change a bone to a muscle — body shape evolves | Hard | 50 min |
-| 18 | The Generation Loop | Select → crossover → mutate → simulate → repeat. Watch fitness climb | Medium | 35 min |
-| 19 | Elitism and Diversity | Keep the best, protect novel body plans with speciation-lite | Medium | 35 min |
-| 20 | The First Walker | Tune parameters until a creature reliably moves across the screen | Hard | 50 min |
+| 14 | Fitness Evaluation | Batch evaluation, fitness distribution, turbofish `::<f32>` | Easy | 40 min |
+| 15 | Selection and Crossover | Roulette wheel selection, uniform crossover | Medium | 50 min |
+| 16 | Mutation | Parameter-specific mutation, `iter_mut()`, clamping | Medium | 50 min |
+| 17 | Structural Mutation | Add/remove nodes, variable-length genomes, updated decoder | Hard | 75 min |
+| 18 | The Generation Loop | Select → crossover → mutate → simulate → repeat | Medium | 50 min |
+| 19 | Elitism and Diversity | Preserve best, protect novel body plans, iterator chains | Medium | 50 min |
+| 20 | The First Walker | Hyperparameter tuning, anti-flip penalty, the moment of emergence | Hard | 75 min |
 
 ### [[Act 4 - The Ecosystem]] — Visualization and Experiments (Stages 21-25)
 
@@ -95,15 +98,15 @@ Polish the simulation: beautiful rendering, creature replay, different environme
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 21 | Beautiful Creatures | Colored segments, muscle contraction visualization, motion trails | Medium | 35 min |
-| 22 | Replay Mode | Save the best creature's simulation, replay it in slow motion | Easy | 30 min |
-| 23 | Different Terrains | Flat ground, hills, obstacles — does the creature generalize? | Medium | 40 min |
-| 24 | Hall of Fame | Save the best creature from each generation, browse them, replay any | Medium | 35 min |
-| 25 | The Complete Génesis | Fitness graph, generation counter, terrain selector, speed controls, the full app | Medium | 35 min |
+| 21 | Beautiful Creatures | Colored segments, muscle contraction glow, motion trails | Medium | 50 min |
+| 22 | Replay Mode | Save/load with serde, JSON persistence, `.map_err()` | Easy | 45 min |
+| 23 | Different Terrains | Enums with data, `match` exhaustiveness, terrain height functions | Medium | 60 min |
+| 24 | Hall of Fame | Evolutionary history, `if let` pattern matching, browse mode | Medium | 50 min |
+| 25 | The Complete Génesis | Mode switching, HUD, terrain selector, speed controls | Medium | 50 min |
 
 ### [[Reference Guide]]
 
-Verlet integration formulas, constraint solving algorithm, genome encoding format, muscle oscillation math, macroquad drawing API, genetic algorithm operators.
+Verlet integration formulas, constraint solving algorithm, genome encoding format, muscle oscillation math, macroquad drawing API, genetic algorithm operators, module system reference, testing patterns, error handling patterns.
 
 ---
 
@@ -111,11 +114,11 @@ Verlet integration formulas, constraint solving algorithm, genome encoding forma
 
 | Act | Stages | Est. Time |
 |---|---|---|
-| The Primordial Soup | 7 | ~3.5 hrs |
-| The Creature | 6 | ~3.5 hrs |
-| The Evolution | 7 | ~4.5 hrs |
-| The Ecosystem | 5 | ~3 hrs |
-| **Total** | **25** | **~14.5 hrs** |
+| The Primordial Soup | 7 | ~5.5 hrs |
+| The Creature | 6 | ~5.5 hrs |
+| The Evolution | 7 | ~6.5 hrs |
+| The Ecosystem | 5 | ~4.5 hrs |
+| **Total** | **25** | **~22 hrs** |
 
 ## Tech Stack
 
@@ -136,3 +139,9 @@ Two crates. Physics, evolution, and creature encoding are all from scratch.
 - Why fitness function design determines what evolution discovers
 - What emergence means — complex behavior from simple rules
 - How Karl Sims' 1994 experiment worked (and why it's still impressive 30 years later)
+- Rust ownership, borrowing, and the borrow checker (through practical encounters)
+- Error handling with `Result`, `?`, and `.map_err()`
+- The module system (`mod`, `pub`, `use`)
+- Testing with `#[test]` and `cargo test`
+- Serialization with serde
+- Enums with data and exhaustive `match`
