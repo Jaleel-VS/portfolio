@@ -10,7 +10,7 @@
 
 ## Stage 31: Secret Passages — *'Tap the Right Brick'*
 
-**Difficulty:** Medium · **New concepts:** Enum variants with data, conditional tile mutation, discovery state
+*Difficulty: Medium*
 
 Hogwarts without secret passages is just a building. The passages are what make it *magical* — walls that aren't walls, shortcuts that reward the curious, teleportation that changes the tactical landscape. This stage teaches mutable pattern matching (destructuring *and* modifying in a single match arm), one of Rust's most elegant features, and introduces the discovery mechanic that gives exploration a tangible reward.
 
@@ -172,20 +172,19 @@ frame.render_widget(discovery_list, discovery_area);
 3. Play a terminal bell (`print!("\x07")`) when a passage is discovered
 4. **Challenge:** Add a "passage hint" system — when the player is within 3 tiles of an undiscovered passage, show a subtle `~` shimmer on nearby walls
 
-### Checkpoint
-
-After this stage, you should be able to walk into specific walls and get teleported, see discovered passages rendered as `◊`, and watch the discovery log update. The castle has secrets now — but a true Marauder needs *tools*. Stage 32 adds the Invisibility Cloak, Dungbombs, and other items that give you tactical options against Filch and Snape.
-
-- Walk into specific walls and get teleported
-- See discovered passages rendered as `◊`
-- See a discovery log updating in real-time
-- Undiscovered passages remain invisible (rendered as walls)
+> [!check] Checkpoint
+> After this stage, you should be able to walk into specific walls and get teleported, see discovered passages rendered as `◊`, and watch the discovery log update. The castle has secrets now — but a true Marauder needs *tools*. Stage 32 adds the Invisibility Cloak, Dungbombs, and other items that give you tactical options against Filch and Snape.
+>
+> - Walk into specific walls and get teleported
+> - See discovered passages rendered as `◊`
+> - See a discovery log updating in real-time
+> - Undiscovered passages remain invisible (rendered as walls)
 
 ---
 
 ## Stage 32: Items — *'The Weasley Twins' Legacy'*
 
-**Difficulty:** Medium · **New concepts:** Enums with behavior, inventory management, game effect system
+*Difficulty: Medium*
 
 Without items, the player's only option when Filch rounds the corner is "run." Items add tactical depth — the Invisibility Cloak freezes detection, Dungbombs redirect NPC pathfinding, Decoy Detonators create phantom targets. The elegant design insight: each item modifies *existing* systems (detection, NPC AI, line-of-sight) rather than creating new ones. This stage also introduces the timed-effect pattern — items create effects that tick down and expire, a pattern used in virtually every game with buffs or power-ups.
 
@@ -448,22 +447,21 @@ if let Some(pickup) = game.item_spawns.remove(&(game.current_floor, new_x, new_y
 3. Add a visual indicator when an effect is active (e.g., `[INVISIBLE 45t]` in the HUD)
 4. **Challenge:** Make the Dungbomb leave a visible smoke cloud (`░`) on the map for its duration
 
-### Checkpoint
-
-After this stage, you have tactical depth — items that interact with every system you've built. But free roam with items is still aimless. Stage 33 adds *missions* — objectives that give the player purpose and test their mastery of movement, items, and NPC avoidance.
-
-- Player can pick up items from the map
-- `[i]` opens inventory, Enter uses selected item
-- Invisibility Cloak freezes detection at 0
-- Dungbombs and Decoy Detonators redirect NPC pathfinding
-- Active effects tick down and expire
-- HUD shows active effect timers
+> [!check] Checkpoint
+> After this stage, you have tactical depth — items that interact with every system you've built. But free roam with items is still aimless. Stage 33 adds *missions* — objectives that give the player purpose and test their mastery of movement, items, and NPC avoidance.
+>
+> - Player can pick up items from the map
+> - `[i]` opens inventory, Enter uses selected item
+> - Invisibility Cloak freezes detection at 0
+> - Dungbombs and Decoy Detonators redirect NPC pathfinding
+> - Active effects tick down and expire
+> - HUD shows active effect timers
 
 ---
 
 ## Stage 33: Missions — *'Mischief Managed'*
 
-**Difficulty:** Medium · **New concepts:** State machines for objectives, trigger zones, completion tracking
+*Difficulty: Medium*
 
 Free roam is fun, but *missions* give purpose. Without objectives, the player wanders aimlessly — with them, every corridor becomes a route to plan, every NPC a threat to account for, every item a tactical choice. This stage introduces position-based trigger conditions and a mission state machine (Locked → Available → Active → Completed/Failed) that drives progressive gameplay. The missions are simple by design — no complex scripting, just "get from A to B without being caught" — because the *systems* you've already built provide all the complexity needed.
 
@@ -762,21 +760,20 @@ fn on_player_caught(game: &mut GameState) {
 3. Allow retrying failed missions (reset objectives, set back to Available)
 4. **Challenge:** Add a timer to "The Midnight Snack" — complete it within 300 ticks for a bonus
 
-### Checkpoint
-
-After this stage, the game has purpose — missions that test your mastery of every system. But close the game and all progress vanishes. Stage 34 adds save/load so discovered passages, inventory, score, and mission progress persist between sessions.
-
-- `[m]` opens mission panel with status icons
-- Missions unlock progressively
-- Objectives auto-complete when conditions are met
-- Getting caught fails stealth missions
-- Score increases on mission completion
+> [!check] Checkpoint
+> After this stage, the game has purpose — missions that test your mastery of every system. But close the game and all progress vanishes. Stage 34 adds save/load so discovered passages, inventory, score, and mission progress persist between sessions.
+>
+> - `[m]` opens mission panel with status icons
+> - Missions unlock progressively
+> - Objectives auto-complete when conditions are met
+> - Getting caught fails stealth missions
+> - Score increases on mission completion
 
 ---
 
 ## Stage 34: Save & Load — *'Your Progress Persists!'*
 
-**Difficulty:** Easy · **New concepts:** serde serialization, file I/O, JSON persistence
+*Difficulty: Easy*
 
 A game that forgets everything when you close it disrespects the player's time. This is the reward stage — everything you've built (discovered passages, inventory, score, mission progress) now persists between sessions. Rust's `serde` ecosystem makes this almost trivially easy: if your structs derive `Serialize` and `Deserialize`, the hard work is already done. The design lesson: save only what *changes* (player state), not what's *fixed* (map layout).
 
@@ -1010,21 +1007,20 @@ Human-readable, editable, debuggable. That's the beauty of JSON.
 3. Show "Last saved: 2 minutes ago" in the HUD
 4. **Challenge:** Add save file versioning — if the format changes, migrate old saves gracefully
 
-### Checkpoint
-
-After this stage, your progress persists — close the game, come back tomorrow, and your Marauder's Map remembers. The mechanics are complete. Stage 35 adds the atmospheric polish that makes Hogwarts *feel* alive: time-of-day color shifts, curfew warnings, detection meter urgency, and the small details that transform a tech demo into an experience.
-
-- `Ctrl+S` saves the game
-- Game auto-saves every ~1 minute
-- On startup, the game loads the save file if it exists
-- Discovered passages, inventory, score, and missions all persist
-- High scores are tracked locally
+> [!check] Checkpoint
+> After this stage, your progress persists — close the game, come back tomorrow, and your Marauder's Map remembers. The mechanics are complete. Stage 35 adds the atmospheric polish that makes Hogwarts *feel* alive: time-of-day color shifts, curfew warnings, detection meter urgency, and the small details that transform a tech demo into an experience.
+>
+> - `Ctrl+S` saves the game
+> - Game auto-saves every ~1 minute
+> - On startup, the game loads the save file if it exists
+> - Discovered passages, inventory, score, and missions all persist
+> - High scores are tracked locally
 
 ---
 
 ## Stage 35: Sound & Polish — *'The Castle Breathes'*
 
-**Difficulty:** Easy · **New concepts:** Terminal escape codes, atmospheric UI, timing-based events
+*Difficulty: Easy*
 
 A game isn't just mechanics — it's *atmosphere*. The difference between "a grid with NPCs" and "sneaking through Hogwarts at midnight" is polish: color shifts as night deepens, curfew warnings that build dread, a detection meter that pulses red as Filch closes in. This stage adds no new systems — it layers atmosphere on top of everything you've built, proving that small details compound into an experience that feels magical.
 
@@ -1231,22 +1227,21 @@ fn render_status_bar(frame: &mut Frame, game: &GameState, area: ratatui::layout:
 3. Add a "caught" animation — flash the screen red briefly before resetting
 4. **Challenge:** Add ghost trail effects — when a ghost passes through a tile, leave a faint `·` that fades over 5 ticks
 
-### Checkpoint
-
-After this stage, Hogwarts *breathes* — colors shift with the hour, curfew warnings build dread, and the detection meter pulses with urgency. The game is complete. But the ultimate gift to your players is letting them build their *own* Hogwarts. Stage 36 documents the JSON map format so anyone can create custom maps without touching Rust code.
-
-- Terminal bell sounds on key events
-- Curfew warnings appear at appropriate times
-- Map colors shift with time of day
-- Detection meter changes color as danger increases
-- Atmospheric text appears when entering notable areas
-- Status bar shows all key info at a glance
+> [!check] Checkpoint
+> After this stage, Hogwarts *breathes* — colors shift with the hour, curfew warnings build dread, and the detection meter pulses with urgency. The game is complete. But the ultimate gift to your players is letting them build their *own* Hogwarts. Stage 36 documents the JSON map format so anyone can create custom maps without touching Rust code.
+>
+> - Terminal bell sounds on key events
+> - Curfew warnings appear at appropriate times
+> - Map colors shift with time of day
+> - Detection meter changes color as danger increases
+> - Atmospheric text appears when entering notable areas
+> - Status bar shows all key info at a glance
 
 ---
 
 ## Stage 36: Custom Maps — *'I Open at the Close'*
 
-**Difficulty:** Medium · **New concepts:** JSON schema documentation, data-driven design, modding support
+*Difficulty: Medium*
 
 The ultimate test of good architecture: can someone else build on it without reading your source code? This stage documents the JSON map format so thoroughly that anyone can design custom floors, place NPCs, hide secret passages, and create missions — all without touching Rust. It's also a capstone lesson in *data-driven design*: the game engine is generic, the content is data. Everything specific to Hogwarts lives in JSON; everything generic lives in Rust.
 
@@ -1537,15 +1532,14 @@ cargo run -- maps/my_custom_castle.json
 3. Create a `maps/` directory with the default Hogwarts map and a sample custom map
 4. **Challenge:** Add a `--validate` CLI flag that checks a map file for errors without running the game
 
-### Checkpoint
-
-After this stage, the Marauder's Map is complete — and extensible. Anyone can create their own Hogwarts without touching Rust code. The game engine is generic; the magic is in the data.
-
-- Maps load from JSON files
-- Custom maps can be passed via command line
-- Map format is fully documented (this stage *is* the documentation)
-- Validation catches common errors before the game starts
-- Players can create and share their own Hogwarts layouts
+> [!check] Checkpoint
+> After this stage, the Marauder's Map is complete — and extensible. Anyone can create their own Hogwarts without touching Rust code. The game engine is generic; the magic is in the data.
+>
+> - Maps load from JSON files
+> - Custom maps can be passed via command line
+> - Map format is fully documented (this stage *is* the documentation)
+> - Validation catches common errors before the game starts
+> - Players can create and share their own Hogwarts layouts
 
 ---
 

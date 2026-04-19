@@ -16,15 +16,16 @@ Source text (.rune file or REPL input)
 
 **Prerequisites:** Acts 1–3 complete — you have a working lexer, parser, and evaluator. The full pipeline can evaluate Runescript source text to produce values and side effects.
 
-**What you'll learn:**
-- External crate dependencies with `Cargo.toml`
-- The `rustyline` crate for readline-style input (history, arrow keys, Ctrl-C)
-- Persistent environment across REPL inputs
-- Multi-line input detection via brace counting
-- File I/O with `std::fs`
-- Command-line argument parsing with `std::env`
-- Edit distance for "did you mean?" suggestions
-- Colored terminal output
+> [!tip] What You'll Learn
+> - External crate dependencies with `Cargo.toml`
+> - The `rustyline` crate for readline-style input (history, arrow keys, Ctrl-C)
+> - Persistent environment across REPL inputs
+> - Multi-line input detection via brace counting
+> - File I/O with `std::fs`
+> - Command-line argument parsing with `std::env`
+> - Edit distance for "did you mean?" suggestions
+> - Colored terminal output
+
 
 **Estimated time:** 4–6 hours across all 4 stages.
 
@@ -33,6 +34,8 @@ Source text (.rune file or REPL input)
 ---
 
 ## Stage 23: The Scrying Pool — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Set up `rustyline` for interactive input, build a read-eval-print loop with a persistent environment, and auto-print expression results.
 
@@ -46,7 +49,7 @@ You have all three pipeline stages — lexer, parser, evaluator — but no way t
 
 The REPL (Read-Eval-Print Loop) is the interpreter's user interface. It reads a line, feeds it through lex → parse → evaluate, prints the result, and loops. The critical design decision from §9.1: the environment **persists** across inputs. When you type `let hp = 100` on one line, `hp` is still defined on the next line. This means the evaluator and its environment live *outside* the loop.
 
-### Python/TS equivalent
+### Python equivalent
 
 Python's REPL is built in — just run `python3`. The pattern is:
 
@@ -80,7 +83,7 @@ edition = "2024"
 rustyline = "18"
 ```
 
-When you next run `cargo build`, Cargo downloads and compiles `rustyline` and all its transitive dependencies. This is like `pip install rustyline` or `npm install rustyline` — but Cargo pins the exact version in `Cargo.lock` automatically.
+When you next run `cargo build`, Cargo downloads and compiles `rustyline` and all its transitive dependencies. This is like `pip install rustyline` — but Cargo pins the exact version in `Cargo.lock` automatically.
 
 **Step 2: Create a `run_pipeline` helper.**
 
@@ -207,13 +210,12 @@ fn main() {
 
 **Hint for auto-printing:** The spec says "Expressions auto-print their result." This means if the user types `42 + 8`, the REPL should print `50`. But if they type `let x = 10`, it should print nothing (or `nil`). Your `run` function already returns the last value — just check if it's `Nil` before printing.
 
-### Common mistakes
-
-- **Creating a new `Evaluator` inside the loop** — this destroys the environment every iteration. The evaluator must live *outside* the loop so `let hp = 100` on line 1 is still visible on line 2.
-- **Breaking on errors** — `Err(msg)` from the pipeline should print the error and `continue`, not `break`. The REPL is resilient — miscast spells don't shatter the pool.
-- **Forgetting `mod runner;` in `main.rs`** — Rust won't find the module without the declaration.
-- **Using `readline` without `&line` in `add_history_entry`** — the method takes `AsRef<str>`, so `&line` works. But if you pass `line` directly (without `&`), it moves the string and you can't use it afterward.
-- **Not handling the `_` wildcard in the `ReadlineError` match** — `ReadlineError` is `#[non_exhaustive]`, meaning future versions may add variants. You must have a catch-all arm: `Err(err) => { ... }`.
+> [!warning] Common Mistakes
+> - **Creating a new `Evaluator` inside the loop** — this destroys the environment every iteration. The evaluator must live *outside* the loop so `let hp = 100` on line 1 is still visible on line 2.
+> - **Breaking on errors** — `Err(msg)` from the pipeline should print the error and `continue`, not `break`. The REPL is resilient — miscast spells don't shatter the pool.
+> - **Forgetting `mod runner;` in `main.rs`** — Rust won't find the module without the declaration.
+> - **Using `readline` without `&line` in `add_history_entry`** — the method takes `AsRef<str>`, so `&line` works. But if you pass `line` directly (without `&`), it moves the string and you can't use it afterward.
+> - **Not handling the `_` wildcard in the `ReadlineError` match** — `ReadlineError` is `#[non_exhaustive]`, meaning future versions may add variants. You must have a catch-all arm: `Err(err) => { ... }`.
 
 ### Verify it works
 
@@ -244,16 +246,17 @@ Key behaviors to test:
 
 The scrying pool shimmers with single-line incantations. But try defining a function — the `{` hangs open and the parser chokes. Next, we teach the pool to detect incomplete input and wait for the closing `}`.
 
-### Checkpoint
-
-Your project now has:
-- `Cargo.toml` with `rustyline = "18"` dependency
-- `src/runner.rs` — pipeline helper that takes `&mut Evaluator`
-- `src/main.rs` — REPL loop using `DefaultEditor`, persistent evaluator
+> [!check] Checkpoint
+> Your project now has:
+> - `Cargo.toml` with `rustyline = "18"` dependency
+> - `src/runner.rs` — pipeline helper that takes `&mut Evaluator`
+> - `src/main.rs` — REPL loop using `DefaultEditor`, persistent evaluator
 
 ---
 
 ## Stage 24: Multi-Line Incantations — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Detect incomplete input (unmatched `{`), collect continuation lines with a `.. ` prompt, and enable persistent history saved to disk.
 
@@ -273,7 +276,7 @@ A REPL that only accepts single lines is crippled. You can't define a function:
 
 This is the same approach Python uses for multi-line input — when you type `def foo():` and press Enter, the prompt changes to `...` and waits for more.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def is_complete(source: str) -> bool:
@@ -428,12 +431,11 @@ fn history_path() -> PathBuf {
 
 This uses only the standard library — no extra dependency needed. `std::env::var("HOME")` reads the `HOME` environment variable (set on macOS and Linux). If it's not set, we fall back to the current directory.
 
-### Common mistakes
-
-- **Counting braces inside strings** — `"hello { world"` has an unmatched `{` but it's inside a string, so it shouldn't count. The `in_string` flag handles this.
-- **Forgetting to clear the buffer** — if you don't `buffer.clear()` after evaluation, the next input gets appended to the previous one.
-- **Adding each line to history separately** — the user wants to recall the entire multi-line block with one up-arrow press, not line by line. Add to history only when the input is complete.
-- **Not handling Ctrl-C during multi-line** — without the buffer-clear logic, Ctrl-C would leave stale partial input in the buffer, causing confusing errors on the next input.
+> [!warning] Common Mistakes
+> - **Counting braces inside strings** — `"hello { world"` has an unmatched `{` but it's inside a string, so it shouldn't count. The `in_string` flag handles this.
+> - **Forgetting to clear the buffer** — if you don't `buffer.clear()` after evaluation, the next input gets appended to the previous one.
+> - **Adding each line to history separately** — the user wants to recall the entire multi-line block with one up-arrow press, not line by line. Add to history only when the input is complete.
+> - **Not handling Ctrl-C during multi-line** — without the buffer-clear logic, Ctrl-C would leave stale partial input in the buffer, causing confusing errors on the next input.
 
 ### Verify it works
 
@@ -474,15 +476,16 @@ cargo run
 
 Multi-line incantations flow naturally now — the pool waits patiently for the closing brace. But the pool only works interactively. Next, we add scroll execution: reading `.rune` files from the command line, so dungeon rooms can be scripted and run directly.
 
-### Checkpoint
-
-Updated files:
-- `src/main.rs` — REPL with multi-line buffer, `is_complete()` brace counter, persistent history
-- History file at `~/.runescript_history`
+> [!check] Checkpoint
+> Updated files:
+> - `src/main.rs` — REPL with multi-line buffer, `is_complete()` brace counter, persistent history
+> - History file at `~/.runescript_history`
 
 ---
 
 ## Stage 25: Scroll Execution — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Add file execution mode — read a `.rune` scroll, run it through the full pipeline, pre-inject the `hunter` object (§9.2), and exit with appropriate codes.
 
@@ -492,11 +495,11 @@ Updated files:
 
 ### Why this stage
 
-The REPL is great for experimentation, but the real purpose of Runescript is scripting dungeon rooms. Each room has a `.rune` file that defines what happens when a hunter enters. File mode reads the entire file, runs it through the pipeline, and exits — like `python script.py` or `node script.js`.
+The REPL is great for experimentation, but the real purpose of Runescript is scripting dungeon rooms. Each room has a `.rune` file that defines what happens when a hunter enters. File mode reads the entire file, runs it through the pipeline, and exits — like `python script.py`.
 
 The spec (§9.2) requires a `hunter` object pre-injected into the global scope so scripts can reference `hunter.hp`, `hunter.name`, etc. without defining them. In the real game, this object comes from the game engine. In standalone mode, we use a test hunter.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 import sys
@@ -631,12 +634,11 @@ if enemy_hp <= 0 {
 
 Copy the remaining examples (03–06) from the spec §10.3–§10.6. These are your integration tests — if they all run correctly, the interpreter is working.
 
-### Common mistakes
-
-- **Forgetting to inject the hunter before running** — scripts that reference `hunter.hp` will fail with "undefined variable 'hunter'" if you forget `inject_hunter()`.
-- **Using `process::exit()` in the REPL** — `process::exit` is for file mode only. In the REPL, errors should print and continue.
-- **Not printing errors to stderr** — use `eprintln!`, not `println!`, for error messages. This follows Unix convention: stdout for program output, stderr for diagnostics. It matters when piping output.
-- **Hardcoding the file extension check** — the spec doesn't require `.rune` extension. Any file path should work. Don't reject `script.txt` — just try to read and run it.
+> [!warning] Common Mistakes
+> - **Forgetting to inject the hunter before running** — scripts that reference `hunter.hp` will fail with "undefined variable 'hunter'" if you forget `inject_hunter()`.
+> - **Using `process::exit()` in the REPL** — `process::exit` is for file mode only. In the REPL, errors should print and continue.
+> - **Not printing errors to stderr** — use `eprintln!`, not `println!`, for error messages. This follows Unix convention: stdout for program output, stderr for diagnostics. It matters when piping output.
+> - **Hardcoding the file extension check** — the spec doesn't require `.rune` extension. Any file path should work. Don't reject `script.txt` — just try to read and run it.
 
 ### Verify it works
 
@@ -686,15 +688,16 @@ Note the `--` between `cargo run` and the filename — this tells Cargo "everyth
 
 Scrolls execute from the command line and the hunter object awaits within. But when a spell misfires, the error message is bare — no suggestions, no color, no guidance. Next, we polish the diagnostics so miscast spells point the hunter toward the fix.
 
-### Checkpoint
-
-Updated files:
-- `src/main.rs` — `main()` dispatches to `run_repl()` or `run_file()`, `inject_hunter()` pre-populates the environment
-- `examples/01_hello.rune` through `examples/06_boss_encounter.rune` — spec example scripts
+> [!check] Checkpoint
+> Updated files:
+> - `src/main.rs` — `main()` dispatches to `run_repl()` or `run_file()`, `inject_hunter()` pre-populates the environment
+> - `examples/01_hello.rune` through `examples/06_boss_encounter.rune` — spec example scripts
 
 ---
 
 ## Stage 26: Miscast Diagnostics — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Polish error messages with line/column context, implement "did you mean?" suggestions via edit distance (§8.4), and add colored terminal output.
 
@@ -712,7 +715,7 @@ Good error messages are the difference between a frustrating language and a plea
 
 ...in red text, with the suggestion in yellow. This matches the spec's error format (§8.2) and makes typos easy to spot.
 
-### Python/TS equivalent
+### Python equivalent
 
 Edit distance in Python:
 
@@ -940,12 +943,11 @@ mod tests {
 }
 ```
 
-### Common mistakes
-
-- **Off-by-one in the DP matrix** — the matrix is `(m+1) x (n+1)`, not `m x n`. Index `dp[0][j]` represents transforming an empty string to `b[..j]`.
-- **Suggesting the exact same name** — if `name` is in scope (distance 0), don't suggest it. The `dist > 0` filter handles this.
-- **ANSI codes in non-terminal output** — if stdout is piped to a file, ANSI codes produce garbage. For a production tool, you'd check `atty::is(Stream::Stderr)` or use the `colored` crate. For this project, raw ANSI codes are fine.
-- **Forgetting `mod diagnostics;` in `main.rs`** — declare the new module.
+> [!warning] Common Mistakes
+> - **Off-by-one in the DP matrix** — the matrix is `(m+1) x (n+1)`, not `m x n`. Index `dp[0][j]` represents transforming an empty string to `b[..j]`.
+> - **Suggesting the exact same name** — if `name` is in scope (distance 0), don't suggest it. The `dist > 0` filter handles this.
+> - **ANSI codes in non-terminal output** — if stdout is piped to a file, ANSI codes produce garbage. For a production tool, you'd check `atty::is(Stream::Stderr)` or use the `colored` crate. For this project, raw ANSI codes are fine.
+> - **Forgetting `mod diagnostics;` in `main.rs`** — declare the new module.
 
 ### Verify it works
 
@@ -976,15 +978,14 @@ cargo run -- /tmp/test_error.rune
 # Exit code: 1
 ```
 
-### Checkpoint
-
-New files:
-- `src/diagnostics.rs` — `edit_distance()`, `suggest_variable()`, ANSI color constants, 7 tests
-
-Updated files:
-- `src/evaluator.rs` — `Ident` case calls `suggest_variable` on undefined variable
-- `src/environment.rs` — added `all_names()` method
-- `src/main.rs` — added `mod diagnostics;`, colored error output in REPL
+> [!check] Checkpoint
+> New files:
+> - `src/diagnostics.rs` — `edit_distance()`, `suggest_variable()`, ANSI color constants, 7 tests
+>
+> Updated files:
+> - `src/evaluator.rs` — `Ident` case calls `suggest_variable` on undefined variable
+> - `src/environment.rs` — added `all_names()` method
+> - `src/main.rs` — added `mod diagnostics;`, colored error output in REPL
 
 ---
 

@@ -31,7 +31,7 @@ This is where the language-learning theme of the course pays off. Every stage te
 
 A monolingual spell checker is a solved problem. The interesting challenge begins when you load multiple dictionaries and must decide which one to consult — or whether to consult all of them. This stage introduces the `MultiChecker` pattern: one `Checker` per language, keyed by a `Language` enum, with cross-language deduplication for the thousands of cognates (like "animal" and "hospital") that are valid in English, Spanish, and Portuguese simultaneously.
 
-*Difficulty: Medium* | *New concepts: `HashMap` of checkers, enum-keyed data structures, dictionary management*
+*Difficulty: Medium*
 
 ### One Checker Per Language
 
@@ -362,15 +362,14 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Loading all languages when the user specified one.** If `--lang en` is set, only load English. Loading three dictionaries triples startup time and memory usage for no benefit.
-
-**Not handling missing dictionaries gracefully.** If the user hasn't installed the Portuguese dictionary, `lexicon check --lang pt file.txt` should give a clear error, not a panic.
-
-**Checking against all languages when one is specified.** If the user said `--lang es`, don't check against English and Portuguese too. The `--lang` flag means "I know what language this is."
-
-Multiple dictionaries are loaded and queryable, but the user still has to tell Lexicon which language to use. For a truly polyglot tool, Lexicon should figure it out on its own. Stage 29 adds automatic language detection.
+> [!warning] Common Mistakes
+> **Loading all languages when the user specified one.** If `--lang en` is set, only load English. Loading three dictionaries triples startup time and memory usage for no benefit.
+>
+> **Not handling missing dictionaries gracefully.** If the user hasn't installed the Portuguese dictionary, `lexicon check --lang pt file.txt` should give a clear error, not a panic.
+>
+> **Checking against all languages when one is specified.** If the user said `--lang es`, don't check against English and Portuguese too. The `--lang` flag means "I know what language this is."
+>
+> Multiple dictionaries are loaded and queryable, but the user still has to tell Lexicon which language to use. For a truly polyglot tool, Lexicon should figure it out on its own. Stage 29 adds automatic language detection.
 
 ### What Changed
 
@@ -382,7 +381,7 @@ Lexicon now loads multiple dictionaries and can check words against any or all o
 
 Asking users to specify `--lang` every time defeats the purpose of a polyglot tool. Language detection sounds like it should require machine learning, but for well-separated languages with distinct vocabularies, a beautifully simple approach works: count how many of the text's words appear in each language's list of function words. Articles, prepositions, and conjunctions — the words linguists find least interesting — turn out to be the most powerful language fingerprints.
 
-*Difficulty: Medium* | *New concepts: word frequency overlap scoring, stop words, confidence thresholds*
+*Difficulty: Medium*
 
 ### The Problem
 
@@ -680,17 +679,16 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Using content words instead of function words.** Content words ("cat", "house", "run") overlap heavily between languages. Function words ("the", "el", "o") are the real discriminators.
-
-**Not lowercasing before comparison.** "The" won't match "the" in your top-word set if you forget to normalize. The tokenizer handles this, but if you're comparing raw text, remember to lowercase.
-
-**Treating low scores as confident.** If the best score is 8% and the second is 6%, that's noise, not a detection. Require both an absolute threshold (>15%) and a relative margin (>1.5x second place).
-
-**Hardcoding "de" as Spanish.** "De" is in the top words for both Spanish AND Portuguese. It's not a discriminator. The detection works because the *combination* of function words differs, not any single word.
-
-Word-frequency detection handles long texts with high accuracy, but short texts — "Hola amigo", "informação importante" — may contain no function words at all. Stage 30 adds a character-level fallback that can distinguish languages from the shape of their trigrams, even in a single word.
+> [!warning] Common Mistakes
+> **Using content words instead of function words.** Content words ("cat", "house", "run") overlap heavily between languages. Function words ("the", "el", "o") are the real discriminators.
+>
+> **Not lowercasing before comparison.** "The" won't match "the" in your top-word set if you forget to normalize. The tokenizer handles this, but if you're comparing raw text, remember to lowercase.
+>
+> **Treating low scores as confident.** If the best score is 8% and the second is 6%, that's noise, not a detection. Require both an absolute threshold (>15%) and a relative margin (>1.5x second place).
+>
+> **Hardcoding "de" as Spanish.** "De" is in the top words for both Spanish AND Portuguese. It's not a discriminator. The detection works because the *combination* of function words differs, not any single word.
+>
+> Word-frequency detection handles long texts with high accuracy, but short texts — "Hola amigo", "informação importante" — may contain no function words at all. Stage 30 adds a character-level fallback that can distinguish languages from the shape of their trigrams, even in a single word.
 
 ### What Changed
 
@@ -704,7 +702,7 @@ But short texts remain a problem. "Hola amigo" has no function words to count. T
 
 Word-frequency detection fails on short texts because there aren't enough function words to count. But even a single word carries a language signature in its *character patterns*. Spanish "información" ends in "-ción"; Portuguese "informação" ends in "-ção". These three-character sequences — trigrams — are the sub-word fingerprints that let you distinguish languages from fragments as short as a single word. This stage introduces cosine similarity over sparse vectors, a technique that appears everywhere from search engines to recommendation systems.
 
-*Difficulty: Hard* | *New concepts: character n-grams, cosine similarity, frequency vectors, the `HashMap` as a sparse vector*
+*Difficulty: Hard*
 
 ### Why Trigrams?
 
@@ -1019,17 +1017,16 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Not padding with spaces.** Without the space prefix/suffix, you miss word-boundary trigrams like `" th"` and `"he "`. These are some of the most discriminating trigrams.
-
-**Using raw counts instead of normalized vectors.** A longer text has more trigrams, so raw counts aren't comparable across texts of different lengths. Normalize to unit vectors before computing cosine similarity.
-
-**Building profiles from too-small corpora.** If your reference English profile is built from "the cat sat on the mat", it won't have enough trigram diversity to distinguish from other languages. Use at least a few hundred words per language.
-
-**Confusing L1 and L2 normalization.** L1 normalization (divide by sum) gives a probability distribution. L2 normalization (divide by Euclidean norm) gives a unit vector for cosine similarity. We want L2 here.
-
-With two-tier language detection in place — word frequency for long texts, trigrams for short ones — Lexicon can identify the language of almost any input. But detection is only half the multi-language story. Stage 31 ensures that custom dictionaries respect language boundaries, so "servidor" doesn't leak from Spanish into English.
+> [!warning] Common Mistakes
+> **Not padding with spaces.** Without the space prefix/suffix, you miss word-boundary trigrams like `" th"` and `"he "`. These are some of the most discriminating trigrams.
+>
+> **Using raw counts instead of normalized vectors.** A longer text has more trigrams, so raw counts aren't comparable across texts of different lengths. Normalize to unit vectors before computing cosine similarity.
+>
+> **Building profiles from too-small corpora.** If your reference English profile is built from "the cat sat on the mat", it won't have enough trigram diversity to distinguish from other languages. Use at least a few hundred words per language.
+>
+> **Confusing L1 and L2 normalization.** L1 normalization (divide by sum) gives a probability distribution. L2 normalization (divide by Euclidean norm) gives a unit vector for cosine similarity. We want L2 here.
+>
+> With two-tier language detection in place — word frequency for long texts, trigrams for short ones — Lexicon can identify the language of almost any input. But detection is only half the multi-language story. Stage 31 ensures that custom dictionaries respect language boundaries, so "servidor" doesn't leak from Spanish into English.
 
 ### What Changed
 
@@ -1041,7 +1038,7 @@ Lexicon now has a two-tier language detection system. Word frequency handles lon
 
 A single custom dictionary shared across all languages is a cross-contamination risk. "Embarazada" means "pregnant" in Spanish — adding it to a universal dictionary would make Lexicon accept it in English text, where it doesn't belong. Per-language custom dictionaries enforce the same boundaries that separate the standard dictionaries, while a universal tier handles true cognates like "kubernetes" that transcend language. This stage also introduces false friends and cognates — the linguistic concepts that make multi-language spell checking genuinely tricky.
 
-*Difficulty: Easy* | *New concepts: language-tagged data, cognates, false friends*
+*Difficulty: Easy*
 
 ### The Problem with One Custom Dictionary
 
@@ -1230,13 +1227,12 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Defaulting to universal when the user probably means language-specific.** If the user runs `lexicon dict add servidor` while checking a Spanish file, it might make sense to default to the detected language rather than universal. But this is a UX decision — for now, require the explicit `--lang` flag.
-
-**Not normalizing language-specific custom words.** Same as Stage 25 — always NFC-normalize and lowercase before storing and comparing.
-
-Per-language custom dictionaries close the last gap in Lexicon's multi-language support. The system is feature-complete. Stage 32 puts it all through a grand benchmark — loading all three dictionaries, detecting languages, checking mixed-language text, and measuring every metric against the spec targets.
+> [!warning] Common Mistakes
+> **Defaulting to universal when the user probably means language-specific.** If the user runs `lexicon dict add servidor` while checking a Spanish file, it might make sense to default to the detected language rather than universal. But this is a UX decision — for now, require the explicit `--lang` flag.
+>
+> **Not normalizing language-specific custom words.** Same as Stage 25 — always NFC-normalize and lowercase before storing and comparing.
+>
+> Per-language custom dictionaries close the last gap in Lexicon's multi-language support. The system is feature-complete. Stage 32 puts it all through a grand benchmark — loading all three dictionaries, detecting languages, checking mixed-language text, and measuring every metric against the spec targets.
 
 ### What Changed
 
@@ -1248,7 +1244,7 @@ Custom dictionaries are now language-aware. Technical terms like "kubernetes" go
 
 This is the capstone. Every component you've built across five acts — trie, bloom filter, BK-tree, tokenizer, checker, CLI, language detection, custom dictionaries — gets exercised in a single end-to-end benchmark. The grand benchmark isn't just a performance test; it's a proof of completeness. If every phase passes, you've built a real, working, multi-language spell checker from scratch.
 
-*Difficulty: Medium* | *New concepts: multi-language benchmarking, mixed-language documents, comprehensive performance reporting*
+*Difficulty: Medium*
 
 ### The Final Test
 
@@ -1528,15 +1524,14 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Not warming up before benchmarking.** The first dictionary load includes file system cache misses. Run the load twice and report the second time, or report both cold and warm times.
-
-**Comparing wall-clock times across different machines.** Benchmark results depend on CPU, memory speed, and system load. Report relative numbers (words/second) rather than absolute times when comparing.
-
-**Forgetting to use `--release` mode.** Debug builds are 10-50x slower. Always benchmark with `cargo run --release -- bench`.
-
-The grand benchmark is both a validation and a celebration. Every number it reports traces back to a data structure you built by hand, an algorithm you derived from first principles, or a design decision you made with intention.
+> [!warning] Common Mistakes
+> **Not warming up before benchmarking.** The first dictionary load includes file system cache misses. Run the load twice and report the second time, or report both cold and warm times.
+>
+> **Comparing wall-clock times across different machines.** Benchmark results depend on CPU, memory speed, and system load. Report relative numbers (words/second) rather than absolute times when comparing.
+>
+> **Forgetting to use `--release` mode.** Debug builds are 10-50x slower. Always benchmark with `cargo run --release -- bench`.
+>
+> The grand benchmark is both a validation and a celebration. Every number it reports traces back to a data structure you built by hand, an algorithm you derived from first principles, or a design decision you made with intention.
 
 ### What Changed
 

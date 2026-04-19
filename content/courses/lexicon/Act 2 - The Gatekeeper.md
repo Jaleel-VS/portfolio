@@ -44,7 +44,7 @@ The Check Pipeline (what we're building toward):
 
 Every bloom filter rests on a foundation of raw bits. Before we can hash words or test membership, we need a way to flip individual bits on and off inside a compact block of memory. This stage teaches you the bitwise operations — shift, AND, OR, NOT — that underpin not just bloom filters but hash tables, compression, and cryptography. Master them here and they'll serve you everywhere.
 
-**Difficulty: Easy** · **Lines of code: ~50** · **Concepts: bitwise ops, Vec\<u64\>, indexing**
+*Difficulty: Easy*
 
 Right now we have a trie that can check words, but every lookup walks the tree node by node. We can't pre-screen words cheaply — there's no "fast reject" path. We need a compact bit-level structure that can answer "is this bit set?" in O(1) time, which the bloom filter will build on.
 
@@ -191,17 +191,14 @@ impl BitArray {
 
 Let's walk through every line that might be unfamiliar:
 
-- **`pub struct BitArray`** — `pub` makes it visible outside this module. A `struct` is like a Python `class` or TypeScript `interface`, but it only holds data — methods are defined separately in `impl` blocks.
-- **`vec![0u64; num_words]`** — the `vec!` macro creates a heap-allocated vector. The `0u64` is the initial value, and `num_words` is how many copies. This is Rust's equivalent of `[0] * n` in Python or `new Array(n).fill(0)` in TypeScript.
+- **`pub struct BitArray`** — `pub` makes it visible outside this module. A `struct` is like a Python `class`, but it only holds data — methods are defined separately in `impl` blocks.
+- **`vec![0u64; num_words]`** — the `vec!` macro creates a heap-allocated vector. The `0u64` is the initial value, and `num_words` is how many copies. This is Rust's equivalent of `[0] * n` in Python.
 - **`&mut self`** — the `set` and `clear` methods need to *modify* the bit array, so they take a mutable reference. `get` only reads, so it takes `&self` (immutable reference). This is Rust's ownership system enforcing read/write discipline at compile time.
 - **`assert!`** — panics (crashes) if the condition is false. In production code you might return a `Result` instead, but for a learning project, panicking on invalid input is fine.
 - **`1u64 << bit`** — the `u64` suffix is critical. Without it, Rust defaults to `i32`, and shifting a 32-bit integer left by 32+ positions is undefined behavior in C and a panic in Rust.
 
-### Common Mistake: Off-by-One in Word Count
-
-If you write `num_bits / 64` instead of `(num_bits + 63) / 64`, you'll allocate one too few `u64`s when `num_bits` isn't a multiple of 64. For example, 65 bits needs 2 `u64`s, but `65 / 64 = 1`. The `+ 63` trick rounds up integer division.
-
-> **TypeScript comparison:** `Math.ceil(numBits / 64)` does the same thing, but floating-point division can lose precision for very large numbers. The integer trick `(n + d - 1) / d` is exact.
+> [!warning] Common Mistake: Off-by-One in Word Count
+> If you write `num_bits / 64` instead of `(num_bits + 63) / 64`, you'll allocate one too few `u64`s when `num_bits` isn't a multiple of 64. For example, 65 bits needs 2 `u64`s, but `65 / 64 = 1`. The `+ 63` trick rounds up integer division.
 
 ### Tests
 
@@ -336,7 +333,7 @@ Next up: we need a way to convert words into bit positions. That's what hash fun
 
 A bit array without a hash function is just a row of switches with no labels. We need a deterministic way to convert any word — "olá", "recibir", "café" — into a number that selects a bit position. FNV-1a is the simplest hash function worth using: ten lines of code, zero dependencies, and good enough distribution to serve as one half of our double-hashing scheme.
 
-**Difficulty: Easy** · **Lines of code: ~10** · **Concepts: byte iteration, wrapping arithmetic, XOR**
+*Difficulty: Easy*
 
 A hash function takes arbitrary input (a word like "olá") and produces a fixed-size number (a `u64`). Good hash functions spread their outputs evenly across the number space — "olá" and "ola" should produce wildly different numbers even though they differ by just one accent.
 
@@ -553,7 +550,7 @@ FNV-1a is fast and simple, but it has a weakness: its bit mixing isn't great. Ch
 
 FNV-1a is fast and simple, but it processes one byte at a time and its mixing is modest — changing one input byte only ripples through nearby output bits. For a bloom filter, we want a second hash function where changing a single input bit flips roughly *half* the output bits (the "avalanche effect"). MurmurHash3 delivers exactly that, and building it by hand teaches you block processing, bit rotation, and the finalization step that separates toy hashes from production ones.
 
-**Difficulty: Medium** · **Lines of code: ~40** · **Concepts: bit rotation, avalanche effect, block processing**
+*Difficulty: Medium*
 
 MurmurHash3 was created by Austin Appleby in 2008 and is in the public domain. The name comes from its two core operations: **mu**ltiply and **r**otate. It's designed for speed *and* excellent distribution — every input bit influences every output bit (the "avalanche effect").
 
@@ -849,19 +846,16 @@ mod murmur3_tests {
 }
 ```
 
-### Common Mistake: Integer Overflow Without Wrapping
-
-If you write `k1 *= C1` instead of `k1 = k1.wrapping_mul(C1)`, Rust will panic in debug mode:
-
-```
-thread 'test' panicked at 'attempt to multiply with overflow'
-```
-
-Every arithmetic operation in MurmurHash3 must use `.wrapping_mul()` and `.wrapping_add()`. The overflow is intentional — it's part of the mixing.
-
-> **TypeScript comparison:** JavaScript numbers are 64-bit floats, so you can't do proper 32-bit wrapping arithmetic without `Math.imul()` and manual masking with `>>> 0`. This is one area where Rust's explicit integer types are a real advantage.
-
-With two hash functions in hand — FNV-1a for breadth and MurmurHash3 for depth of mixing — we have everything we need to build the bloom filter itself. Stage 11 combines the bit array and both hashes into a single probabilistic data structure.
+> [!warning] Common Mistake: Integer Overflow Without Wrapping
+> If you write `k1 *= C1` instead of `k1 = k1.wrapping_mul(C1)`, Rust will panic in debug mode:
+>
+> ```
+> thread 'test' panicked at 'attempt to multiply with overflow'
+> ```
+>
+> Every arithmetic operation in MurmurHash3 must use `.wrapping_mul()` and `.wrapping_add()`. The overflow is intentional — it's part of the mixing.
+>
+> With two hash functions in hand — FNV-1a for breadth and MurmurHash3 for depth of mixing — we have everything we need to build the bloom filter itself. Stage 11 combines the bit array and both hashes into a single probabilistic data structure.
 
 ### What You Built
 
@@ -882,7 +876,7 @@ Now we have two hash functions: `fnv1a_64` (64-bit) and `murmur3_32` (32-bit). T
 
 This is the stage where the pieces snap together. The bit array stores the state, the hash functions generate positions, and the bloom filter orchestrates them into a probabilistic membership test. The key insight — double hashing to derive *k* hash functions from just two — is an elegant trick from information theory that you'll see again in distributed systems and database indexing.
 
-**Difficulty: Medium** · **Lines of code: ~40** · **Concepts: double hashing, probabilistic data structures, false positives**
+*Difficulty: Medium*
 
 Now we combine the bit array (Stage 8) and both hash functions (Stages 9-10) into a bloom filter. The idea is simple:
 
@@ -1157,7 +1151,7 @@ But we've been picking `num_bits` and `num_hashes` by hand. How do you choose th
 
 The bloom filter works, but we've been guessing at its parameters. This stage replaces guesswork with mathematics. You'll derive — not memorize — the formulas for optimal bit count and hash count, and understand *why* the filter is exactly 50% full at the sweet spot. This is the kind of principled engineering that separates a toy implementation from a production one.
 
-**Difficulty: Medium** · **Lines of code: ~30** · **Concepts: probability, calculus (minimization), natural logarithms**
+*Difficulty: Medium*
 
 This is the math stage. We'll derive — not just state — the formulas for optimal bloom filter sizing. By the end, you'll understand *why* k=7 and m≈2.9 million bits is the right choice for a 300,000-word dictionary at 1% false positive rate.
 
@@ -1465,7 +1459,7 @@ The math says our bloom filter should have a 1% false positive rate. But does it
 
 Theory without measurement is faith. This stage closes the loop: you'll insert thousands of words, query thousands of non-words, and compare the actual false positive rate against the theoretical prediction. If the numbers match, the math is validated. If they don't, something is wrong with the implementation. This empirical discipline — derive, implement, measure, compare — is the engineering method at its core.
 
-**Difficulty: Medium** · **Lines of code: ~60** · **Concepts: empirical testing, statistical validation, ASCII visualization**
+*Difficulty: Medium*
 
 We derived that a bloom filter with n=10,000 items, 1% target FP rate should produce roughly 1% false positives on random queries. Let's test it. We'll insert 10,000 real-ish words, query 10,000 non-words, count the false positives, and compare against the theoretical prediction.
 
@@ -1733,9 +1727,8 @@ Effect of overfilling (filter sized for 1000 items):
 
 At 3x capacity, the filter is nearly useless (18% false positives). At 5x, it's a coin flip. This is why sizing matters — the `with_rate` constructor exists to prevent this.
 
-### Common Mistake: Using the Wrong n
-
-If you create `BloomFilter::with_rate(1_000, 0.01)` but then insert 10,000 words, you'll get terrible false positive rates. The `expected_items` parameter must match (or exceed) the actual number of insertions. When in doubt, overestimate n — the cost is just a bit more memory.
+> [!warning] Common Mistake: Using the Wrong n
+> If you create `BloomFilter::with_rate(1_000, 0.01)` but then insert 10,000 words, you'll get terrible false positive rates. The `expected_items` parameter must match (or exceed) the actual number of insertions. When in doubt, overestimate n — the cost is just a bit more memory.
 
 ### Putting It All Together: The Spell Check Pipeline
 

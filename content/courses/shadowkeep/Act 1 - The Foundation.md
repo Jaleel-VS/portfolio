@@ -4,7 +4,7 @@
 
 Welcome to **Shadowkeep** — a multiplayer horror text adventure server written in Rust. By the end of this act, you'll have a working TCP server that players can connect to with `netcat`. But first, we lay the foundation: variables, structs, enums, ownership, traits, error handling, file I/O, and networking.
 
-**Prerequisites:** Python or TypeScript experience. No Rust experience needed.
+**Prerequisites:** Python experience. No Rust experience needed.
 
 **Setup:** macOS with a terminal (Ghostty, iTerm2, etc.) and a text editor (nvim, VS Code, etc.). Install Rust via [rustup.rs](https://rustup.rs).
 
@@ -29,7 +29,8 @@ graph LR
 
 Every horror story begins with a single step into the dark. Before you can build a multiplayer server, you need to know that your tools work — that Rust compiles, that your terminal speaks, that the void answers back. This stage exists because every complex system starts with the simplest possible proof of life.
 
-**Difficulty:** Very Easy | **Time:** < 5 minutes
+*Difficulty: Very Easy*
+
 
 ### Story Beat
 
@@ -51,7 +52,7 @@ cargo new shadowkeep --edition 2024
 cd shadowkeep
 ```
 
-- `cargo new` creates a new Rust project — a directory with a `Cargo.toml` (like `package.json` in Node or `pyproject.toml` in Python) and a `src/main.rs` file.
+- `cargo new` creates a new Rust project — a directory with a `Cargo.toml` (like `pyproject.toml` in Python) and a `src/main.rs` file.
 - `--edition 2024` tells Cargo to use the Rust 2024 edition (the latest, stable since Rust 1.85).
 
 **Step 2: Open `src/main.rs`.** You'll see:
@@ -64,7 +65,7 @@ fn main() {
 
 Let's break this down:
 
-- `fn main()` — defines a function called `main`. This is the entry point of every Rust program, just like `if __name__ == "__main__"` in Python or the top-level code in a Node script.
+- `fn main()` — defines a function called `main`. This is the entry point of every Rust program, just like `if __name__ == "__main__"` in Python.
 - `println!("Hello, world!");` — prints text to the terminal. The `!` means this is a **macro**, not a regular function. For now, think of it as "a function that does extra work at compile time." The `ln` means it adds a newline at the end.
 
 **Step 3: Replace the contents of `src/main.rs` with:**
@@ -96,19 +97,18 @@ If you see those two lines, you've entered the castle.
 
 ### Rust Aside — `println!` is a Macro
 
-In Python you'd write `print("hello")`. In TypeScript, `console.log("hello")`. In Rust, `println!` is a macro (note the `!`). Why? Because Rust's type system needs to know at compile time how many arguments you're passing and what types they are. A macro can accept a variable number of arguments — a regular function in Rust cannot (without extra machinery). You'll see more macros later. For now: if it has `!`, it's a macro.
+In Python you'd write `print("hello")`. In Rust, `println!` is a macro (note the `!`). Why? Because Rust's type system needs to know at compile time how many arguments you're passing and what types they are. A macro can accept a variable number of arguments — a regular function in Rust cannot (without extra machinery). You'll see more macros later. For now: if it has `!`, it's a macro.
 
 You've proven the castle answers. But a single shout into the void isn't enough — you need to remember things. Names. Places. The shape of the darkness ahead.
 
-### Checkpoint Code
-
-```rust
-// src/main.rs
-fn main() {
-    println!("You stand before the gates of Shadowkeep.");
-    println!("The air is cold. The stones are watching.");
-}
-```
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> fn main() {
+>     println!("You stand before the gates of Shadowkeep.");
+>     println!("The air is cold. The stones are watching.");
+> }
+> ```
 
 ---
 
@@ -116,7 +116,13 @@ fn main() {
 
 You can print text, but you can't remember anything. A game needs state — names, descriptions, layouts held in memory. Before you can build rooms or track players, you need to understand how Rust stores and displays data. Variables are the first bricks of the castle wall.
 
-**Difficulty:** Very Easy | **Time:** < 5 minutes
+*Difficulty: Very Easy*
+
+> [!tip] What You'll Learn
+> - Variables with `let`
+> - string types
+> - and multi-line printing
+
 
 ### Story Beat
 
@@ -139,9 +145,9 @@ fn main() {
 }
 ```
 
-- `let` declares a variable. This is like `const` in JavaScript or a plain assignment in Python. In Rust, variables are **immutable by default** — you can't reassign them unless you say `let mut`.
+- `let` declares a variable. This is like a plain assignment in Python. In Rust, variables are **immutable by default** — you can't reassign them unless you say `let mut`.
 - `"Shadowkeep"` is a **string literal** — its type is `&str` (a reference to a string slice). We'll explain references later. For now, think of `&str` as "a borrowed piece of text."
-- `{castle_name}` inside the string is **inline formatting** — Rust's equivalent of Python's f-strings (`f"Welcome to {castle_name}"`) or JavaScript template literals (`` `Welcome to ${castleName}` ``).
+- `{castle_name}` inside the string is **inline formatting** — Rust's equivalent of Python's f-strings (`f"Welcome to {castle_name}"`).
 
 **Step 2: Print the map.**
 
@@ -214,33 +220,30 @@ In Python and JS, variables are mutable by default. You use `const` in JS to opt
 | Language | Immutable | Mutable |
 |----------|-----------|---------|
 | Python | (no built-in) | `x = 5` |
-| JavaScript | `const x = 5` | `let x = 5` |
 | Rust | `let x = 5` | `let mut x = 5` |
 
 You can store text and print it. But a castle isn't just a name and a map — it's rooms, each with their own identity. You need a way to bundle related data together.
 
-### Checkpoint Code
-
-```rust
-// src/main.rs
-fn main() {
-    let castle_name = "Shadowkeep";
-
-    let map = "\
-╔══════════════════════════════╗
-║       SHADOWKEEP CASTLE      ║
-╠══════════════════════════════╣
-║  [Crypt] --- [Great Hall]    ║
-║     |            |           ║
-║  [Library] -- [Tower]        ║
-╚══════════════════════════════╝";
-
-    println!("Welcome to {castle_name}");
-    println!();
-    println!("{map}");
-}
-```
-
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> fn main() {
+>     let castle_name = "Shadowkeep";
+>
+>     let map = "\
+> ╔══════════════════════════════╗
+> ║       SHADOWKEEP CASTLE      ║
+> ╠══════════════════════════════╣
+> ║  [Crypt] --- [Great Hall]    ║
+> ║     |            |           ║
+> ║  [Library] -- [Tower]        ║
+> ╚══════════════════════════════╝";
+>
+>     println!("Welcome to {castle_name}");
+>     println!();
+>     println!("{map}");
+> }
+> ```
 
 ---
 
@@ -248,7 +251,8 @@ fn main() {
 
 You have variables, but they're loose — a name here, a description there, nothing tying them together. A room in Shadowkeep isn't just a string; it's a *thing* with properties. You need a way to say "this name and this description belong to the same room." Without that, the castle is just scattered words in the dark.
 
-**Difficulty:** Easy | **Time:** 5–10 minutes
+*Difficulty: Easy*
+
 
 ### Story Beat
 
@@ -256,7 +260,7 @@ You step through the gate. The crypt stretches before you — damp stone walls, 
 
 ### Concept
 
-Structs — Rust's way of grouping related data together (like a class in Python/TS, but without methods baked in).
+Structs — Rust's way of grouping related data together (like a class in Python, but without methods baked in).
 
 ### Instructions
 
@@ -273,7 +277,7 @@ struct Room {
 }
 ```
 
-- `struct` defines a new data type. Think of it like a Python `dataclass` or a TypeScript `interface`/`type`.
+- `struct` defines a new data type. Think of it like a Python `dataclass`.
 - `name: String` — a field called `name` with type `String`. Note: `String` (capital S) is an **owned** string — the struct owns this data. This is different from `&str` (a borrowed reference) that we used in Stage 2. We'll explain ownership in Stage 6.
 - Each field has an explicit type. Rust doesn't infer struct field types.
 
@@ -283,14 +287,6 @@ struct Room {
 class Room:
     name: str
     description: str
-```
-
-**TypeScript equivalent:**
-```typescript
-interface Room {
-    name: string;
-    description: string;
-}
 ```
 
 **Step 2: Create a room and print it.**
@@ -313,7 +309,7 @@ fn main() {
 ```
 
 - `Room { name: ..., description: ... }` creates an instance of the struct. Like `Room(name=..., description=...)` in Python.
-- `String::from("text")` converts a string literal (`&str`) into an owned `String`. The `::` syntax calls an **associated function** (like a static method in Python/TS). You'll also see `.to_string()` and `.into()` used for the same purpose.
+- `String::from("text")` converts a string literal (`&str`) into an owned `String`. The `::` syntax calls an **associated function** (like a static method in Python). You'll also see `.to_string()` and `.into()` used for the same purpose.
 - `crypt.name` accesses the field with dot notation — same as Python and TS.
 - `println!("{}", crypt.name)` — the `{}` is a placeholder. The value after the comma fills it in. This is the older style; `{crypt.name}` inline also works for simple field access.
 
@@ -339,16 +335,15 @@ fn main() {
 }
 ```
 
-### Common Mistake
-
-If you try `name: "The Crypt"` without `String::from()`, you'll get:
-
-```
-error[E0308]: mismatched types
-  expected `String`, found `&str`
-```
-
-The struct expects an owned `String`, but `"The Crypt"` is a `&str` (a borrowed reference). Use `String::from()` or `.to_string()` to convert it.
+> [!warning] Common Mistakes
+> If you try `name: "The Crypt"` without `String::from()`, you'll get:
+>
+> ```
+> error[E0308]: mismatched types
+>   expected `String`, found `&str`
+> ```
+>
+> The struct expects an owned `String`, but `"The Crypt"` is a `&str` (a borrowed reference). Use `String::from()` or `.to_string()` to convert it.
 
 ### Test
 
@@ -376,33 +371,32 @@ This is one of the first things that trips up Rust beginners. Rust has two main 
 
 Two rooms is a start, but Shadowkeep has many chambers. Hardcoding each one as a separate variable won't scale — you need a collection that can hold all of them at once.
 
-### Checkpoint Code
-
-```rust
-// src/main.rs
-struct Room {
-    name: String,
-    description: String,
-}
-
-fn main() {
-    let crypt = Room {
-        name: String::from("The Crypt"),
-        description: String::from("A damp chamber. Water drips from the ceiling. Bones are stacked along the walls."),
-    };
-
-    let great_hall = Room {
-        name: String::from("The Great Hall"),
-        description: String::from("A vast room with a shattered chandelier. Something moved in the shadows."),
-    };
-
-    println!("You enter: {}", crypt.name);
-    println!("{}", crypt.description);
-    println!();
-    println!("You enter: {}", great_hall.name);
-    println!("{}", great_hall.description);
-}
-```
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> struct Room {
+>     name: String,
+>     description: String,
+> }
+>
+> fn main() {
+>     let crypt = Room {
+>         name: String::from("The Crypt"),
+>         description: String::from("A damp chamber. Water drips from the ceiling. Bones are stacked along the walls."),
+>     };
+>
+>     let great_hall = Room {
+>         name: String::from("The Great Hall"),
+>         description: String::from("A vast room with a shattered chandelier. Something moved in the shadows."),
+>     };
+>
+>     println!("You enter: {}", crypt.name);
+>     println!("{}", crypt.description);
+>     println!();
+>     println!("You enter: {}", great_hall.name);
+>     println!("{}", great_hall.description);
+> }
+> ```
 
 ---
 
@@ -410,7 +404,8 @@ fn main() {
 
 A castle with two rooms is a closet, not a dungeon. You need to hold an unknown number of rooms and iterate over them — the fundamental operation of any game world. Vectors are how Rust handles dynamic collections, and understanding them now prevents a wall of confusion later when rooms, items, and players all live in lists.
 
-**Difficulty:** Easy | **Time:** 5–10 minutes
+*Difficulty: Easy*
+
 
 ### Story Beat
 
@@ -458,7 +453,7 @@ fn main() {
 
 Let's break down the new parts:
 
-- `vec![...]` is a macro that creates a `Vec` (vector) — Rust's equivalent of Python's `list` or JavaScript's `Array`. It's a growable, heap-allocated array.
+- `vec![...]` is a macro that creates a `Vec` (vector) — Rust's equivalent of Python's `list`. It's a growable, heap-allocated array.
 - `rooms.len()` returns the number of elements — like `len(rooms)` in Python or `rooms.length` in JS.
 - `for room in &rooms` — iterates over the vector. The `&` means we're **borrowing** the rooms, not consuming them. Without `&`, the loop would take ownership of the vector and you couldn't use `rooms` afterward. We'll explain ownership fully in Stage 6.
 - `room.name` — inside the loop, `room` is a reference to each `Room` struct.
@@ -468,14 +463,6 @@ Let's break down the new parts:
 rooms = [Room("The Crypt", "..."), Room("The Great Hall", "...")]
 for room in rooms:
     print(f"  [{room.name}]")
-```
-
-**TypeScript equivalent:**
-```typescript
-const rooms: Room[] = [{ name: "The Crypt", description: "..." }];
-for (const room of rooms) {
-    console.log(`  [${room.name}]`);
-}
 ```
 
 **Step 2: Access a room by index.**
@@ -490,15 +477,14 @@ Add this after the `for` loop:
 - `&rooms[0]` borrows a reference to the first element. Like `rooms[0]` in Python/JS, but with an explicit `&` to say "I'm borrowing, not taking."
 - If you try `rooms[99]`, the program will **panic** (crash) at runtime. We'll learn safer access with `.get()` in Stage 8.
 
-### Common Mistake
-
-If you write `for room in rooms` (without `&`), the vector is **moved** into the loop. Any code after the loop that tries to use `rooms` will fail:
-
-```
-error[E0382]: borrow of moved value: `rooms`
-```
-
-Fix: use `for room in &rooms` to borrow instead of move.
+> [!warning] Common Mistakes
+> If you write `for room in rooms` (without `&`), the vector is **moved** into the loop. Any code after the loop that tries to use `rooms` will fail:
+>
+> ```
+> error[E0382]: borrow of moved value: `rooms`
+> ```
+>
+> Fix: use `for room in &rooms` to borrow instead of move.
 
 ### Test
 
@@ -536,47 +522,45 @@ The `&` in `for room in &rooms` is a **borrow** — you're looking at the data w
 
 You can store rooms and walk through them. But walking is meaningless without choice — the player needs to decide which direction to go, and the castle needs to understand their answer.
 
-### Checkpoint Code
-
-```rust
-// src/main.rs
-struct Room {
-    name: String,
-    description: String,
-}
-
-fn main() {
-    let rooms = vec![
-        Room {
-            name: String::from("The Crypt"),
-            description: String::from("A damp chamber. Bones are stacked along the walls."),
-        },
-        Room {
-            name: String::from("The Great Hall"),
-            description: String::from("A vast room with a shattered chandelier."),
-        },
-        Room {
-            name: String::from("The Library"),
-            description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
-        },
-        Room {
-            name: String::from("The Tower"),
-            description: String::from("A spiral staircase vanishes into darkness above."),
-        },
-    ];
-
-    println!("Shadowkeep has {} rooms:\n", rooms.len());
-
-    for room in &rooms {
-        println!("  [{}]", room.name);
-        println!("  {}\n", room.description);
-    }
-
-    let first_room = &rooms[0];
-    println!("You start in: {}", first_room.name);
-}
-```
-
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> struct Room {
+>     name: String,
+>     description: String,
+> }
+>
+> fn main() {
+>     let rooms = vec![
+>         Room {
+>             name: String::from("The Crypt"),
+>             description: String::from("A damp chamber. Bones are stacked along the walls."),
+>         },
+>         Room {
+>             name: String::from("The Great Hall"),
+>             description: String::from("A vast room with a shattered chandelier."),
+>         },
+>         Room {
+>             name: String::from("The Library"),
+>             description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
+>         },
+>         Room {
+>             name: String::from("The Tower"),
+>             description: String::from("A spiral staircase vanishes into darkness above."),
+>         },
+>     ];
+>
+>     println!("Shadowkeep has {} rooms:\n", rooms.len());
+>
+>     for room in &rooms {
+>         println!("  [{}]", room.name);
+>         println!("  {}\n", room.description);
+>     }
+>
+>     let first_room = &rooms[0];
+>     println!("You start in: {}", first_room.name);
+> }
+> ```
 
 ---
 
@@ -584,7 +568,8 @@ fn main() {
 
 A game without player input is a screensaver. This stage transforms your program from a static display into an interactive loop — the player types, the castle responds. More importantly, you'll learn enums and `match`, which are how Rust models choices and forces you to handle every possibility. In a horror game, forgetting to handle a case means something slips through the cracks. Rust won't let that happen.
 
-**Difficulty:** Easy | **Time:** 5–10 minutes
+*Difficulty: Easy*
+
 
 ### Story Beat
 
@@ -613,7 +598,7 @@ enum Direction {
 }
 ```
 
-- `enum` defines a type that can be one of several **variants**. Think of it like a TypeScript union type (`type Direction = "north" | "south" | "east" | "west"`) or a Python `Enum`.
+- `enum` defines a type that can be one of several **variants**. Think of it like a Python `Enum`.
 - Each variant (`North`, `South`, etc.) is a distinct value. Unlike strings, the compiler knows all possible values — typos are caught at compile time.
 - `use std::io;` imports the I/O module from the standard library. We'll need it to read from stdin.
 
@@ -633,7 +618,7 @@ fn parse_direction(input: &str) -> Option<Direction> {
 }
 ```
 
-- `fn parse_direction(input: &str) -> Option<Direction>` — a function that takes a borrowed string and returns an `Option<Direction>`. `Option` is Rust's way of saying "this might have a value, or it might not." It's like `Optional` in Python or `T | undefined` in TypeScript.
+- `fn parse_direction(input: &str) -> Option<Direction>` — a function that takes a borrowed string and returns an `Option<Direction>`. `Option` is Rust's way of saying "this might have a value, or it might not." It's like `Optional` in Python.
 - `match` is Rust's pattern matching — like a `switch` statement, but the compiler **forces you to handle every case**. The `_` is a catch-all (like `default` in a switch).
 - `input.trim()` removes whitespace (the newline from pressing Enter).
 - `.to_lowercase()` returns a new `String`. `.as_str()` converts it back to `&str` for matching.
@@ -747,7 +732,7 @@ Type `north`, `n`, `south`, `s`, etc. to move. Type `quit` to exit. Type gibberi
 
 ### Rust Aside — Enums and Match
 
-Rust enums are far more powerful than Python/TS enums. They can carry data (we'll see this later). And `match` is **exhaustive** — the compiler forces you to handle every variant. If you add a new direction and forget to handle it, the code won't compile. This eliminates an entire class of bugs.
+Rust enums are far more powerful than Python enums. They can carry data (we'll see this later). And `match` is **exhaustive** — the compiler forces you to handle every variant. If you add a new direction and forget to handle it, the code won't compile. This eliminates an entire class of bugs.
 
 ```rust
 // This won't compile — missing East and West:
@@ -758,107 +743,118 @@ match direction {
 }
 ```
 
-In Python/TS, a `switch` or `if/elif` chain silently ignores unhandled cases. Rust refuses.
+In Python, an `if/elif` chain silently ignores unhandled cases. Rust refuses.
 
 The player can move between rooms. But what's a dungeon without loot? The crypt floor glints with something metallic — and picking it up means understanding who *owns* that data.
 
-### Checkpoint Code
+In the next stage, we'll let the player pick up items. This sounds simple, but it introduces Rust's most important concept: *ownership*. When you pick up a key from a room, the key moves from the room's inventory to the player's inventory. In Python, both could hold a reference to the same key object. In Rust, only one owner can exist at a time — and this is enforced at compile time. The next stage will feel harder than anything so far. That's normal. Ownership is the concept that makes Rust different from every other language you've used.
 
-```rust
-// src/main.rs
-use std::io;
-
-enum Direction {
-    North,
-    South,
-    East,
-    West,
-}
-
-struct Room {
-    name: String,
-    description: String,
-}
-
-fn parse_direction(input: &str) -> Option<Direction> {
-    match input.trim().to_lowercase().as_str() {
-        "north" | "n" => Some(Direction::North),
-        "south" | "s" => Some(Direction::South),
-        "east" | "e" => Some(Direction::East),
-        "west" | "w" => Some(Direction::West),
-        _ => None,
-    }
-}
-
-fn main() {
-    let rooms = vec![
-        Room {
-            name: String::from("The Crypt"),
-            description: String::from("A damp chamber. Bones are stacked along the walls."),
-        },
-        Room {
-            name: String::from("The Great Hall"),
-            description: String::from("A vast room with a shattered chandelier."),
-        },
-        Room {
-            name: String::from("The Library"),
-            description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
-        },
-        Room {
-            name: String::from("The Tower"),
-            description: String::from("A spiral staircase vanishes into darkness above."),
-        },
-    ];
-
-    let mut current_room = 0;
-
-    loop {
-        println!("\n--- {} ---", rooms[current_room].name);
-        println!("{}", rooms[current_room].description);
-        println!("\nWhich direction? (north/south/east/west or quit)");
-
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read input");
-
-        if input.trim() == "quit" {
-            println!("You flee Shadowkeep... for now.");
-            break;
-        }
-
-        match parse_direction(&input) {
-            Some(Direction::North) => {
-                current_room = (current_room + 1) % rooms.len();
-                println!("You head north...");
-            }
-            Some(Direction::South) => {
-                current_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
-                println!("You head south...");
-            }
-            Some(Direction::East) => {
-                current_room = (current_room + 1) % rooms.len();
-                println!("You head east...");
-            }
-            Some(Direction::West) => {
-                current_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
-                println!("You head west...");
-            }
-            None => {
-                println!("The shadows swallow your words. Try a direction: north, south, east, west.");
-            }
-        }
-    }
-}
-```
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> use std::io;
+>
+> enum Direction {
+>     North,
+>     South,
+>     East,
+>     West,
+> }
+>
+> struct Room {
+>     name: String,
+>     description: String,
+> }
+>
+> fn parse_direction(input: &str) -> Option<Direction> {
+>     match input.trim().to_lowercase().as_str() {
+>         "north" | "n" => Some(Direction::North),
+>         "south" | "s" => Some(Direction::South),
+>         "east" | "e" => Some(Direction::East),
+>         "west" | "w" => Some(Direction::West),
+>         _ => None,
+>     }
+> }
+>
+> fn main() {
+>     let rooms = vec![
+>         Room {
+>             name: String::from("The Crypt"),
+>             description: String::from("A damp chamber. Bones are stacked along the walls."),
+>         },
+>         Room {
+>             name: String::from("The Great Hall"),
+>             description: String::from("A vast room with a shattered chandelier."),
+>         },
+>         Room {
+>             name: String::from("The Library"),
+>             description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
+>         },
+>         Room {
+>             name: String::from("The Tower"),
+>             description: String::from("A spiral staircase vanishes into darkness above."),
+>         },
+>     ];
+>
+>     let mut current_room = 0;
+>
+>     loop {
+>         println!("\n--- {} ---", rooms[current_room].name);
+>         println!("{}", rooms[current_room].description);
+>         println!("\nWhich direction? (north/south/east/west or quit)");
+>
+>         let mut input = String::new();
+>         io::stdin()
+>             .read_line(&mut input)
+>             .expect("Failed to read input");
+>
+>         if input.trim() == "quit" {
+>             println!("You flee Shadowkeep... for now.");
+>             break;
+>         }
+>
+>         match parse_direction(&input) {
+>             Some(Direction::North) => {
+>                 current_room = (current_room + 1) % rooms.len();
+>                 println!("You head north...");
+>             }
+>             Some(Direction::South) => {
+>                 current_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
+>                 println!("You head south...");
+>             }
+>             Some(Direction::East) => {
+>                 current_room = (current_room + 1) % rooms.len();
+>                 println!("You head east...");
+>             }
+>             Some(Direction::West) => {
+>                 current_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
+>                 println!("You head west...");
+>             }
+>             None => {
+>                 println!("The shadows swallow your words. Try a direction: north, south, east, west.");
+>             }
+>         }
+>     }
+> }
+> ```
 
 ---
 
 ## Stage 6 — The Inventory
 
+> [!warning] Difficulty Spike
+> This stage introduces ownership, borrowing, mutable references, closures, `if let Some(pos)`, `.iter().position()`, and `.remove()` all at once. It will feel significantly harder than anything so far. That's expected — ownership is the hardest concept in Rust, and you're learning it for the first time. Take it slow, re-read the explanations, and don't worry if it takes multiple passes to click.
+
 This is the stage where Rust stops feeling like Python-with-types and starts feeling like *Rust*. Ownership is the concept that makes Rust unique — it's how the language guarantees memory safety without a garbage collector. You're learning it now because picking up an item is the perfect physical metaphor: the key leaves the room and enters your pocket. It can't be in both places. The compiler enforces this, and once you internalize it, an entire class of bugs becomes impossible.
 
-**Difficulty:** Medium | **Time:** 30 minutes – 1 hour
+*Difficulty: Medium*
+
+> [!tip] What You'll Learn
+> - Ownership
+> - borrowing
+> - and moving — the heart of Rust. We learn it
+> - putting them down
+
 
 ### Story Beat
 
@@ -1033,23 +1029,22 @@ New concepts:
 - `let input = input.trim();` — this **shadows** the previous `input` variable. The old mutable `String` is replaced by an immutable `&str`. Shadowing is idiomatic Rust — it lets you refine a value without inventing new names.
 - `&mut rooms[current_room]` — passes a mutable reference to the specific room.
 
-### Common Mistake
-
-If you try to borrow `rooms` immutably (to print) and mutably (to take items) at the same time:
-
-```rust
-let room = &rooms[current_room];       // immutable borrow
-take_item(&mut player, &mut rooms[current_room], "key"); // mutable borrow
-println!("{}", room.name);             // uses immutable borrow
-```
-
-You'll get:
-
-```
-error[E0502]: cannot borrow `rooms` as mutable because it is also borrowed as immutable
-```
-
-The fix: don't hold the immutable borrow across the mutable operation. In our code, we print the room info first, then drop the immutable borrow before calling `take_item`. The `let room = &rooms[current_room];` borrow ends before the `if let` block.
+> [!warning] Common Mistakes
+> If you try to borrow `rooms` immutably (to print) and mutably (to take items) at the same time:
+>
+> ```rust
+> let room = &rooms[current_room];       // immutable borrow
+> take_item(&mut player, &mut rooms[current_room], "key"); // mutable borrow
+> println!("{}", room.name);             // uses immutable borrow
+> ```
+>
+> You'll get:
+>
+> ```
+> error[E0502]: cannot borrow `rooms` as mutable because it is also borrowed as immutable
+> ```
+>
+> The fix: don't hold the immutable borrow across the mutable operation. In our code, we print the room info first, then drop the immutable borrow before calling `take_item`. The `let room = &rooms[current_room];` borrow ends before the `if let` block.
 
 ### Test
 
@@ -1102,135 +1097,133 @@ This is what makes Rust memory-safe without a garbage collector. The compiler ch
 
 Items move between owners. But the castle isn't just rooms and loot — something *lives* in these halls. Different creatures with different behaviors, all sharing the ability to describe themselves and attack. You need a way to define that shared contract.
 
-### Checkpoint Code
-
-```rust
-// src/main.rs
-use std::io;
-
-enum Direction {
-    North,
-    South,
-    East,
-    West,
-}
-
-struct Room {
-    name: String,
-    description: String,
-    items: Vec<String>,
-}
-
-struct Player {
-    inventory: Vec<String>,
-}
-
-fn parse_direction(input: &str) -> Option<Direction> {
-    match input.trim().to_lowercase().as_str() {
-        "north" | "n" => Some(Direction::North),
-        "south" | "s" => Some(Direction::South),
-        "east" | "e" => Some(Direction::East),
-        "west" | "w" => Some(Direction::West),
-        _ => None,
-    }
-}
-
-fn take_item(player: &mut Player, room: &mut Room, item_name: &str) {
-    if let Some(pos) = room.items.iter().position(|i| i == item_name) {
-        let item = room.items.remove(pos);
-        println!("You pick up the {}. It's cold to the touch.", item);
-        player.inventory.push(item);
-    } else {
-        println!("There is no '{}' here.", item_name);
-    }
-}
-
-fn drop_item(player: &mut Player, room: &mut Room, item_name: &str) {
-    if let Some(pos) = player.inventory.iter().position(|i| i == item_name) {
-        let item = player.inventory.remove(pos);
-        println!("You drop the {}. It clatters on the stone floor.", item);
-        room.items.push(item);
-    } else {
-        println!("You don't have a '{}'.", item_name);
-    }
-}
-
-fn main() {
-    let mut rooms = vec![
-        Room {
-            name: String::from("The Crypt"),
-            description: String::from("A damp chamber. Bones are stacked along the walls."),
-            items: vec![String::from("rusty key"), String::from("torch")],
-        },
-        Room {
-            name: String::from("The Great Hall"),
-            description: String::from("A vast room with a shattered chandelier."),
-            items: vec![String::from("silver dagger")],
-        },
-        Room {
-            name: String::from("The Library"),
-            description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
-            items: vec![String::from("ancient tome")],
-        },
-        Room {
-            name: String::from("The Tower"),
-            description: String::from("A spiral staircase vanishes into darkness above."),
-            items: vec![],
-        },
-    ];
-
-    let mut player = Player {
-        inventory: Vec::new(),
-    };
-
-    let mut current_room = 0;
-
-    loop {
-        let room = &rooms[current_room];
-        println!("\n--- {} ---", room.name);
-        println!("{}", room.description);
-        if !room.items.is_empty() {
-            println!("You see: {}", room.items.join(", "));
-        }
-        if !player.inventory.is_empty() {
-            println!("Inventory: {}", player.inventory.join(", "));
-        }
-        println!("\nCommand? (north/south/east/west/take <item>/drop <item>/quit)");
-
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read input");
-        let input = input.trim();
-
-        if input == "quit" {
-            println!("You flee Shadowkeep... for now.");
-            break;
-        }
-
-        if let Some(item_name) = input.strip_prefix("take ") {
-            take_item(&mut player, &mut rooms[current_room], item_name);
-        } else if let Some(item_name) = input.strip_prefix("drop ") {
-            drop_item(&mut player, &mut rooms[current_room], item_name);
-        } else {
-            match parse_direction(input) {
-                Some(Direction::North) | Some(Direction::East) => {
-                    current_room = (current_room + 1) % rooms.len();
-                    println!("You move onward...");
-                }
-                Some(Direction::South) | Some(Direction::West) => {
-                    current_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
-                    println!("You move onward...");
-                }
-                None => {
-                    println!("The shadows swallow your words. Try: north, south, take <item>, drop <item>");
-                }
-            }
-        }
-    }
-}
-```
-
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> use std::io;
+>
+> enum Direction {
+>     North,
+>     South,
+>     East,
+>     West,
+> }
+>
+> struct Room {
+>     name: String,
+>     description: String,
+>     items: Vec<String>,
+> }
+>
+> struct Player {
+>     inventory: Vec<String>,
+> }
+>
+> fn parse_direction(input: &str) -> Option<Direction> {
+>     match input.trim().to_lowercase().as_str() {
+>         "north" | "n" => Some(Direction::North),
+>         "south" | "s" => Some(Direction::South),
+>         "east" | "e" => Some(Direction::East),
+>         "west" | "w" => Some(Direction::West),
+>         _ => None,
+>     }
+> }
+>
+> fn take_item(player: &mut Player, room: &mut Room, item_name: &str) {
+>     if let Some(pos) = room.items.iter().position(|i| i == item_name) {
+>         let item = room.items.remove(pos);
+>         println!("You pick up the {}. It's cold to the touch.", item);
+>         player.inventory.push(item);
+>     } else {
+>         println!("There is no '{}' here.", item_name);
+>     }
+> }
+>
+> fn drop_item(player: &mut Player, room: &mut Room, item_name: &str) {
+>     if let Some(pos) = player.inventory.iter().position(|i| i == item_name) {
+>         let item = player.inventory.remove(pos);
+>         println!("You drop the {}. It clatters on the stone floor.", item);
+>         room.items.push(item);
+>     } else {
+>         println!("You don't have a '{}'.", item_name);
+>     }
+> }
+>
+> fn main() {
+>     let mut rooms = vec![
+>         Room {
+>             name: String::from("The Crypt"),
+>             description: String::from("A damp chamber. Bones are stacked along the walls."),
+>             items: vec![String::from("rusty key"), String::from("torch")],
+>         },
+>         Room {
+>             name: String::from("The Great Hall"),
+>             description: String::from("A vast room with a shattered chandelier."),
+>             items: vec![String::from("silver dagger")],
+>         },
+>         Room {
+>             name: String::from("The Library"),
+>             description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
+>             items: vec![String::from("ancient tome")],
+>         },
+>         Room {
+>             name: String::from("The Tower"),
+>             description: String::from("A spiral staircase vanishes into darkness above."),
+>             items: vec![],
+>         },
+>     ];
+>
+>     let mut player = Player {
+>         inventory: Vec::new(),
+>     };
+>
+>     let mut current_room = 0;
+>
+>     loop {
+>         let room = &rooms[current_room];
+>         println!("\n--- {} ---", room.name);
+>         println!("{}", room.description);
+>         if !room.items.is_empty() {
+>             println!("You see: {}", room.items.join(", "));
+>         }
+>         if !player.inventory.is_empty() {
+>             println!("Inventory: {}", player.inventory.join(", "));
+>         }
+>         println!("\nCommand? (north/south/east/west/take <item>/drop <item>/quit)");
+>
+>         let mut input = String::new();
+>         io::stdin()
+>             .read_line(&mut input)
+>             .expect("Failed to read input");
+>         let input = input.trim();
+>
+>         if input == "quit" {
+>             println!("You flee Shadowkeep... for now.");
+>             break;
+>         }
+>
+>         if let Some(item_name) = input.strip_prefix("take ") {
+>             take_item(&mut player, &mut rooms[current_room], item_name);
+>         } else if let Some(item_name) = input.strip_prefix("drop ") {
+>             drop_item(&mut player, &mut rooms[current_room], item_name);
+>         } else {
+>             match parse_direction(input) {
+>                 Some(Direction::North) | Some(Direction::East) => {
+>                     current_room = (current_room + 1) % rooms.len();
+>                     println!("You move onward...");
+>                 }
+>                 Some(Direction::South) | Some(Direction::West) => {
+>                     current_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
+>                     println!("You move onward...");
+>                 }
+>                 None => {
+>                     println!("The shadows swallow your words. Try: north, south, take <item>, drop <item>");
+>                 }
+>             }
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -1238,7 +1231,8 @@ fn main() {
 
 A horror game without monsters is just a walking simulator. But monsters aren't all the same — a wraith drains life, a spider shoots webs. They share a common interface (name, describe, attack) but differ in implementation. This is the problem traits solve, and it's the same pattern you'll use later when different network message types all need to be "sendable" or different game events all need to be "processable."
 
-**Difficulty:** Medium | **Time:** 30 minutes – 1 hour
+*Difficulty: Medium*
+
 
 ### Story Beat
 
@@ -1246,7 +1240,7 @@ Something moves in the Library. A shape unfolds from the shadows — too many li
 
 ### Concept
 
-Traits — Rust's way of defining shared behavior across different types. Like interfaces in TypeScript or abstract base classes in Python.
+Traits — Rust's way of defining shared behavior across different types. Like abstract base classes in Python.
 
 ### Instructions
 
@@ -1268,15 +1262,6 @@ trait Monster {
 - `&self` — each method takes a reference to the instance. Like `self` in Python methods, but explicitly borrowed.
 - `-> &str` — returns a borrowed string reference. The string data lives inside the struct; we're just lending it out.
 - `-> String` — returns an owned string. The `attack` method constructs a new string each time.
-
-**TypeScript equivalent:**
-```typescript
-interface Monster {
-    name(): string;
-    describe(): string;
-    attack(): string;
-}
-```
 
 **Python equivalent:**
 ```python
@@ -1307,7 +1292,7 @@ struct GiantSpider {
 }
 ```
 
-- `u32` is an unsigned 32-bit integer. Rust has explicit integer sizes: `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, etc. Python just has `int` (arbitrary size). TypeScript has `number` (64-bit float). Rust makes you choose.
+- `u32` is an unsigned 32-bit integer. Rust has explicit integer sizes: `u8`, `u16`, `u32`, `u64`, `i8`, `i16`, `i32`, `i64`, etc. Python just has `int` (arbitrary size). Rust makes you choose.
 
 **Step 3: Implement the trait for each monster.**
 
@@ -1384,15 +1369,14 @@ Add this inside your `main` function, before the game loop:
 
 Both `Wraith` and `GiantSpider` are passed to the same `encounter` function because they both implement `Monster`. The function doesn't know or care which concrete type it gets.
 
-### Common Mistake
-
-If you forget to implement one of the trait methods:
-
-```
-error[E0046]: not all trait items implemented, missing: `attack`
-```
-
-The compiler tells you exactly which method is missing. Unlike Python's ABCs (which only check at instantiation time), Rust checks at compile time.
+> [!warning] Common Mistakes
+> If you forget to implement one of the trait methods:
+>
+> ```
+> error[E0046]: not all trait items implemented, missing: `attack`
+> ```
+>
+> The compiler tells you exactly which method is missing. Unlike Python's ABCs (which only check at instantiation time), Rust checks at compile time.
 
 ### Test
 
@@ -1413,6 +1397,9 @@ The Silk Widow shoots a web (strength 8) and lunges with venomous fangs!
 
 The encounters print before the game loop starts. In later acts, we'll trigger encounters when entering rooms.
 
+> [!note]
+> Right now monsters exist but don't interact with the game loop — they print their descriptions at startup and that's it. In Act 4, we'll wire them into room encounters so they attack when you enter their territory. For now, the important thing is the *trait pattern*: defining shared behavior (`Monster` trait) that different types implement differently.
+
 ### Rust Aside — Traits vs Interfaces vs ABCs
 
 | Feature | Rust Trait | TS Interface | Python ABC |
@@ -1427,204 +1414,203 @@ Rust traits can also have **default implementations** — methods with a body th
 
 Monsters lurk in the rooms, but some doors won't open for just anyone. The Tower is sealed — and what happens when you try to enter a room that might not let you in? You need types that represent "maybe" and "success or failure."
 
-### Checkpoint Code
-
-```rust
-// src/main.rs
-use std::io;
-
-enum Direction {
-    North,
-    South,
-    East,
-    West,
-}
-
-struct Room {
-    name: String,
-    description: String,
-    items: Vec<String>,
-}
-
-struct Player {
-    inventory: Vec<String>,
-}
-
-trait Monster {
-    fn name(&self) -> &str;
-    fn describe(&self) -> &str;
-    fn attack(&self) -> String;
-}
-
-struct Wraith {
-    name: String,
-    description: String,
-    damage: u32,
-}
-
-struct GiantSpider {
-    name: String,
-    description: String,
-    web_strength: u32,
-}
-
-impl Monster for Wraith {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn describe(&self) -> &str {
-        &self.description
-    }
-
-    fn attack(&self) -> String {
-        format!("The {} shrieks and drains {} life force from you!", self.name, self.damage)
-    }
-}
-
-impl Monster for GiantSpider {
-    fn name(&self) -> &str {
-        &self.name
-    }
-
-    fn describe(&self) -> &str {
-        &self.description
-    }
-
-    fn attack(&self) -> String {
-        format!(
-            "The {} shoots a web (strength {}) and lunges with venomous fangs!",
-            self.name, self.web_strength
-        )
-    }
-}
-
-fn parse_direction(input: &str) -> Option<Direction> {
-    match input.trim().to_lowercase().as_str() {
-        "north" | "n" => Some(Direction::North),
-        "south" | "s" => Some(Direction::South),
-        "east" | "e" => Some(Direction::East),
-        "west" | "w" => Some(Direction::West),
-        _ => None,
-    }
-}
-
-fn take_item(player: &mut Player, room: &mut Room, item_name: &str) {
-    if let Some(pos) = room.items.iter().position(|i| i == item_name) {
-        let item = room.items.remove(pos);
-        println!("You pick up the {}. It's cold to the touch.", item);
-        player.inventory.push(item);
-    } else {
-        println!("There is no '{}' here.", item_name);
-    }
-}
-
-fn drop_item(player: &mut Player, room: &mut Room, item_name: &str) {
-    if let Some(pos) = player.inventory.iter().position(|i| i == item_name) {
-        let item = player.inventory.remove(pos);
-        println!("You drop the {}. It clatters on the stone floor.", item);
-        room.items.push(item);
-    } else {
-        println!("You don't have a '{}'.", item_name);
-    }
-}
-
-fn encounter(monster: &dyn Monster) {
-    println!("\nSomething stirs in the darkness...");
-    println!("You see: {}", monster.describe());
-    println!("{}", monster.attack());
-}
-
-fn main() {
-    let mut rooms = vec![
-        Room {
-            name: String::from("The Crypt"),
-            description: String::from("A damp chamber. Bones are stacked along the walls."),
-            items: vec![String::from("rusty key"), String::from("torch")],
-        },
-        Room {
-            name: String::from("The Great Hall"),
-            description: String::from("A vast room with a shattered chandelier."),
-            items: vec![String::from("silver dagger")],
-        },
-        Room {
-            name: String::from("The Library"),
-            description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
-            items: vec![String::from("ancient tome")],
-        },
-        Room {
-            name: String::from("The Tower"),
-            description: String::from("A spiral staircase vanishes into darkness above."),
-            items: vec![],
-        },
-    ];
-
-    let mut player = Player {
-        inventory: Vec::new(),
-    };
-
-    let wraith = Wraith {
-        name: String::from("Hollow Wraith"),
-        description: String::from("A translucent figure, its face frozen in a silent scream."),
-        damage: 15,
-    };
-
-    let spider = GiantSpider {
-        name: String::from("Silk Widow"),
-        description: String::from("Eight eyes gleam in the dark. Its web fills the doorway."),
-        web_strength: 8,
-    };
-
-    encounter(&wraith);
-    encounter(&spider);
-
-    let mut current_room = 0;
-
-    loop {
-        let room = &rooms[current_room];
-        println!("\n--- {} ---", room.name);
-        println!("{}", room.description);
-        if !room.items.is_empty() {
-            println!("You see: {}", room.items.join(", "));
-        }
-        if !player.inventory.is_empty() {
-            println!("Inventory: {}", player.inventory.join(", "));
-        }
-        println!("\nCommand? (north/south/east/west/take <item>/drop <item>/quit)");
-
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read input");
-        let input = input.trim();
-
-        if input == "quit" {
-            println!("You flee Shadowkeep... for now.");
-            break;
-        }
-
-        if let Some(item_name) = input.strip_prefix("take ") {
-            take_item(&mut player, &mut rooms[current_room], item_name);
-        } else if let Some(item_name) = input.strip_prefix("drop ") {
-            drop_item(&mut player, &mut rooms[current_room], item_name);
-        } else {
-            match parse_direction(input) {
-                Some(Direction::North) | Some(Direction::East) => {
-                    current_room = (current_room + 1) % rooms.len();
-                    println!("You move onward...");
-                }
-                Some(Direction::South) | Some(Direction::West) => {
-                    current_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
-                    println!("You move onward...");
-                }
-                None => {
-                    println!("The shadows swallow your words. Try: north, south, take <item>, drop <item>");
-                }
-            }
-        }
-    }
-}
-```
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> use std::io;
+>
+> enum Direction {
+>     North,
+>     South,
+>     East,
+>     West,
+> }
+>
+> struct Room {
+>     name: String,
+>     description: String,
+>     items: Vec<String>,
+> }
+>
+> struct Player {
+>     inventory: Vec<String>,
+> }
+>
+> trait Monster {
+>     fn name(&self) -> &str;
+>     fn describe(&self) -> &str;
+>     fn attack(&self) -> String;
+> }
+>
+> struct Wraith {
+>     name: String,
+>     description: String,
+>     damage: u32,
+> }
+>
+> struct GiantSpider {
+>     name: String,
+>     description: String,
+>     web_strength: u32,
+> }
+>
+> impl Monster for Wraith {
+>     fn name(&self) -> &str {
+>         &self.name
+>     }
+>
+>     fn describe(&self) -> &str {
+>         &self.description
+>     }
+>
+>     fn attack(&self) -> String {
+>         format!("The {} shrieks and drains {} life force from you!", self.name, self.damage)
+>     }
+> }
+>
+> impl Monster for GiantSpider {
+>     fn name(&self) -> &str {
+>         &self.name
+>     }
+>
+>     fn describe(&self) -> &str {
+>         &self.description
+>     }
+>
+>     fn attack(&self) -> String {
+>         format!(
+>             "The {} shoots a web (strength {}) and lunges with venomous fangs!",
+>             self.name, self.web_strength
+>         )
+>     }
+> }
+>
+> fn parse_direction(input: &str) -> Option<Direction> {
+>     match input.trim().to_lowercase().as_str() {
+>         "north" | "n" => Some(Direction::North),
+>         "south" | "s" => Some(Direction::South),
+>         "east" | "e" => Some(Direction::East),
+>         "west" | "w" => Some(Direction::West),
+>         _ => None,
+>     }
+> }
+>
+> fn take_item(player: &mut Player, room: &mut Room, item_name: &str) {
+>     if let Some(pos) = room.items.iter().position(|i| i == item_name) {
+>         let item = room.items.remove(pos);
+>         println!("You pick up the {}. It's cold to the touch.", item);
+>         player.inventory.push(item);
+>     } else {
+>         println!("There is no '{}' here.", item_name);
+>     }
+> }
+>
+> fn drop_item(player: &mut Player, room: &mut Room, item_name: &str) {
+>     if let Some(pos) = player.inventory.iter().position(|i| i == item_name) {
+>         let item = player.inventory.remove(pos);
+>         println!("You drop the {}. It clatters on the stone floor.", item);
+>         room.items.push(item);
+>     } else {
+>         println!("You don't have a '{}'.", item_name);
+>     }
+> }
+>
+> fn encounter(monster: &dyn Monster) {
+>     println!("\nSomething stirs in the darkness...");
+>     println!("You see: {}", monster.describe());
+>     println!("{}", monster.attack());
+> }
+>
+> fn main() {
+>     let mut rooms = vec![
+>         Room {
+>             name: String::from("The Crypt"),
+>             description: String::from("A damp chamber. Bones are stacked along the walls."),
+>             items: vec![String::from("rusty key"), String::from("torch")],
+>         },
+>         Room {
+>             name: String::from("The Great Hall"),
+>             description: String::from("A vast room with a shattered chandelier."),
+>             items: vec![String::from("silver dagger")],
+>         },
+>         Room {
+>             name: String::from("The Library"),
+>             description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
+>             items: vec![String::from("ancient tome")],
+>         },
+>         Room {
+>             name: String::from("The Tower"),
+>             description: String::from("A spiral staircase vanishes into darkness above."),
+>             items: vec![],
+>         },
+>     ];
+>
+>     let mut player = Player {
+>         inventory: Vec::new(),
+>     };
+>
+>     let wraith = Wraith {
+>         name: String::from("Hollow Wraith"),
+>         description: String::from("A translucent figure, its face frozen in a silent scream."),
+>         damage: 15,
+>     };
+>
+>     let spider = GiantSpider {
+>         name: String::from("Silk Widow"),
+>         description: String::from("Eight eyes gleam in the dark. Its web fills the doorway."),
+>         web_strength: 8,
+>     };
+>
+>     encounter(&wraith);
+>     encounter(&spider);
+>
+>     let mut current_room = 0;
+>
+>     loop {
+>         let room = &rooms[current_room];
+>         println!("\n--- {} ---", room.name);
+>         println!("{}", room.description);
+>         if !room.items.is_empty() {
+>             println!("You see: {}", room.items.join(", "));
+>         }
+>         if !player.inventory.is_empty() {
+>             println!("Inventory: {}", player.inventory.join(", "));
+>         }
+>         println!("\nCommand? (north/south/east/west/take <item>/drop <item>/quit)");
+>
+>         let mut input = String::new();
+>         io::stdin()
+>             .read_line(&mut input)
+>             .expect("Failed to read input");
+>         let input = input.trim();
+>
+>         if input == "quit" {
+>             println!("You flee Shadowkeep... for now.");
+>             break;
+>         }
+>
+>         if let Some(item_name) = input.strip_prefix("take ") {
+>             take_item(&mut player, &mut rooms[current_room], item_name);
+>         } else if let Some(item_name) = input.strip_prefix("drop ") {
+>             drop_item(&mut player, &mut rooms[current_room], item_name);
+>         } else {
+>             match parse_direction(input) {
+>                 Some(Direction::North) | Some(Direction::East) => {
+>                     current_room = (current_room + 1) % rooms.len();
+>                     println!("You move onward...");
+>                 }
+>                 Some(Direction::South) | Some(Direction::West) => {
+>                     current_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
+>                     println!("You move onward...");
+>                 }
+>                 None => {
+>                     println!("The shadows swallow your words. Try: north, south, take <item>, drop <item>");
+>                 }
+>             }
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -1632,7 +1618,15 @@ fn main() {
 
 Every real program must handle things that might not exist and operations that might fail. In Python, you get `None` and exceptions — and you find out you forgot to handle them at 3 AM in production. Rust replaces both with `Option` and `Result`, types that the compiler *forces* you to deal with. Learning them now means every error path in your multiplayer server will be visible and handled.
 
-**Difficulty:** Easy | **Time:** 5–10 minutes
+*Difficulty: Medium*
+
+> [!tip] What You'll Learn
+> - `Option<T>`
+> - `Result<T
+> - E>` — Rust's approach to handling absence
+> - errors. No null
+> - no exceptions
+
 
 ### Story Beat
 
@@ -1663,7 +1657,7 @@ struct Room {
 - `locked: bool` — whether the room is locked. `bool` is `true` or `false`, same as every language.
 - `required_key: Option<String>` — the key needed to unlock this room, if any. `Option<String>` is either `Some(String)` (there's a key name) or `None` (no key needed).
 
-**Why Option instead of null?** In Python, you might use `required_key: str | None = None`. In TypeScript, `requiredKey?: string`. The problem: you can forget to check for `None`/`undefined` and get a runtime crash. In Rust, `Option` forces you to handle both cases — the compiler won't let you use the inner value without checking first.
+**Why Option instead of null?** In Python, you might use `required_key: str | None = None`. The problem: you can forget to check for `None` and get a runtime crash. In Rust, `Option` forces you to handle both cases — the compiler won't let you use the inner value without checking first.
 
 **Step 2: Write a function to try entering a room.**
 
@@ -1805,251 +1799,249 @@ A spiral staircase vanishes into darkness above.
 
 Rust has no `null` and no exceptions. Instead:
 
-| Situation | Python/TS | Rust |
-|-----------|-----------|------|
-| Value might be absent | `None` / `undefined` | `Option<T>` — `Some(value)` or `None` |
-| Operation might fail | `raise Exception` / `throw Error` | `Result<T, E>` — `Ok(value)` or `Err(error)` |
+| Situation | Python | Rust |
+|-----------|--------|------|
+| Value might be absent | `None` | `Option<T>` — `Some(value)` or `None` |
+| Operation might fail | `raise Exception` | `Result<T, E>` — `Ok(value)` or `Err(error)` |
 | Must handle? | No (runtime crash) | Yes (compiler enforces it) |
 
 This means: if your Rust code compiles, you've handled every possible absence and every possible error. No surprise `NoneType has no attribute 'x'` at 3 AM.
 
 Doors lock and unlock, errors are handled, the game state grows richer. But when the player quits, everything vanishes. The castle forgets. You need a way to write the world to disk and read it back — persistence.
 
-### Checkpoint Code
-
-```rust
-// src/main.rs
-use std::io;
-
-enum Direction {
-    North,
-    South,
-    East,
-    West,
-}
-
-struct Room {
-    name: String,
-    description: String,
-    items: Vec<String>,
-    locked: bool,
-    required_key: Option<String>,
-}
-
-struct Player {
-    inventory: Vec<String>,
-}
-
-trait Monster {
-    fn name(&self) -> &str;
-    fn describe(&self) -> &str;
-    fn attack(&self) -> String;
-}
-
-struct Wraith {
-    name: String,
-    description: String,
-    damage: u32,
-}
-
-struct GiantSpider {
-    name: String,
-    description: String,
-    web_strength: u32,
-}
-
-impl Monster for Wraith {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn describe(&self) -> &str {
-        &self.description
-    }
-    fn attack(&self) -> String {
-        format!("The {} shrieks and drains {} life force from you!", self.name, self.damage)
-    }
-}
-
-impl Monster for GiantSpider {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn describe(&self) -> &str {
-        &self.description
-    }
-    fn attack(&self) -> String {
-        format!(
-            "The {} shoots a web (strength {}) and lunges with venomous fangs!",
-            self.name, self.web_strength
-        )
-    }
-}
-
-fn parse_direction(input: &str) -> Option<Direction> {
-    match input.trim().to_lowercase().as_str() {
-        "north" | "n" => Some(Direction::North),
-        "south" | "s" => Some(Direction::South),
-        "east" | "e" => Some(Direction::East),
-        "west" | "w" => Some(Direction::West),
-        _ => None,
-    }
-}
-
-fn take_item(player: &mut Player, room: &mut Room, item_name: &str) {
-    if let Some(pos) = room.items.iter().position(|i| i == item_name) {
-        let item = room.items.remove(pos);
-        println!("You pick up the {}. It's cold to the touch.", item);
-        player.inventory.push(item);
-    } else {
-        println!("There is no '{}' here.", item_name);
-    }
-}
-
-fn drop_item(player: &mut Player, room: &mut Room, item_name: &str) {
-    if let Some(pos) = player.inventory.iter().position(|i| i == item_name) {
-        let item = player.inventory.remove(pos);
-        println!("You drop the {}. It clatters on the stone floor.", item);
-        room.items.push(item);
-    } else {
-        println!("You don't have a '{}'.", item_name);
-    }
-}
-
-fn encounter(monster: &dyn Monster) {
-    println!("\nSomething stirs in the darkness...");
-    println!("You see: {}", monster.describe());
-    println!("{}", monster.attack());
-}
-
-fn try_enter_room(player: &Player, room: &Room) -> Result<(), String> {
-    if !room.locked {
-        return Ok(());
-    }
-
-    match &room.required_key {
-        Some(key) => {
-            if player.inventory.iter().any(|item| item == key) {
-                println!("You use the {} to unlock {}.", key, room.name);
-                Ok(())
-            } else {
-                Err(format!("{} is locked. You need: {}", room.name, key))
-            }
-        }
-        None => Err(format!("{} is sealed by dark magic. No key can open it.", room.name)),
-    }
-}
-
-fn main() {
-    let mut rooms = vec![
-        Room {
-            name: String::from("The Crypt"),
-            description: String::from("A damp chamber. Bones are stacked along the walls."),
-            items: vec![String::from("rusty key"), String::from("torch")],
-            locked: false,
-            required_key: None,
-        },
-        Room {
-            name: String::from("The Great Hall"),
-            description: String::from("A vast room with a shattered chandelier."),
-            items: vec![String::from("silver dagger")],
-            locked: false,
-            required_key: None,
-        },
-        Room {
-            name: String::from("The Library"),
-            description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
-            items: vec![String::from("ancient tome")],
-            locked: false,
-            required_key: None,
-        },
-        Room {
-            name: String::from("The Tower"),
-            description: String::from("A spiral staircase vanishes into darkness above."),
-            items: vec![],
-            locked: true,
-            required_key: Some(String::from("rusty key")),
-        },
-    ];
-
-    let mut player = Player {
-        inventory: Vec::new(),
-    };
-
-    let wraith = Wraith {
-        name: String::from("Hollow Wraith"),
-        description: String::from("A translucent figure, its face frozen in a silent scream."),
-        damage: 15,
-    };
-
-    let spider = GiantSpider {
-        name: String::from("Silk Widow"),
-        description: String::from("Eight eyes gleam in the dark. Its web fills the doorway."),
-        web_strength: 8,
-    };
-
-    encounter(&wraith);
-    encounter(&spider);
-
-    let mut current_room = 0;
-
-    loop {
-        let room = &rooms[current_room];
-        println!("\n--- {} ---", room.name);
-        println!("{}", room.description);
-        if !room.items.is_empty() {
-            println!("You see: {}", room.items.join(", "));
-        }
-        if !player.inventory.is_empty() {
-            println!("Inventory: {}", player.inventory.join(", "));
-        }
-        println!("\nCommand? (north/south/east/west/take <item>/drop <item>/quit)");
-
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read input");
-        let input = input.trim();
-
-        if input == "quit" {
-            println!("You flee Shadowkeep... for now.");
-            break;
-        }
-
-        if let Some(item_name) = input.strip_prefix("take ") {
-            take_item(&mut player, &mut rooms[current_room], item_name);
-        } else if let Some(item_name) = input.strip_prefix("drop ") {
-            drop_item(&mut player, &mut rooms[current_room], item_name);
-        } else {
-            match parse_direction(input) {
-                Some(Direction::North) | Some(Direction::East) => {
-                    let next_room = (current_room + 1) % rooms.len();
-                    match try_enter_room(&player, &rooms[next_room]) {
-                        Ok(()) => {
-                            current_room = next_room;
-                            println!("You move onward...");
-                        }
-                        Err(msg) => println!("{}", msg),
-                    }
-                }
-                Some(Direction::South) | Some(Direction::West) => {
-                    let next_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
-                    match try_enter_room(&player, &rooms[next_room]) {
-                        Ok(()) => {
-                            current_room = next_room;
-                            println!("You move onward...");
-                        }
-                        Err(msg) => println!("{}", msg),
-                    }
-                }
-                None => {
-                    println!("The shadows swallow your words. Try: north, south, take <item>, drop <item>");
-                }
-            }
-        }
-    }
-}
-```
-
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> use std::io;
+>
+> enum Direction {
+>     North,
+>     South,
+>     East,
+>     West,
+> }
+>
+> struct Room {
+>     name: String,
+>     description: String,
+>     items: Vec<String>,
+>     locked: bool,
+>     required_key: Option<String>,
+> }
+>
+> struct Player {
+>     inventory: Vec<String>,
+> }
+>
+> trait Monster {
+>     fn name(&self) -> &str;
+>     fn describe(&self) -> &str;
+>     fn attack(&self) -> String;
+> }
+>
+> struct Wraith {
+>     name: String,
+>     description: String,
+>     damage: u32,
+> }
+>
+> struct GiantSpider {
+>     name: String,
+>     description: String,
+>     web_strength: u32,
+> }
+>
+> impl Monster for Wraith {
+>     fn name(&self) -> &str {
+>         &self.name
+>     }
+>     fn describe(&self) -> &str {
+>         &self.description
+>     }
+>     fn attack(&self) -> String {
+>         format!("The {} shrieks and drains {} life force from you!", self.name, self.damage)
+>     }
+> }
+>
+> impl Monster for GiantSpider {
+>     fn name(&self) -> &str {
+>         &self.name
+>     }
+>     fn describe(&self) -> &str {
+>         &self.description
+>     }
+>     fn attack(&self) -> String {
+>         format!(
+>             "The {} shoots a web (strength {}) and lunges with venomous fangs!",
+>             self.name, self.web_strength
+>         )
+>     }
+> }
+>
+> fn parse_direction(input: &str) -> Option<Direction> {
+>     match input.trim().to_lowercase().as_str() {
+>         "north" | "n" => Some(Direction::North),
+>         "south" | "s" => Some(Direction::South),
+>         "east" | "e" => Some(Direction::East),
+>         "west" | "w" => Some(Direction::West),
+>         _ => None,
+>     }
+> }
+>
+> fn take_item(player: &mut Player, room: &mut Room, item_name: &str) {
+>     if let Some(pos) = room.items.iter().position(|i| i == item_name) {
+>         let item = room.items.remove(pos);
+>         println!("You pick up the {}. It's cold to the touch.", item);
+>         player.inventory.push(item);
+>     } else {
+>         println!("There is no '{}' here.", item_name);
+>     }
+> }
+>
+> fn drop_item(player: &mut Player, room: &mut Room, item_name: &str) {
+>     if let Some(pos) = player.inventory.iter().position(|i| i == item_name) {
+>         let item = player.inventory.remove(pos);
+>         println!("You drop the {}. It clatters on the stone floor.", item);
+>         room.items.push(item);
+>     } else {
+>         println!("You don't have a '{}'.", item_name);
+>     }
+> }
+>
+> fn encounter(monster: &dyn Monster) {
+>     println!("\nSomething stirs in the darkness...");
+>     println!("You see: {}", monster.describe());
+>     println!("{}", monster.attack());
+> }
+>
+> fn try_enter_room(player: &Player, room: &Room) -> Result<(), String> {
+>     if !room.locked {
+>         return Ok(());
+>     }
+>
+>     match &room.required_key {
+>         Some(key) => {
+>             if player.inventory.iter().any(|item| item == key) {
+>                 println!("You use the {} to unlock {}.", key, room.name);
+>                 Ok(())
+>             } else {
+>                 Err(format!("{} is locked. You need: {}", room.name, key))
+>             }
+>         }
+>         None => Err(format!("{} is sealed by dark magic. No key can open it.", room.name)),
+>     }
+> }
+>
+> fn main() {
+>     let mut rooms = vec![
+>         Room {
+>             name: String::from("The Crypt"),
+>             description: String::from("A damp chamber. Bones are stacked along the walls."),
+>             items: vec![String::from("rusty key"), String::from("torch")],
+>             locked: false,
+>             required_key: None,
+>         },
+>         Room {
+>             name: String::from("The Great Hall"),
+>             description: String::from("A vast room with a shattered chandelier."),
+>             items: vec![String::from("silver dagger")],
+>             locked: false,
+>             required_key: None,
+>         },
+>         Room {
+>             name: String::from("The Library"),
+>             description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
+>             items: vec![String::from("ancient tome")],
+>             locked: false,
+>             required_key: None,
+>         },
+>         Room {
+>             name: String::from("The Tower"),
+>             description: String::from("A spiral staircase vanishes into darkness above."),
+>             items: vec![],
+>             locked: true,
+>             required_key: Some(String::from("rusty key")),
+>         },
+>     ];
+>
+>     let mut player = Player {
+>         inventory: Vec::new(),
+>     };
+>
+>     let wraith = Wraith {
+>         name: String::from("Hollow Wraith"),
+>         description: String::from("A translucent figure, its face frozen in a silent scream."),
+>         damage: 15,
+>     };
+>
+>     let spider = GiantSpider {
+>         name: String::from("Silk Widow"),
+>         description: String::from("Eight eyes gleam in the dark. Its web fills the doorway."),
+>         web_strength: 8,
+>     };
+>
+>     encounter(&wraith);
+>     encounter(&spider);
+>
+>     let mut current_room = 0;
+>
+>     loop {
+>         let room = &rooms[current_room];
+>         println!("\n--- {} ---", room.name);
+>         println!("{}", room.description);
+>         if !room.items.is_empty() {
+>             println!("You see: {}", room.items.join(", "));
+>         }
+>         if !player.inventory.is_empty() {
+>             println!("Inventory: {}", player.inventory.join(", "));
+>         }
+>         println!("\nCommand? (north/south/east/west/take <item>/drop <item>/quit)");
+>
+>         let mut input = String::new();
+>         io::stdin()
+>             .read_line(&mut input)
+>             .expect("Failed to read input");
+>         let input = input.trim();
+>
+>         if input == "quit" {
+>             println!("You flee Shadowkeep... for now.");
+>             break;
+>         }
+>
+>         if let Some(item_name) = input.strip_prefix("take ") {
+>             take_item(&mut player, &mut rooms[current_room], item_name);
+>         } else if let Some(item_name) = input.strip_prefix("drop ") {
+>             drop_item(&mut player, &mut rooms[current_room], item_name);
+>         } else {
+>             match parse_direction(input) {
+>                 Some(Direction::North) | Some(Direction::East) => {
+>                     let next_room = (current_room + 1) % rooms.len();
+>                     match try_enter_room(&player, &rooms[next_room]) {
+>                         Ok(()) => {
+>                             current_room = next_room;
+>                             println!("You move onward...");
+>                         }
+>                         Err(msg) => println!("{}", msg),
+>                     }
+>                 }
+>                 Some(Direction::South) | Some(Direction::West) => {
+>                     let next_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
+>                     match try_enter_room(&player, &rooms[next_room]) {
+>                         Ok(()) => {
+>                             current_room = next_room;
+>                             println!("You move onward...");
+>                         }
+>                         Err(msg) => println!("{}", msg),
+>                     }
+>                 }
+>                 None => {
+>                     println!("The shadows swallow your words. Try: north, south, take <item>, drop <item>");
+>                 }
+>             }
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -2057,7 +2049,15 @@ fn main() {
 
 A game that forgets your progress is a game no one finishes. Serialization — converting live data structures to bytes on disk and back — is a skill you'll use in every Rust project, from config files to network protocols. You're learning it now with serde because the multiplayer server in Act 2 will need to serialize game state for save files, and Act 3 will serialize messages for the network. The journal is your first taste of persistence in a world that wants to forget you.
 
-**Difficulty:** Medium | **Time:** 30 minutes – 1 hour
+*Difficulty: Medium*
+
+> [!tip] What You'll Learn
+> - Err
+> - Vec
+> - Path
+> - main
+> - bool
+
 
 ### Story Beat
 
@@ -2078,7 +2078,7 @@ cargo add serde --features derive
 cargo add serde_json
 ```
 
-- `cargo add` adds a dependency to your `Cargo.toml` — like `npm install` or `pip install`.
+- `cargo add` adds a dependency to your `Cargo.toml` — like `pip install`.
 - `--features derive` enables serde's derive macros so we can use `#[derive(Serialize, Deserialize)]`.
 - After running these, your `Cargo.toml` will have:
 
@@ -2227,15 +2227,14 @@ In your game loop, add these branches to the input handling (before the directio
 - `.clone()` creates a deep copy. We need this because `SaveState` takes ownership of its data, but we want to keep playing with our current `rooms` and `player`. Cloning is explicit in Rust — no hidden copies.
 - `.iter().map(|r| ...).collect()` — transforms each room into a new owned `Room` for the save state. `.collect()` gathers the iterator into a `Vec`.
 
-### Common Mistake
-
-If you forget `#[derive(Serialize, Deserialize)]` on a struct:
-
-```
-error[E0277]: the trait bound `Room: Serialize` is not satisfied
-```
-
-Every struct that goes into JSON needs the derive attribute. And every field type in that struct must also implement `Serialize`/`Deserialize`.
+> [!warning] Common Mistakes
+> If you forget `#[derive(Serialize, Deserialize)]` on a struct:
+>
+> ```
+> error[E0277]: the trait bound `Room: Serialize` is not satisfied
+> ```
+>
+> Every struct that goes into JSON needs the derive attribute. And every field type in that struct must also implement `Serialize`/`Deserialize`.
 
 ### Test
 
@@ -2310,296 +2309,294 @@ The `?` operator is the idiomatic way to propagate errors in Rust. It keeps your
 
 The journal remembers. But a single-player game in a haunted castle is lonely — the real horror begins when other souls arrive. You need to open a door to the outside world: a TCP server that listens for connections.
 
-### Checkpoint Code
-
-```rust
-// src/main.rs
-use serde::{Deserialize, Serialize};
-use std::fs;
-use std::io;
-use std::path::Path;
-
-enum Direction {
-    North,
-    South,
-    East,
-    West,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Room {
-    name: String,
-    description: String,
-    items: Vec<String>,
-    locked: bool,
-    required_key: Option<String>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct Player {
-    inventory: Vec<String>,
-}
-
-#[derive(Serialize, Deserialize)]
-struct SaveState {
-    current_room: usize,
-    player: Player,
-    rooms: Vec<Room>,
-}
-
-trait Monster {
-    fn name(&self) -> &str;
-    fn describe(&self) -> &str;
-    fn attack(&self) -> String;
-}
-
-struct Wraith {
-    name: String,
-    description: String,
-    damage: u32,
-}
-
-struct GiantSpider {
-    name: String,
-    description: String,
-    web_strength: u32,
-}
-
-impl Monster for Wraith {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn describe(&self) -> &str {
-        &self.description
-    }
-    fn attack(&self) -> String {
-        format!("The {} shrieks and drains {} life force from you!", self.name, self.damage)
-    }
-}
-
-impl Monster for GiantSpider {
-    fn name(&self) -> &str {
-        &self.name
-    }
-    fn describe(&self) -> &str {
-        &self.description
-    }
-    fn attack(&self) -> String {
-        format!(
-            "The {} shoots a web (strength {}) and lunges with venomous fangs!",
-            self.name, self.web_strength
-        )
-    }
-}
-
-fn parse_direction(input: &str) -> Option<Direction> {
-    match input.trim().to_lowercase().as_str() {
-        "north" | "n" => Some(Direction::North),
-        "south" | "s" => Some(Direction::South),
-        "east" | "e" => Some(Direction::East),
-        "west" | "w" => Some(Direction::West),
-        _ => None,
-    }
-}
-
-fn take_item(player: &mut Player, room: &mut Room, item_name: &str) {
-    if let Some(pos) = room.items.iter().position(|i| i == item_name) {
-        let item = room.items.remove(pos);
-        println!("You pick up the {}. It's cold to the touch.", item);
-        player.inventory.push(item);
-    } else {
-        println!("There is no '{}' here.", item_name);
-    }
-}
-
-fn drop_item(player: &mut Player, room: &mut Room, item_name: &str) {
-    if let Some(pos) = player.inventory.iter().position(|i| i == item_name) {
-        let item = player.inventory.remove(pos);
-        println!("You drop the {}. It clatters on the stone floor.", item);
-        room.items.push(item);
-    } else {
-        println!("You don't have a '{}'.", item_name);
-    }
-}
-
-fn encounter(monster: &dyn Monster) {
-    println!("\nSomething stirs in the darkness...");
-    println!("You see: {}", monster.describe());
-    println!("{}", monster.attack());
-}
-
-fn try_enter_room(player: &Player, room: &Room) -> Result<(), String> {
-    if !room.locked {
-        return Ok(());
-    }
-    match &room.required_key {
-        Some(key) => {
-            if player.inventory.iter().any(|item| item == key) {
-                println!("You use the {} to unlock {}.", key, room.name);
-                Ok(())
-            } else {
-                Err(format!("{} is locked. You need: {}", room.name, key))
-            }
-        }
-        None => Err(format!("{} is sealed by dark magic. No key can open it.", room.name)),
-    }
-}
-
-fn save_game(state: &SaveState) -> Result<(), String> {
-    let json = serde_json::to_string_pretty(state)
-        .map_err(|e| format!("Failed to serialize: {e}"))?;
-    fs::write("shadowkeep_save.json", &json)
-        .map_err(|e| format!("Failed to write save file: {e}"))?;
-    Ok(())
-}
-
-fn load_game() -> Result<SaveState, String> {
-    let path = Path::new("shadowkeep_save.json");
-    if !path.exists() {
-        return Err("No save file found. The journal is blank.".to_string());
-    }
-    let json = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read save file: {e}"))?;
-    let state: SaveState = serde_json::from_str(&json)
-        .map_err(|e| format!("Failed to parse save file: {e}"))?;
-    Ok(state)
-}
-
-fn main() {
-    let mut rooms = vec![
-        Room {
-            name: String::from("The Crypt"),
-            description: String::from("A damp chamber. Bones are stacked along the walls."),
-            items: vec![String::from("rusty key"), String::from("torch")],
-            locked: false,
-            required_key: None,
-        },
-        Room {
-            name: String::from("The Great Hall"),
-            description: String::from("A vast room with a shattered chandelier."),
-            items: vec![String::from("silver dagger")],
-            locked: false,
-            required_key: None,
-        },
-        Room {
-            name: String::from("The Library"),
-            description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
-            items: vec![String::from("ancient tome")],
-            locked: false,
-            required_key: None,
-        },
-        Room {
-            name: String::from("The Tower"),
-            description: String::from("A spiral staircase vanishes into darkness above."),
-            items: vec![],
-            locked: true,
-            required_key: Some(String::from("rusty key")),
-        },
-    ];
-
-    let mut player = Player {
-        inventory: Vec::new(),
-    };
-
-    let wraith = Wraith {
-        name: String::from("Hollow Wraith"),
-        description: String::from("A translucent figure, its face frozen in a silent scream."),
-        damage: 15,
-    };
-
-    let spider = GiantSpider {
-        name: String::from("Silk Widow"),
-        description: String::from("Eight eyes gleam in the dark. Its web fills the doorway."),
-        web_strength: 8,
-    };
-
-    encounter(&wraith);
-    encounter(&spider);
-
-    let mut current_room = 0;
-
-    loop {
-        let room = &rooms[current_room];
-        println!("\n--- {} ---", room.name);
-        println!("{}", room.description);
-        if !room.items.is_empty() {
-            println!("You see: {}", room.items.join(", "));
-        }
-        if !player.inventory.is_empty() {
-            println!("Inventory: {}", player.inventory.join(", "));
-        }
-        println!("\nCommand? (north/south/east/west/take/drop/save/load/quit)");
-
-        let mut input = String::new();
-        io::stdin()
-            .read_line(&mut input)
-            .expect("Failed to read input");
-        let input = input.trim();
-
-        if input == "quit" {
-            println!("You flee Shadowkeep... for now.");
-            break;
-        } else if input == "save" {
-            let state = SaveState {
-                current_room,
-                player: Player { inventory: player.inventory.clone() },
-                rooms: rooms.iter().map(|r| Room {
-                    name: r.name.clone(),
-                    description: r.description.clone(),
-                    items: r.items.clone(),
-                    locked: r.locked,
-                    required_key: r.required_key.clone(),
-                }).collect(),
-            };
-            match save_game(&state) {
-                Ok(()) => println!("The journal glows. Your progress is saved."),
-                Err(e) => println!("The journal resists: {e}"),
-            }
-        } else if input == "load" {
-            match load_game() {
-                Ok(state) => {
-                    current_room = state.current_room;
-                    player = state.player;
-                    rooms = state.rooms;
-                    println!("The journal's pages flutter. Your memories return.");
-                }
-                Err(e) => println!("{e}"),
-            }
-        } else if let Some(item_name) = input.strip_prefix("take ") {
-            take_item(&mut player, &mut rooms[current_room], item_name);
-        } else if let Some(item_name) = input.strip_prefix("drop ") {
-            drop_item(&mut player, &mut rooms[current_room], item_name);
-        } else {
-            match parse_direction(input) {
-                Some(Direction::North) | Some(Direction::East) => {
-                    let next_room = (current_room + 1) % rooms.len();
-                    match try_enter_room(&player, &rooms[next_room]) {
-                        Ok(()) => {
-                            current_room = next_room;
-                            println!("You move onward...");
-                        }
-                        Err(msg) => println!("{}", msg),
-                    }
-                }
-                Some(Direction::South) | Some(Direction::West) => {
-                    let next_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
-                    match try_enter_room(&player, &rooms[next_room]) {
-                        Ok(()) => {
-                            current_room = next_room;
-                            println!("You move onward...");
-                        }
-                        Err(msg) => println!("{}", msg),
-                    }
-                }
-                None => {
-                    println!("The shadows swallow your words. Try: north, south, take <item>, drop <item>");
-                }
-            }
-        }
-    }
-}
-```
-
+> [!check] Checkpoint
+> ```rust
+> // src/main.rs
+> use serde::{Deserialize, Serialize};
+> use std::fs;
+> use std::io;
+> use std::path::Path;
+>
+> enum Direction {
+>     North,
+>     South,
+>     East,
+>     West,
+> }
+>
+> #[derive(Serialize, Deserialize)]
+> struct Room {
+>     name: String,
+>     description: String,
+>     items: Vec<String>,
+>     locked: bool,
+>     required_key: Option<String>,
+> }
+>
+> #[derive(Serialize, Deserialize)]
+> struct Player {
+>     inventory: Vec<String>,
+> }
+>
+> #[derive(Serialize, Deserialize)]
+> struct SaveState {
+>     current_room: usize,
+>     player: Player,
+>     rooms: Vec<Room>,
+> }
+>
+> trait Monster {
+>     fn name(&self) -> &str;
+>     fn describe(&self) -> &str;
+>     fn attack(&self) -> String;
+> }
+>
+> struct Wraith {
+>     name: String,
+>     description: String,
+>     damage: u32,
+> }
+>
+> struct GiantSpider {
+>     name: String,
+>     description: String,
+>     web_strength: u32,
+> }
+>
+> impl Monster for Wraith {
+>     fn name(&self) -> &str {
+>         &self.name
+>     }
+>     fn describe(&self) -> &str {
+>         &self.description
+>     }
+>     fn attack(&self) -> String {
+>         format!("The {} shrieks and drains {} life force from you!", self.name, self.damage)
+>     }
+> }
+>
+> impl Monster for GiantSpider {
+>     fn name(&self) -> &str {
+>         &self.name
+>     }
+>     fn describe(&self) -> &str {
+>         &self.description
+>     }
+>     fn attack(&self) -> String {
+>         format!(
+>             "The {} shoots a web (strength {}) and lunges with venomous fangs!",
+>             self.name, self.web_strength
+>         )
+>     }
+> }
+>
+> fn parse_direction(input: &str) -> Option<Direction> {
+>     match input.trim().to_lowercase().as_str() {
+>         "north" | "n" => Some(Direction::North),
+>         "south" | "s" => Some(Direction::South),
+>         "east" | "e" => Some(Direction::East),
+>         "west" | "w" => Some(Direction::West),
+>         _ => None,
+>     }
+> }
+>
+> fn take_item(player: &mut Player, room: &mut Room, item_name: &str) {
+>     if let Some(pos) = room.items.iter().position(|i| i == item_name) {
+>         let item = room.items.remove(pos);
+>         println!("You pick up the {}. It's cold to the touch.", item);
+>         player.inventory.push(item);
+>     } else {
+>         println!("There is no '{}' here.", item_name);
+>     }
+> }
+>
+> fn drop_item(player: &mut Player, room: &mut Room, item_name: &str) {
+>     if let Some(pos) = player.inventory.iter().position(|i| i == item_name) {
+>         let item = player.inventory.remove(pos);
+>         println!("You drop the {}. It clatters on the stone floor.", item);
+>         room.items.push(item);
+>     } else {
+>         println!("You don't have a '{}'.", item_name);
+>     }
+> }
+>
+> fn encounter(monster: &dyn Monster) {
+>     println!("\nSomething stirs in the darkness...");
+>     println!("You see: {}", monster.describe());
+>     println!("{}", monster.attack());
+> }
+>
+> fn try_enter_room(player: &Player, room: &Room) -> Result<(), String> {
+>     if !room.locked {
+>         return Ok(());
+>     }
+>     match &room.required_key {
+>         Some(key) => {
+>             if player.inventory.iter().any(|item| item == key) {
+>                 println!("You use the {} to unlock {}.", key, room.name);
+>                 Ok(())
+>             } else {
+>                 Err(format!("{} is locked. You need: {}", room.name, key))
+>             }
+>         }
+>         None => Err(format!("{} is sealed by dark magic. No key can open it.", room.name)),
+>     }
+> }
+>
+> fn save_game(state: &SaveState) -> Result<(), String> {
+>     let json = serde_json::to_string_pretty(state)
+>         .map_err(|e| format!("Failed to serialize: {e}"))?;
+>     fs::write("shadowkeep_save.json", &json)
+>         .map_err(|e| format!("Failed to write save file: {e}"))?;
+>     Ok(())
+> }
+>
+> fn load_game() -> Result<SaveState, String> {
+>     let path = Path::new("shadowkeep_save.json");
+>     if !path.exists() {
+>         return Err("No save file found. The journal is blank.".to_string());
+>     }
+>     let json = fs::read_to_string(path)
+>         .map_err(|e| format!("Failed to read save file: {e}"))?;
+>     let state: SaveState = serde_json::from_str(&json)
+>         .map_err(|e| format!("Failed to parse save file: {e}"))?;
+>     Ok(state)
+> }
+>
+> fn main() {
+>     let mut rooms = vec![
+>         Room {
+>             name: String::from("The Crypt"),
+>             description: String::from("A damp chamber. Bones are stacked along the walls."),
+>             items: vec![String::from("rusty key"), String::from("torch")],
+>             locked: false,
+>             required_key: None,
+>         },
+>         Room {
+>             name: String::from("The Great Hall"),
+>             description: String::from("A vast room with a shattered chandelier."),
+>             items: vec![String::from("silver dagger")],
+>             locked: false,
+>             required_key: None,
+>         },
+>         Room {
+>             name: String::from("The Library"),
+>             description: String::from("Shelves of rotting books. One lies open, its pages turning by themselves."),
+>             items: vec![String::from("ancient tome")],
+>             locked: false,
+>             required_key: None,
+>         },
+>         Room {
+>             name: String::from("The Tower"),
+>             description: String::from("A spiral staircase vanishes into darkness above."),
+>             items: vec![],
+>             locked: true,
+>             required_key: Some(String::from("rusty key")),
+>         },
+>     ];
+>
+>     let mut player = Player {
+>         inventory: Vec::new(),
+>     };
+>
+>     let wraith = Wraith {
+>         name: String::from("Hollow Wraith"),
+>         description: String::from("A translucent figure, its face frozen in a silent scream."),
+>         damage: 15,
+>     };
+>
+>     let spider = GiantSpider {
+>         name: String::from("Silk Widow"),
+>         description: String::from("Eight eyes gleam in the dark. Its web fills the doorway."),
+>         web_strength: 8,
+>     };
+>
+>     encounter(&wraith);
+>     encounter(&spider);
+>
+>     let mut current_room = 0;
+>
+>     loop {
+>         let room = &rooms[current_room];
+>         println!("\n--- {} ---", room.name);
+>         println!("{}", room.description);
+>         if !room.items.is_empty() {
+>             println!("You see: {}", room.items.join(", "));
+>         }
+>         if !player.inventory.is_empty() {
+>             println!("Inventory: {}", player.inventory.join(", "));
+>         }
+>         println!("\nCommand? (north/south/east/west/take/drop/save/load/quit)");
+>
+>         let mut input = String::new();
+>         io::stdin()
+>             .read_line(&mut input)
+>             .expect("Failed to read input");
+>         let input = input.trim();
+>
+>         if input == "quit" {
+>             println!("You flee Shadowkeep... for now.");
+>             break;
+>         } else if input == "save" {
+>             let state = SaveState {
+>                 current_room,
+>                 player: Player { inventory: player.inventory.clone() },
+>                 rooms: rooms.iter().map(|r| Room {
+>                     name: r.name.clone(),
+>                     description: r.description.clone(),
+>                     items: r.items.clone(),
+>                     locked: r.locked,
+>                     required_key: r.required_key.clone(),
+>                 }).collect(),
+>             };
+>             match save_game(&state) {
+>                 Ok(()) => println!("The journal glows. Your progress is saved."),
+>                 Err(e) => println!("The journal resists: {e}"),
+>             }
+>         } else if input == "load" {
+>             match load_game() {
+>                 Ok(state) => {
+>                     current_room = state.current_room;
+>                     player = state.player;
+>                     rooms = state.rooms;
+>                     println!("The journal's pages flutter. Your memories return.");
+>                 }
+>                 Err(e) => println!("{e}"),
+>             }
+>         } else if let Some(item_name) = input.strip_prefix("take ") {
+>             take_item(&mut player, &mut rooms[current_room], item_name);
+>         } else if let Some(item_name) = input.strip_prefix("drop ") {
+>             drop_item(&mut player, &mut rooms[current_room], item_name);
+>         } else {
+>             match parse_direction(input) {
+>                 Some(Direction::North) | Some(Direction::East) => {
+>                     let next_room = (current_room + 1) % rooms.len();
+>                     match try_enter_room(&player, &rooms[next_room]) {
+>                         Ok(()) => {
+>                             current_room = next_room;
+>                             println!("You move onward...");
+>                         }
+>                         Err(msg) => println!("{}", msg),
+>                     }
+>                 }
+>                 Some(Direction::South) | Some(Direction::West) => {
+>                     let next_room = if current_room == 0 { rooms.len() - 1 } else { current_room - 1 };
+>                     match try_enter_room(&player, &rooms[next_room]) {
+>                         Ok(()) => {
+>                             current_room = next_room;
+>                             println!("You move onward...");
+>                         }
+>                         Err(msg) => println!("{}", msg),
+>                     }
+>                 }
+>                 None => {
+>                     println!("The shadows swallow your words. Try: north, south, take <item>, drop <item>");
+>                 }
+>             }
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -2607,7 +2604,15 @@ fn main() {
 
 Everything you've built so far runs locally — one player, one terminal, one process. This stage cracks open the castle gates to the network. TCP is the foundation of every multiplayer game, every web server, every chat application. You're building the simplest possible networked server here so that Act 2 can focus on the hard part: making it handle *many* players at once.
 
-**Difficulty:** Medium | **Time:** 30 minutes – 1 hour
+*Difficulty: Medium*
+
+> [!tip] What You'll Learn
+> - TCP networking with `std::net::TcpListener`. What TCP is
+> - what sockets
+> - ports are
+> - and how to accept a connection
+> - send data
+
 
 ### Story Beat
 
@@ -2845,15 +2850,14 @@ Failed to bind to port 7878: Address already in use
 
 Either stop the other process using that port (`lsof -i :7878`) or change the port number in the code.
 
-### Common Mistake
-
-If you forget `use std::io::Write;`, you'll get:
-
-```
-error[E0599]: no method named `write_all` found for mutable reference `&mut TcpStream`
-```
-
-This is because `write_all` comes from the `Write` trait, and Rust requires traits to be imported before you can call their methods. Add `use std::io::Write;` at the top.
+> [!warning] Common Mistakes
+> If you forget `use std::io::Write;`, you'll get:
+>
+> ```
+> error[E0599]: no method named `write_all` found for mutable reference `&mut TcpStream`
+> ```
+>
+> This is because `write_all` comes from the `Write` trait, and Rust requires traits to be imported before you can call their methods. Add `use std::io::Write;` at the top.
 
 ### Rust Aside — Blocking I/O and What's Next
 
@@ -2869,91 +2873,90 @@ In Act 2, we'll make this concurrent — handling many players at once using thr
 
 The gate is open. One soul at a time can enter — but the castle hungers for more. In Act 2, you'll learn to let many players through at once, sharing the same haunted world.
 
-### Checkpoint Code
-
-```rust
-// src/server.rs
-use std::io::Write;
-use std::net::TcpListener;
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").expect("Failed to bind to port 7878");
-
-    println!("Shadowkeep server listening on 127.0.0.1:7878");
-    println!("Connect with: nc 127.0.0.1 7878");
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                println!("A soul approaches the gate...");
-                handle_connection(&mut stream);
-            }
-            Err(e) => {
-                eprintln!("Failed to accept connection: {e}");
-            }
-        }
-    }
-}
-
-fn handle_connection(stream: &mut std::net::TcpStream) {
-    let welcome = "\
-╔══════════════════════════════════════╗
-║     Welcome to SHADOWKEEP            ║
-║     A darkness stirs within...       ║
-╠══════════════════════════════════════╣
-║                                      ║
-║  You stand before an ancient castle. ║
-║  The iron gate groans open.          ║
-║  Cold air rushes past you.           ║
-║                                      ║
-║  Type 'look' to observe your         ║
-║  surroundings.                       ║
-║                                      ║
-╚══════════════════════════════════════╝\n\n";
-
-    if let Err(e) = stream.write_all(welcome.as_bytes()) {
-        eprintln!("Failed to send welcome: {e}");
-        return;
-    }
-
-    let room_desc = "--- The Crypt ---\n\
-                     A damp chamber. Bones are stacked along the walls.\n\
-                     You see: rusty key, torch\n\
-                     \n\
-                     What do you do?\n> ";
-
-    if let Err(e) = stream.write_all(room_desc.as_bytes()) {
-        eprintln!("Failed to send room description: {e}");
-        return;
-    }
-
-    let mut buffer = [0u8; 512];
-    match std::io::Read::read(&mut *stream, &mut buffer) {
-        Ok(0) => {
-            println!("The soul vanished without a word.");
-        }
-        Ok(n) => {
-            let command = String::from_utf8_lossy(&buffer[..n]);
-            let command = command.trim();
-            println!("Player said: {command}");
-
-            let response = match command {
-                "look" => "You see damp stone walls. Water drips from the ceiling.\nBones are stacked in alcoves. A rusty key glints on the floor.\n",
-                "take rusty key" => "You pick up the rusty key. It's cold to the touch.\n",
-                "quit" => "You flee Shadowkeep... for now.\n",
-                _ => "The shadows swallow your words.\n",
-            };
-
-            let _ = stream.write_all(response.as_bytes());
-        }
-        Err(e) => {
-            eprintln!("Failed to read from player: {e}");
-        }
-    }
-
-    println!("Connection closed.");
-}
-```
+> [!check] Checkpoint
+> ```rust
+> // src/server.rs
+> use std::io::Write;
+> use std::net::TcpListener;
+>
+> fn main() {
+>     let listener = TcpListener::bind("127.0.0.1:7878").expect("Failed to bind to port 7878");
+>
+>     println!("Shadowkeep server listening on 127.0.0.1:7878");
+>     println!("Connect with: nc 127.0.0.1 7878");
+>
+>     for stream in listener.incoming() {
+>         match stream {
+>             Ok(mut stream) => {
+>                 println!("A soul approaches the gate...");
+>                 handle_connection(&mut stream);
+>             }
+>             Err(e) => {
+>                 eprintln!("Failed to accept connection: {e}");
+>             }
+>         }
+>     }
+> }
+>
+> fn handle_connection(stream: &mut std::net::TcpStream) {
+>     let welcome = "\
+> ╔══════════════════════════════════════╗
+> ║     Welcome to SHADOWKEEP            ║
+> ║     A darkness stirs within...       ║
+> ╠══════════════════════════════════════╣
+> ║                                      ║
+> ║  You stand before an ancient castle. ║
+> ║  The iron gate groans open.          ║
+> ║  Cold air rushes past you.           ║
+> ║                                      ║
+> ║  Type 'look' to observe your         ║
+> ║  surroundings.                       ║
+> ║                                      ║
+> ╚══════════════════════════════════════╝\n\n";
+>
+>     if let Err(e) = stream.write_all(welcome.as_bytes()) {
+>         eprintln!("Failed to send welcome: {e}");
+>         return;
+>     }
+>
+>     let room_desc = "--- The Crypt ---\n\
+>                      A damp chamber. Bones are stacked along the walls.\n\
+>                      You see: rusty key, torch\n\
+>                      \n\
+>                      What do you do?\n> ";
+>
+>     if let Err(e) = stream.write_all(room_desc.as_bytes()) {
+>         eprintln!("Failed to send room description: {e}");
+>         return;
+>     }
+>
+>     let mut buffer = [0u8; 512];
+>     match std::io::Read::read(&mut *stream, &mut buffer) {
+>         Ok(0) => {
+>             println!("The soul vanished without a word.");
+>         }
+>         Ok(n) => {
+>             let command = String::from_utf8_lossy(&buffer[..n]);
+>             let command = command.trim();
+>             println!("Player said: {command}");
+>
+>             let response = match command {
+>                 "look" => "You see damp stone walls. Water drips from the ceiling.\nBones are stacked in alcoves. A rusty key glints on the floor.\n",
+>                 "take rusty key" => "You pick up the rusty key. It's cold to the touch.\n",
+>                 "quit" => "You flee Shadowkeep... for now.\n",
+>                 _ => "The shadows swallow your words.\n",
+>             };
+>
+>             let _ = stream.write_all(response.as_bytes());
+>         }
+>         Err(e) => {
+>             eprintln!("Failed to read from player: {e}");
+>         }
+>     }
+>
+>     println!("Connection closed.");
+> }
+> ```
 
 ---
 

@@ -12,7 +12,7 @@
 
 ## Stage 23 — The NPC Struct
 
-*Difficulty: Easy — Estimated time: 30 minutes*
+*Difficulty: Easy · Time: ~30 min*
 
 Before any dot can move on the Marauder's Map, we need to define what a dot *is*. This stage creates the data foundation for every NPC in the game — from Filch's red menace to Nearly Headless Nick's ethereal drift. You'll learn how Rust's enums-with-data pattern eliminates entire categories of "invalid state" bugs that plague game AI in other languages, and why the compiler's exhaustive matching is your best friend when you add a new character type.
 
@@ -212,19 +212,20 @@ let status = Paragraph::new(npc_line).style(Style::new().fg(Color::DarkGray));
 frame.render_widget(status, status_area);
 ```
 
-### 23.7 — Checkpoint
+> [!check] Checkpoint
+> Build and run. You should see colored letters scattered across your map — `F` for Filch in red, `S` for Snape in magenta, `P` for Peeves in yellow. They don't move yet, but they're *there*. The castle finally has inhabitants. In Stage 24, we wire up the Dijkstra pathfinding from Act 3 to make them walk their patrol routes.
+>
+> [!warning] Common Mistake
+> If you're getting a borrow error when iterating `game.npcs` inside the render closure, remember that `terminal.draw(|frame| { ... })` borrows the terminal mutably, but your game state is separate. Pass `&game` into the render function rather than trying to access it through the closure.
 
-Build and run. You should see colored letters scattered across your map — `F` for Filch in red, `S` for Snape in magenta, `P` for Peeves in yellow. They don't move yet, but they're *there*. The castle finally has inhabitants. In Stage 24, we wire up the Dijkstra pathfinding from Act 3 to make them walk their patrol routes.
-
-> **Common mistake**: If you're getting a borrow error when iterating `game.npcs` inside the render closure, remember that `terminal.draw(|frame| { ... })` borrows the terminal mutably, but your game state is separate. Pass `&game` into the render function rather than trying to access it through the closure.
-
-**Your NPC module should now have**: `NpcKind` enum, `AiState` enum, `Npc` struct with `new()`, rendering code in your draw function, and a `spawn_npcs()` method. In the next stage, we make them walk.
+>
+> **Your NPC module should now have**: `NpcKind` enum, `AiState` enum, `Npc` struct with `new()`, rendering code in your draw function, and a `spawn_npcs()` method. In the next stage, we make them walk.
 
 ---
 
 ## Stage 24 — Patrol Routes
 
-*Difficulty: Medium — Estimated time: 45 minutes*
+*Difficulty: Medium · Time: ~45 min*
 
 A stationary NPC is just furniture — a colored letter sitting on the map doing nothing. This stage is where the pathfinding algorithms from Act 3 earn their keep: Dijkstra computes the shortest weighted path between waypoints, and NPCs follow those paths step by step. You'll also encounter one of Rust's most important borrow checker lessons: why you can't mutate NPCs while reading the grid through the same `&self`.
 
@@ -405,19 +406,20 @@ if game.debug_mode {
 
 This draws a dim trail of dots in each NPC's color showing where they're headed. Toggle debug mode and watch Filch's red dots trace his patrol route through the corridors. It's satisfying — and useful for tuning routes.
 
-### 24.7 — Checkpoint
+> [!check] Checkpoint
+> Build and run. Filch should now pace back and forth along his patrol route, his red `F` moving steadily through the corridors. Snape glides between waypoints in the dungeons. Students amble between classrooms. The castle is alive. But NPCs patrol the same route regardless of the time of day — next, we add a schedule system so Snape shows up to class on time and Filch only prowls after curfew.
+>
+> > **Try this**: Set Filch's speed to 1.5 and watch him zip around. Set Dumbledore's to 0.2 and watch him stroll. The accumulator system makes speed tuning trivial.
+>
+> [!warning] Common Mistake
+> If NPCs get stuck at waypoints, check that your waypoint coordinates are actually walkable tiles. A waypoint placed on a wall means Dijkstra returns no path, and the NPC idles forever. Add a debug log: `if path.is_none() { eprintln!("{} can't reach waypoint {:?}", self.name, target); }`.
 
-Build and run. Filch should now pace back and forth along his patrol route, his red `F` moving steadily through the corridors. Snape glides between waypoints in the dungeons. Students amble between classrooms. The castle is alive. But NPCs patrol the same route regardless of the time of day — next, we add a schedule system so Snape shows up to class on time and Filch only prowls after curfew.
-
-> **Try this**: Set Filch's speed to 1.5 and watch him zip around. Set Dumbledore's to 0.2 and watch him stroll. The accumulator system makes speed tuning trivial.
-
-> **Common mistake**: If NPCs get stuck at waypoints, check that your waypoint coordinates are actually walkable tiles. A waypoint placed on a wall means Dijkstra returns no path, and the NPC idles forever. Add a debug log: `if path.is_none() { eprintln!("{} can't reach waypoint {:?}", self.name, target); }`.
 
 ---
 
 ## Stage 25 — The Schedule
 
-*Difficulty: Medium — Estimated time: 45 minutes*
+*Difficulty: Medium · Time: ~45 min*
 
 NPCs that patrol the same route 24/7 feel robotic. In the books, the Marauder's Map shows people going about their *lives* — Snape walks to class at 8 AM, students flood the Great Hall at noon, Filch only prowls after curfew. A schedule system transforms NPCs from mechanical patrol bots into inhabitants with daily rhythms. It also introduces a critical design principle: schedule is *lower priority* than alert/chase — if Filch spots you at 5:59 AM, he doesn't break off the chase because his schedule says "go to office" at 6:00.
 
@@ -676,17 +678,16 @@ for npc in &mut game.npcs {
 
 Again, note the borrow splitting — we take `&game.grid` and `&game.clock` as separate borrows before mutably iterating `game.npcs`. The borrow checker is happy because we're not mutating `grid` or `clock`.
 
-### 25.7 — Checkpoint
-
-Build and run. Start the game at different times and watch the NPCs behave differently. At 10 PM, Filch patrols and Snape is in his office. At noon, students head to the Great Hall and Snape walks to lunch. The castle has a daily rhythm now. But NPCs still can't *see* you — they patrol blindly past the player. Next, we add line-of-sight detection and the tension-building detection meter. Fast-forward time (add a debug key to advance the clock by an hour) and watch the castle's daily rhythm unfold.
-
-> **Exercise for the reader**: Add schedules for students. Have groups of 3-4 students move between classrooms on the hour. The corridors should feel busy during class changes and empty at night — just like real Hogwarts.
+> [!check] Checkpoint
+> Build and run. Start the game at different times and watch the NPCs behave differently. At 10 PM, Filch patrols and Snape is in his office. At noon, students head to the Great Hall and Snape walks to lunch. The castle has a daily rhythm now. But NPCs still can't *see* you — they patrol blindly past the player. Next, we add line-of-sight detection and the tension-building detection meter. Fast-forward time (add a debug key to advance the clock by an hour) and watch the castle's daily rhythm unfold.
+>
+> > **Exercise for the reader**: Add schedules for students. Have groups of 3-4 students move between classrooms on the hour. The corridors should feel busy during class changes and empty at night — just like real Hogwarts.
 
 ---
 
 ## Stage 26 — Detection
 
-*Difficulty: Medium — Estimated time: 50 minutes*
+*Difficulty: Medium · Time: ~50 min*
 
 NPCs that can't see you aren't dangerous — they're scenery. Detection is the mechanic that transforms the game from "walk around a pretty map" into "sneak through a castle where getting seen has consequences." This stage implements Bresenham's line algorithm for line-of-sight, builds the detection meter that creates real-time tension, and wires them together so ducking behind a wall actually *matters*. The detection meter is the player's heartbeat — green when safe, red when Filch is three tiles away and closing.
 
@@ -969,19 +970,20 @@ if game.debug_mode {
 
 This lets you *see* what the NPCs see. Toggle debug mode and watch Filch's red line-of-sight ray sweep down corridors. When it hits a wall, it stops. When it reaches you — the detection meter spikes.
 
-### 26.7 — Checkpoint
+> [!check] Checkpoint
+> Build and run. Walk near Filch and watch the detection meter climb. Duck behind a wall and watch it decay. The game now has *tension* — you're not just walking through a map, you're sneaking through a castle where getting seen has consequences. But right now, NPCs just *detect* you — they don't *react*. Next, we build the full AI state machine: Filch spots you, switches to A* pathfinding, and hunts you through the corridors.
+>
+> [!warning] Common Mistake
+> If detection seems to spike instantly to 100, check your tick rate. At 200ms per tick with +5 per tick from Filch, it takes 20 ticks (4 seconds) to go from 0 to 100. If your tick rate is faster (say 50ms), detection climbs 4x faster. Tune the numbers to feel right.
 
-Build and run. Walk near Filch and watch the detection meter climb. Duck behind a wall and watch it decay. The game now has *tension* — you're not just walking through a map, you're sneaking through a castle where getting seen has consequences. But right now, NPCs just *detect* you — they don't *react*. Next, we build the full AI state machine: Filch spots you, switches to A* pathfinding, and hunts you through the corridors.
-
-> **Common mistake**: If detection seems to spike instantly to 100, check your tick rate. At 200ms per tick with +5 per tick from Filch, it takes 20 ticks (4 seconds) to go from 0 to 100. If your tick rate is faster (say 50ms), detection climbs 4x faster. Tune the numbers to feel right.
-
-> **Exercise**: Add a "heartbeat" effect — when detection is above 70, flash the meter bar between red and dark red every few frames. The visual pulse creates anxiety even before the player is caught.
+>
+> > **Exercise**: Add a "heartbeat" effect — when detection is above 70, flash the meter bar between red and dark red every few frames. The visual pulse creates anxiety even before the player is caught.
 
 ---
 
 ## Stage 27 — Alert & Chase
 
-*Difficulty: Hard — Estimated time: 60 minutes*
+*Difficulty: Hard · Time: ~60 min*
 
 This is the stage where Filch becomes *terrifying*. Detection without reaction is just a number on a meter. The AI state machine — Patrol → Alert → Chase → Return → Patrol — is what transforms a patrolling NPC into an intelligent adversary. When Filch spots you, he breaks from his route, switches from Dijkstra to A* pathfinding, and hunts you through the corridors at 1.5x speed. Lose him around a corner and he investigates your last known position. This is the full payoff of every algorithm and system you've built so far.
 
@@ -1228,26 +1230,27 @@ for npc in &mut game.npcs {
 
 The order matters: schedule sets the baseline behavior, AI overrides it if the player is detected, patrol advances waypoints, and tick moves the NPC along its path.
 
-### 27.6 — Checkpoint
+> [!check] Checkpoint
+> Build and run. Deliberately get spotted by Filch and test the full state machine cycle. Filch is now a genuine threat — but he's working alone. In Stage 28, Mrs. Norris becomes his force multiplier: she scouts ahead with BFS, and when she spots you, she relays your position to Filch. Two enemies, coordinated.
+>
+> Verify that:
+> - He switches from `F` to `?` to flashing `!`
+> - He speeds up during chase
+> - He goes to your last known position when you break line of sight
+> - He eventually gives up and returns to patrol
+> - The detection meter spikes during the encounter
+>
+> [!warning] Common Mistake
+> If Filch seems to "teleport" during chase, you're probably recomputing the path every tick without checking if the target moved. Only recompute when `player_pos != target_pos` — otherwise the NPC follows the existing cached path.
 
-Build and run. Deliberately get spotted by Filch and test the full state machine cycle. Filch is now a genuine threat — but he's working alone. In Stage 28, Mrs. Norris becomes his force multiplier: she scouts ahead with BFS, and when she spots you, she relays your position to Filch. Two enemies, coordinated.
-
-Verify that:
-- He switches from `F` to `?` to flashing `!`
-- He speeds up during chase
-- He goes to your last known position when you break line of sight
-- He eventually gives up and returns to patrol
-- The detection meter spikes during the encounter
-
-> **Common mistake**: If Filch seems to "teleport" during chase, you're probably recomputing the path every tick without checking if the target moved. Only recompute when `player_pos != target_pos` — otherwise the NPC follows the existing cached path.
-
-> **Debugging tip**: In debug mode, render the NPC's current state as text next to their symbol: `F[Chase]` or `S[Patrol:2]`. This makes state machine bugs immediately visible.
+>
+> > **Debugging tip**: In debug mode, render the NPC's current state as text next to their symbol: `F[Chase]` or `S[Patrol:2]`. This makes state machine bugs immediately visible.
 
 ---
 
 ## Stage 28 — Mrs. Norris
 
-*Difficulty: Medium — Estimated time: 40 minutes*
+*Difficulty: Medium · Time: ~40 min*
 
 Filch is dangerous alone, but Mrs. Norris makes him *terrifying*. She's his force multiplier — a scout with wider detection range who relays your position back to the caretaker. This stage introduces the "collect-then-apply" pattern, a fundamental Rust technique for coordinating mutations across a collection without fighting the borrow checker. It's also the educational payoff for BFS: Mrs. Norris scouts with BFS because she's *exploring*, not targeting — the algorithm matches the personality.
 
@@ -1439,19 +1442,18 @@ for npc in &mut game.npcs {
 }
 ```
 
-### 28.6 — Checkpoint
-
-Build and run. Position yourself where Mrs. Norris can see you but Filch can't. Watch her spot you (her symbol changes to `?`), then watch Filch suddenly change direction and head toward your position — even though *he* never saw you. The relay system works. The dangerous NPCs are coordinated. Now let's add the atmospheric ones — ghosts that drift through walls and Peeves who blocks corridors with chaotic glee.
-
-> **The tactical implication**: Mrs. Norris has a detection range of 12 vs Filch's 8. She can see you from further away. The smart play is to watch for Mrs. Norris *first* — if you see the `N` symbol nearby, Filch isn't far behind. Avoid the cat and you avoid the caretaker.
-
-> **Exercise**: Add a cooldown to Mrs. Norris's alerts — she can only alert Filch once every 30 ticks. This prevents the player from being permanently tracked and gives them a window to escape after being spotted.
+> [!check] Checkpoint
+> Build and run. Position yourself where Mrs. Norris can see you but Filch can't. Watch her spot you (her symbol changes to `?`), then watch Filch suddenly change direction and head toward your position — even though *he* never saw you. The relay system works. The dangerous NPCs are coordinated. Now let's add the atmospheric ones — ghosts that drift through walls and Peeves who blocks corridors with chaotic glee.
+>
+> > **The tactical implication**: Mrs. Norris has a detection range of 12 vs Filch's 8. She can see you from further away. The smart play is to watch for Mrs. Norris *first* — if you see the `N` symbol nearby, Filch isn't far behind. Avoid the cat and you avoid the caretaker.
+>
+> > **Exercise**: Add a cooldown to Mrs. Norris's alerts — she can only alert Filch once every 30 ticks. This prevents the player from being permanently tracked and gives them a window to escape after being spotted.
 
 ---
 
 ## Stage 29 — Ghosts & Peeves
 
-*Difficulty: Easy — Estimated time: 30 minutes*
+*Difficulty: Easy · Time: ~30 min*
 
 Not every NPC is a threat — some are atmosphere, some are obstacles, and some are pure chaos. This stage introduces **behavior polymorphism**: different NPC types sharing the same struct but moving in fundamentally different ways. Ghosts ignore walls entirely (no pathfinding needed — just Bresenham's line). Peeves respects walls but moves unpredictably and blocks corridors. The design question — enum dispatch vs trait objects — is one you'll face in every Rust project with polymorphic behavior.
 
@@ -1705,22 +1707,21 @@ for npc in &mut game.npcs {
 
 **Design note**: You could also model this with a trait — `trait NpcBehavior { fn update(&mut self, ...); fn tick(&mut self, ...); }` — and store `Box<dyn NpcBehavior>` in each NPC. That's the trait object approach. For this game, the enum match is simpler and avoids heap allocation. Use trait objects when you need open-ended extensibility (plugins, user-defined NPC types). Use enums when the set of variants is known at compile time. Both are valid Rust patterns — pick the one that fits.
 
-### 29.8 — Checkpoint
-
-Build and run. You should see ghosts drifting through walls in cyan, Peeves bouncing between corridors in yellow, and the full cast of dangerous NPCs patrolling with AI. The castle has a complete ecosystem now. One thing remains: what happens when the detection meter hits 100? Stage 30 closes the loop with consequences — getting caught, losing house points, and respawning at the common room.
-
-- Ghosts drifting through walls in cyan, following their routes regardless of obstacles
-- Peeves bouncing between corridors in yellow, occasionally blocking your path
-- Filch and Snape patrolling with full AI (alert, chase, return)
-- Mrs. Norris scouting ahead and alerting Filch
-
-The castle now has a full ecosystem of characters, each with distinct behavior driven by the pathfinding algorithms you built in Act 3.
+> [!check] Checkpoint
+> Build and run. You should see ghosts drifting through walls in cyan, Peeves bouncing between corridors in yellow, and the full cast of dangerous NPCs patrolling with AI. The castle has a complete ecosystem now. One thing remains: what happens when the detection meter hits 100? Stage 30 closes the loop with consequences — getting caught, losing house points, and respawning at the common room.
+>
+> - Ghosts drifting through walls in cyan, following their routes regardless of obstacles
+> - Peeves bouncing between corridors in yellow, occasionally blocking your path
+> - Filch and Snape patrolling with full AI (alert, chase, return)
+> - Mrs. Norris scouting ahead and alerting Filch
+>
+> The castle now has a full ecosystem of characters, each with distinct behavior driven by the pathfinding algorithms you built in Act 3.
 
 ---
 
 ## Stage 30 — Getting Caught
 
-*Difficulty: Medium — Estimated time: 40 minutes*
+*Difficulty: Medium · Time: ~40 min*
 
 A detection meter that climbs to 100 and does nothing is a broken promise. This stage closes the gameplay loop: getting caught triggers a dramatic animation, deducts house points, and respawns the player at their common room. It transforms the detection meter from a number into a *consequence* — and adds the near-miss scoring that rewards skillful play. Without this stage, there are no stakes; with it, every corridor becomes a gamble.
 
@@ -2012,19 +2013,18 @@ fn game_tick(game: &mut Game) {
 
 Alerts before NPC updates, detection after movement, caught check last. Each system feeds the next.
 
-### 30.8 — Checkpoint
-
-Build and run. Walk into Filch's line of sight and let the detection meter climb to 100. The full caught sequence should play — freeze, popup, point deduction, respawn. Then try the opposite: sneak past at close range and earn the +25 bonus. The game now has stakes, consequences, and rewards. Act 4 is complete — the castle is alive with intelligent NPCs. In Act 5, we add the secrets and polish that transform this from a tech demo into a *game*: hidden passages, items, missions, save/load, and atmospheric magic.
-
-You should see:
-
-1. The map freezes
-2. A red-bordered "CAUGHT" popup appears with flavor text
-3. House points deducted (-75)
-4. After the animation, you respawn at the common room
-5. All NPCs reset to patrol — the slate is clean
-
-Then try the opposite: sneak past Filch at close range, break his line of sight, and earn the +25 close call bonus. The game now has stakes, consequences, and rewards.
+> [!check] Checkpoint
+> Build and run. Walk into Filch's line of sight and let the detection meter climb to 100. The full caught sequence should play — freeze, popup, point deduction, respawn. Then try the opposite: sneak past at close range and earn the +25 bonus. The game now has stakes, consequences, and rewards. Act 4 is complete — the castle is alive with intelligent NPCs. In Act 5, we add the secrets and polish that transform this from a tech demo into a *game*: hidden passages, items, missions, save/load, and atmospheric magic.
+>
+> You should see:
+>
+> 1. The map freezes
+> 2. A red-bordered "CAUGHT" popup appears with flavor text
+> 3. House points deducted (-75)
+> 4. After the animation, you respawn at the common room
+> 5. All NPCs reset to patrol — the slate is clean
+>
+> Then try the opposite: sneak past Filch at close range, break his line of sight, and earn the +25 close call bonus. The game now has stakes, consequences, and rewards.
 
 ---
 

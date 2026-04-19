@@ -52,8 +52,6 @@ chrono = { version = "0.4", features = ["serde"] }
 
 Right now every duel is a one-off — win or lose, nothing changes. XP and levels give players a reason to keep dueling: each victory brings them closer to new spells, higher stats, and tougher opponents. This stage builds the progression backbone that makes the game feel like a journey from nervous first-year to master duelist. It also teaches you how to design a reward curve that feels satisfying without being trivial.
 
-### The Progression Table Right now your wizard is static — same HP, same mana, same spells forever. We'll fix that with an XP system that rewards skillful play.
-
 ### The Progression Table
 
 Here's the XP curve. It's not linear — each level demands more, like O.W.L. exams getting harder each year:
@@ -322,6 +320,87 @@ mod tests {
     }
 }
 ```
+
+> [!check] Checkpoint
+> ```rust
+> const XP_TABLE: [u32; 10] = [0, 50, 120, 200, 300, 420, 560, 720, 900, 1100];
+>
+> #[derive(Debug, Clone)]
+> pub struct Progression {
+>     pub xp: u32,
+>     pub level: u8,
+>     pub win_streak: u32,
+>     pub total_wins: u32,
+>     pub total_losses: u32,
+> }
+>
+> #[derive(Debug, Clone)]
+> pub struct LevelUp {
+>     pub new_level: u8,
+>     pub hp_bonus: i32,
+>     pub mana_bonus: i32,
+> }
+>
+> impl Progression {
+>     pub fn new() -> Self {
+>         Self { xp: 0, level: 1, win_streak: 0, total_wins: 0, total_losses: 0 }
+>     }
+>
+>     pub fn calculate_xp(&self, won: bool, opponent_level: u8, perfect: bool) -> u32 {
+>         if won {
+>             let base = 30 + (opponent_level as u32 * 5);
+>             let streak = self.win_streak * 5;
+>             let perfect_bonus = if perfect { 20 } else { 0 };
+>             base + streak + perfect_bonus
+>         } else {
+>             10
+>         }
+>     }
+>
+>     pub fn award_xp(&mut self, won: bool, opponent_level: u8, perfect: bool) -> Vec<LevelUp> {
+>         let xp_earned = self.calculate_xp(won, opponent_level, perfect);
+>         self.xp += xp_earned;
+>         if won {
+>             self.win_streak += 1;
+>             self.total_wins += 1;
+>         } else {
+>             self.win_streak = 0;
+>             self.total_losses += 1;
+>         }
+>         let mut level_ups = Vec::new();
+>         while self.level < 10 {
+>             let next_level = self.level as usize;
+>             if self.xp >= XP_TABLE[next_level] {
+>                 self.level += 1;
+>                 level_ups.push(LevelUp {
+>                     new_level: self.level,
+>                     hp_bonus: if self.level % 2 == 1 { 5 } else { 0 },
+>                     mana_bonus: if self.level % 2 == 0 { 5 } else { 0 },
+>                 });
+>             } else {
+>                 break;
+>             }
+>         }
+>         level_ups
+>     }
+>
+>     pub fn xp_to_next_level(&self) -> Option<u32> {
+>         if self.level >= 10 { return None; }
+>         Some(XP_TABLE[self.level as usize] - self.xp)
+>     }
+> }
+>
+> impl Wizard {
+>     pub fn apply_level_up(&mut self, level_up: &LevelUp) {
+>         self.max_hp += level_up.hp_bonus;
+>         self.max_mana += level_up.mana_bonus;
+>         self.hp = self.max_hp;
+>         self.mana = self.max_mana;
+>     }
+> }
+> ```
+> 
+> Your `Wizard` struct should now include a `progression: Progression` field, and the post-duel flow should call `award_xp()` and `apply_level_up()`. The XP bar and level-up notification render in the HUD and results screen respectively.
 
 ---
 
@@ -784,15 +863,14 @@ Without persistence, every game session starts from scratch — all that XP, all
 
 ### What is serde?
 
-If you're coming from Python or TypeScript, think of it this way:
+If you're coming from Python, think of it this way:
 
 | Language | Serialize | Deserialize |
 |----------|-----------|-------------|
 | Python | `json.dumps(obj.__dict__)` | `json.loads(s)` then manually reconstruct |
-| TypeScript | `JSON.stringify(obj)` | `JSON.parse(s) as MyType` (no runtime check!) |
 | Rust (serde) | `serde_json::to_string(&obj)` | `serde_json::from_str::<MyType>(s)` (compile-time checked!) |
 
-The key difference: **serde validates the structure at compile time**. If your JSON doesn't match your struct, you get a clear error — not a silent `undefined` field at runtime.
+The key difference: **serde validates the structure at compile time**. If your JSON doesn't match your struct, you get a clear error — not a silent bug at runtime.
 
 ### The Derive Macros
 
@@ -2393,16 +2471,16 @@ cargo run
 
 ## What You've Learned in Act 4
 
-| Concept | Rust Feature | Python/TS Equivalent |
-|---------|-------------|---------------------|
-| Serialization | `serde` derive macros | `json.dumps` / `JSON.stringify` |
-| Deserialization | `serde_json::from_str` | `json.loads` / `JSON.parse` (but type-safe!) |
-| File I/O | `std::fs::read_to_string`, `write` | `open().read()` / `fs.readFileSync` |
-| Path handling | `PathBuf`, `.join()` | `os.path.join` / `path.join` |
-| Error recovery | `match` on `Result`, graceful fallback | `try/except` / `try/catch` |
+| Concept | Rust Feature | Python Equivalent |
+|---------|-------------|-------------------|
+| Serialization | `serde` derive macros | `json.dumps` |
+| Deserialization | `serde_json::from_str` | `json.loads` (but type-safe!) |
+| File I/O | `std::fs::read_to_string`, `write` | `open().read()` |
+| Path handling | `PathBuf`, `.join()` | `os.path.join` |
+| Error recovery | `match` on `Result`, graceful fallback | `try/except` |
 | Enum serialization | `#[serde(tag, content)]` | Manual `type` discriminator fields |
-| State machines | Enum-based animation states | `setTimeout` / `requestAnimationFrame` |
-| Table rendering | ratatui `Table`, `Row`, `Cell` | HTML `<table>` / terminal-kit |
+| State machines | Enum-based animation states | Timer-based state tracking |
+| Table rendering | ratatui `Table`, `Row`, `Cell` | `curses` / terminal libraries |
 
 ## What's Next
 

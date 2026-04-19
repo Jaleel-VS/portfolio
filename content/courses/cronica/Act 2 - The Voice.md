@@ -8,7 +8,7 @@ Act 1 gave you structs, enums, dice, serialization, and a quest engine — all s
 
 ## Stage 9 — Calling Bedrock: async/await and Your First AI Call
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Our quest engine ticks and our characters have stats, but the narrator's throne is empty — every scene description is hardcoded, every outcome predetermined. We need to reach across the network to an AI that can improvise, react, and weave stories we didn't write. This stage cracks open async programming and makes your first call to the voice that will narrate every adventure from here on.
 
@@ -17,7 +17,7 @@ Our quest engine ticks and our characters have stats, but the narrator's throne 
 > - The `tokio` runtime and `#[tokio::main]`
 > - The `aws-sdk-bedrockruntime` crate and the Converse API
 > - Making your first AI call and getting text back
-> - How `.await` works compared to Python's `await` and JS promises
+> - How `.await` works compared to Python's `await`
 
 ### Why Async?
 
@@ -35,18 +35,11 @@ async with aiohttp.ClientSession() as session:
     response = await session.get("https://api.example.com/data")  # yields control
 ```
 
-**TypeScript comparison:**
-```typescript
-// Promise-based — non-blocking
-const response = await fetch("https://api.example.com/data");
-// JS engine can handle other events while waiting
-```
-
-Rust's async works like Python's `asyncio` — you need a **runtime** to drive the futures. Rust chose not to bake a runtime into the language (unlike JS which has one built into the browser/Node). Instead, you pick one. The ecosystem standard is **tokio**.
+Rust's async works like Python's `asyncio` — you need a **runtime** to drive the futures. Rust chose not to bake a runtime into the language. Instead, you pick one. The ecosystem standard is **tokio**.
 
 ### The Mental Model
 
-A **Future** in Rust is like a Promise in JS or a coroutine in Python. It represents "a value that will exist later." But unlike JS promises, Rust futures are **lazy** — they do nothing until you `.await` them.
+A **Future** in Rust is like a coroutine in Python. It represents "a value that will exist later." But unlike Python coroutines that start executing when awaited, Rust futures are **lazy** — they do nothing until you `.await` them.
 
 ```rust
 // This does NOT send a request. It just creates a Future.
@@ -65,7 +58,7 @@ Uncomment the Act 2 dependencies and add the AWS SDK crates:
 ```toml
 [dependencies]
 # --- Act 1 (already uncommented) ---
-rand = "0.8"
+rand = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
@@ -220,17 +213,16 @@ If your AWS credentials are configured, you'll see the AI narrate a tavern scene
 
 The voice speaks — but it speaks freely, without structure or constraint. We can hear the AI, but we can't control *what* it says or *how* it formats its response. Next stage, we'll craft the prompt that shapes the narrator's every word.
 
-### Checkpoint
-
-- [ ] `cargo run` compiles without errors
-- [ ] You see AI-generated text describing a tavern
-- [ ] You understand that `.await` yields control, not blocks the thread
+> [!check] Checkpoint
+> - [ ] `cargo run` compiles without errors
+> - [ ] You see AI-generated text describing a tavern
+> - [ ] You understand that `.await` yields control, not blocks the thread
 
 ---
 
 ## Stage 10 — The Prompt: Crafting the AI's Instructions
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 We can call the AI, but right now it's a wild oracle — it doesn't know our character's name, their realm, or what kind of quest they're on. Without structured instructions, the narrator rambles aimlessly. We need a prompt architecture that injects game state into every AI call, demands structured JSON responses, and shapes the narrator's voice to match Crónica's dark fantasy tone.
 
@@ -248,7 +240,7 @@ The spec (§12) defines what the AI needs to know to narrate well. Each context 
 |---------|---------|-----|
 | Realm | "Ashenmoor, a plague-scarred marshland" | Sets the scene |
 | Language | "English" | Localization |
-| Character stats | STR 14, DEX 10, WIS 16 | AI proposes stat-appropriate choices |
+| Character stats | Might 3, Finesse 2, Wit 1, Charm 2, Grit 2 | AI proposes stat-appropriate choices |
 | Quest archetype | "rescue" | Shapes narrative arc |
 | Current beat | "rising_action" | Controls pacing |
 | Tension level | 3 (of 5) | Governs danger and tone |
@@ -282,10 +274,10 @@ impl PromptBuilder {
 
 ## Character
 - Name: {name}
-- Class: {class}
 - Level: {level}
-- Stats: STR {str}, DEX {dex}, CON {con}, WIS {wis}, INT {int}, CHA {cha}
+- Stats: Might {might}, Finesse {finesse}, Wit {wit}, Charm {charm}, Grit {grit}
 - HP: {hp}/{max_hp}
+- Fortune: {fortune}/{fortune_max}
 
 ## Quest
 - Archetype: {archetype}
@@ -299,9 +291,9 @@ You MUST respond with valid JSON matching this schema:
   "choices": [
     {{
       "label": "Short description of the choice",
-      "primary_stat": "STR",
+      "primary_stat": "MIGHT",
       "dc": 12,
-      "secondary_stat": "CON",
+      "secondary_stat": "GRIT",
       "secondary_dc": 15
     }}
   ],
@@ -314,7 +306,7 @@ Rules:
 - Provide exactly 3 choices per response
 - Each choice has a primary_stat and dc (difficulty class)
 - secondary_stat activates at dc + 3 (a bonus if the roll is very high)
-- Valid stats: STR, DEX, CON, WIS, INT, CHA
+- Valid stats: MIGHT, FINESSE, WIT, CHARM, GRIT
 - DC range: 8-18 based on tension level
 - quest_beat must be one of: introduction, rising_action, climax, falling_action, resolution
 - tension_level: 1-5, should shift gradually based on narrative momentum
@@ -322,19 +314,19 @@ Rules:
             realm = self.realm,
             language = self.language,
             name = character.name,
-            class = character.class,
             level = character.level,
-            str = character.stats.strength,
-            dex = character.stats.dexterity,
-            con = character.stats.constitution,
-            wis = character.stats.wisdom,
-            int = character.stats.intelligence,
-            cha = character.stats.charisma,
+            might = character.might,
+            finesse = character.finesse,
+            wit = character.wit,
+            charm = character.charm,
+            grit = character.grit,
             archetype = self.quest_archetype,
             beat = self.current_beat.as_str(),
             tension = self.tension_level,
             hp = character.hp,
             max_hp = character.max_hp,
+            fortune = character.fortune,
+            fortune_max = character.fortune_max,
         )
     }
 
@@ -435,17 +427,16 @@ One gotcha: literal curly braces in the JSON schema must be **doubled** — `{{`
 
 We can instruct the narrator now, but the JSON it returns is still just a raw string — we can't access the choices, the tension level, or the narration as typed Rust data. Next stage, we'll parse that JSON into structs the compiler can check.
 
-### Checkpoint
-
-- [ ] `PromptBuilder::build_system_prompt()` returns a string containing character stats
-- [ ] The JSON schema in the prompt matches the `AiResponse` struct we'll build in Stage 11
-- [ ] You understand why `{{` is needed for literal braces in `format!`
+> [!check] Checkpoint
+> - [ ] `PromptBuilder::build_system_prompt()` returns a string containing character stats
+> - [ ] The JSON schema in the prompt matches the `AiResponse` struct we'll build in Stage 11
+> - [ ] You understand why `{{` is needed for literal braces in `format!`
 
 ---
 
 ## Stage 11 — Structured Responses: Parsing the AI's JSON
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 The AI speaks, but its words arrive as a raw string — we can print them, but we can't extract the three choices, read the tension level, or check the quest beat without manual string parsing. We need typed Rust structs that mirror the AI's JSON output so the compiler catches mismatches before the player ever sees a broken scene. This is where serde earns its keep.
 
@@ -489,7 +480,7 @@ pub struct Choice {
     /// Short description: "Kick down the door"
     pub label: String,
 
-    /// The main stat tested: "STR", "DEX", etc.
+    /// The main stat tested: "MIGHT", "FINESSE", etc.
     pub primary_stat: String,
 
     /// Difficulty class for the primary check.
@@ -570,11 +561,10 @@ pub async fn call_ai(
 
 ### Understanding `Option<T>`
 
-Some fields in the AI response might be absent. In Python, you'd use `None`. In TypeScript, `undefined` or `null`. Rust uses `Option<T>`:
+Some fields in the AI response might be absent. In Python, you'd use `None`. Rust uses `Option<T>`:
 
 ```rust
 // Python:  ambient_event: str | None = None
-// TS:      ambientEvent?: string
 // Rust:
 pub ambient_event: Option<String>,
 ```
@@ -628,18 +618,17 @@ pub async fn call_ai_with_retry(
 
 We can parse the AI's words into typed data now, but there's no loop — no way for the player to choose, roll dice, and hear what happens next. Next stage, we'll wire everything into a playable game loop.
 
-### Checkpoint
-
-- [ ] `parse_ai_response` successfully parses a sample JSON string into `AiResponse`
-- [ ] `Option<String>` fields handle both `null` and present values
-- [ ] `strip_code_fences` removes markdown wrapping
-- [ ] You understand the difference between `Some("value")` and `None`
+> [!check] Checkpoint
+> - [ ] `parse_ai_response` successfully parses a sample JSON string into `AiResponse`
+> - [ ] `Option<String>` fields handle both `null` and present values
+> - [ ] `strip_code_fences` removes markdown wrapping
+> - [ ] You understand the difference between `Some("value")` and `None`
 
 ---
 
 ## Stage 12 — The Game Loop: A Playable CLI Adventure
 
-> **Difficulty: Hard**
+*Difficulty: Hard*
 
 We have all the ingredients — AI calls, structured responses, dice rolls, stat checks — but they're scattered across separate functions with no orchestration. There's no way for a player to sit down and *play*. We need the game loop: the heartbeat of every game ever made, from Pong to Elden Ring. This stage wires everything together into a real, playable CLI adventure.
 
@@ -710,11 +699,11 @@ pub struct CheckResult {
     pub secondary_hit: bool,  // true if margin >= 3 (secondary stat bonus)
 }
 
-/// Roll a d20 + stat modifier against a difficulty class.
+/// Roll a d20 + stat value against a difficulty class.
 pub fn stat_check(stat_value: i32, dc: i32) -> CheckResult {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     let roll = rng.gen_range(1..=20);
-    let modifier = (stat_value - 10) / 2; // D&D-style modifier
+    let modifier = stat_value; // stat value IS the modifier (spec v0.3)
     let total = roll + modifier;
     let margin = total - dc;
 
@@ -732,12 +721,11 @@ pub fn stat_check(stat_value: i32, dc: i32) -> CheckResult {
 /// Look up a character's stat value by name.
 pub fn get_stat(character: &Character, stat_name: &str) -> i32 {
     match stat_name.to_uppercase().as_str() {
-        "STR" => character.stats.strength,
-        "DEX" => character.stats.dexterity,
-        "CON" => character.stats.constitution,
-        "WIS" => character.stats.wisdom,
-        "INT" => character.stats.intelligence,
-        "CHA" => character.stats.charisma,
+        "MIGHT" => character.might,
+        "FINESSE" => character.finesse,
+        "WIT" => character.wit,
+        "CHARM" => character.charm,
+        "GRIT" => character.grit,
         _ => 10, // default if AI returns something unexpected
     }
 }
@@ -929,10 +917,7 @@ async fn main() {
     let client = Client::new(&config);
 
     // Create a character (from Act 1).
-    let character = Character::new("Kael", "Ranger", Stats {
-        strength: 12, dexterity: 16, constitution: 14,
-        wisdom: 13, intelligence: 10, charisma: 8,
-    });
+    let character = Character::new("Kael".to_string(), 3, 2, 1, 2, 2, 1);
 
     let prompt_builder = PromptBuilder {
         realm: "Ashenmoor, a plague-scarred marshland".into(),
@@ -972,19 +957,18 @@ let system_prompt = self.prompt_builder.build_system_prompt(&self.character);
 
 We have a playable adventure now — but combat is still just a stat check with a single outcome. Real combat needs multiple exchanges, a margin band system, and the tension of not knowing whether your next swing will be a crushing blow or a catastrophic fumble. Next stage, we'll forge the combat system.
 
-### Checkpoint
-
-- [ ] `cargo run` starts an interactive game session
-- [ ] AI narrates scenes and presents 3 choices
-- [ ] Typing `1`, `2`, or `3` triggers a stat check and advances the story
-- [ ] Typing `quit` exits cleanly
-- [ ] The game loop continues until `quest_beat == "resolution"`
+> [!check] Checkpoint
+> - [ ] `cargo run` starts an interactive game session
+> - [ ] AI narrates scenes and presents 3 choices
+> - [ ] Typing `1`, `2`, or `3` triggers a stat check and advances the story
+> - [ ] Typing `quit` exits cleanly
+> - [ ] The game loop continues until `quest_beat == "resolution"`
 
 ---
 
 ## Stage 13 — Combat: Narrative Exchanges and the Margin Band
 
-> **Difficulty: Hard**
+*Difficulty: Hard*
 
 Our game loop handles exploration and choices, but combat is a gaping hole — a single stat check that either succeeds or fails, with no drama, no back-and-forth, no sense of danger. Real combat needs multiple exchanges where the tide can turn, where a desperate defend might save your life, and where the margin between triumph and catastrophe is measured in a single die roll. This stage builds the combat engine.
 
@@ -1098,7 +1082,7 @@ pub enum CombatAction {
     Attack { stat: String },       // standard attack using a stat
     Defend,                        // halve incoming damage this exchange
     UseItem { item_name: String }, // use an inventory item
-    Flee,                          // attempt to escape (DEX check)
+    Flee,                          // attempt to escape (FINESSE check)
     Special { description: String }, // creative action (GM/AI decides stat + DC)
 }
 ```
@@ -1120,7 +1104,7 @@ pub struct CombatState {
 
 impl CombatState {
     pub fn new(enemy: Enemy, player_weapon_die: i32) -> Self {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         Self {
             enemy,
             exchange: 0,
@@ -1139,7 +1123,7 @@ impl CombatState {
     ) -> ExchangeResult {
         self.exchange += 1;
         self.defending = false;
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         match action {
             CombatAction::Attack { stat } => {
@@ -1201,7 +1185,7 @@ impl CombatState {
 
             CombatAction::Flee => {
                 let check = stat_check(
-                    get_stat(character, "DEX"),
+                    get_stat(character, "FINESSE"),
                     self.enemy.threat_dc,
                 );
                 if check.success {
@@ -1256,9 +1240,9 @@ impl CombatState {
             }
 
             CombatAction::Special { description } => {
-                // Special actions use WIS check at threat_dc + 2.
+                // Special actions use WIT check at threat_dc + 2.
                 let check = stat_check(
-                    get_stat(character, "WIS"),
+                    get_stat(character, "WIT"),
                     self.enemy.threat_dc + 2,
                 );
                 let tier = MarginTier::from_margin(check.margin);
@@ -1326,9 +1310,9 @@ impl ExchangeResult {
         }
         println!(
             "  HP: You {}/{} | {} {}/{}",
-            self.player_hp, self.player_hp, // max_hp not tracked here, display approx
+            self.player_hp, self.player_hp, // TODO: pass max_hp through ExchangeResult for accurate display
             enemy_name, self.enemy_hp.max(0),
-            self.dc // using dc as placeholder; in real code use enemy.max_hp
+            self.dc // TODO: replace with enemy.max_hp — ExchangeResult doesn't track it yet
         );
     }
 }
@@ -1349,15 +1333,15 @@ pub fn run_combat(character: &mut Character, enemy: Enemy) -> String {
     );
 
     loop {
-        println!("\n  [1] Attack (STR)  [2] Attack (DEX)  [3] Defend  [4] Flee");
+        println!("\n  [1] Attack (MIGHT)  [2] Attack (FINESSE)  [3] Defend  [4] Flee");
         let input = match read_input("  Combat> ") {
             Some(s) => s,
             None => break,
         };
 
         let action = match input.as_str() {
-            "1" => CombatAction::Attack { stat: "STR".into() },
-            "2" => CombatAction::Attack { stat: "DEX".into() },
+            "1" => CombatAction::Attack { stat: "MIGHT".into() },
+            "2" => CombatAction::Attack { stat: "FINESSE".into() },
             "3" => CombatAction::Defend,
             "4" => CombatAction::Flee,
             _ => {
@@ -1421,19 +1405,18 @@ if ai_response.quest_beat == "combat" {
 
 Combat sings with steel and consequence now — but when the quest ends, the story evaporates. No record, no legend, no proof the adventure happened. Next stage, we'll build the chronicle compiler that transforms raw session logs into literary prose.
 
-### Checkpoint
-
-- [ ] Combat runs as a sub-loop within the game
-- [ ] The 4-tier margin band correctly categorizes rolls
-- [ ] Damage scales with the margin tier (crushing > clean > mixed > failure)
-- [ ] Defend halves incoming damage, Flee requires a DEX check
-- [ ] Combat ends when HP hits 0, exchanges run out, or the player flees
+> [!check] Checkpoint
+> - [ ] Combat runs as a sub-loop within the game
+> - [ ] The 4-tier margin band correctly categorizes rolls
+> - [ ] Damage scales with the margin tier (crushing > clean > mixed > failure)
+> - [ ] Defend halves incoming damage, Flee requires a FINESSE check
+> - [ ] Combat ends when HP hits 0, exchanges run out, or the player flees
 
 ---
 
 ## Stage 14 — The Chronicle Compiler: Writing Your Story
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 The quest ends, the hero survives (or doesn't), and then... nothing. The raw session log reads like a spreadsheet: "Turn 3: Kick down the door — success (margin +7)." That's not a legend — that's bookkeeping. We need a compiler that takes those mechanical summaries and transforms them into a literary short story worthy of the chronicle. This stage also introduces the multi-model strategy: fast and cheap for gameplay, slow and beautiful for the final record.
 
@@ -1486,13 +1469,12 @@ pub async fn compile_chronicle(
 evocative short stories (500-1000 words).
 
 Write in third person past tense. Use vivid sensory details.
-The protagonist is {name}, a {class} adventuring in {realm}.
+The protagonist is {name}, adventuring in {realm}.
 
 Style: dark fantasy, literary fiction. Think Ursula K. Le Guin meets Joe Abercrombie.
 Do NOT include game mechanics (dice rolls, DCs, stats) in the story.
 Transform mechanical outcomes into narrative moments."#,
         name = character.name,
-        class = character.class,
         realm = realm,
     );
 
@@ -1628,19 +1610,18 @@ Game Start
 > [!warning] Common Mistakes
 > **Using Sonnet for gameplay** — It's 10-25x slower and more expensive than Haiku. The structured JSON responses don't need Sonnet's writing quality. Save it for the chronicle.
 >
-> **Sending raw game mechanics to the chronicler** — The prompt explicitly says "Do NOT include dice rolls, DCs, stats." But if your turn summaries contain "DC 14 STR check margin +3", the AI might echo them. Keep summaries narrative: "Kicked down the door — success" not "STR check DC 14 roll 17 margin +3".
+> **Sending raw game mechanics to the chronicler** — The prompt explicitly says "Do NOT include dice rolls, DCs, stats." But if your turn summaries contain "DC 14 MIGHT check margin +3", the AI might echo them. Keep summaries narrative: "Kicked down the door — success" not "MIGHT check DC 14 roll 17 margin +3".
 >
 > **Not handling empty sessions** — If the player quits immediately, `turn_summaries` is empty. The early return handles this gracefully.
 
 The voice has spoken and the chronicle is written — but only you can hear it, alone in a terminal. In Act 3, we'll give Crónica a gateway to the world: a Discord bot where players summon heroes with slash commands and write legends that echo across channels.
 
-### Checkpoint
-
-- [ ] After a quest ends, the chronicle compiler runs automatically
-- [ ] The output is a readable short story, not a game log
-- [ ] The chronicle is formatted with the box-drawing border
-- [ ] The story is saved to a `.txt` file
-- [ ] You understand why Haiku handles gameplay and Sonnet handles the chronicle
+> [!check] Checkpoint
+> - [ ] After a quest ends, the chronicle compiler runs automatically
+> - [ ] The output is a readable short story, not a game log
+> - [ ] The chronicle is formatted with the box-drawing border
+> - [ ] The story is saved to a `.txt` file
+> - [ ] You understand why Haiku handles gameplay and Sonnet handles the chronicle
 
 ---
 

@@ -12,7 +12,7 @@ In this act, you'll build:
 - A seeded boss pool that assembles unique bosses from an attack library
 - Victory rewards: echoes, insight, and dramatic narrative text
 
-Bosses are where Rust's enum + match pattern truly shines. You'll model a state machine that would be a mess of `if/elif` chains in Python or a brittle `switch` in TypeScript — but in Rust, the compiler *guarantees* you handle every state.
+Bosses are where Rust's enum + match pattern truly shines. You'll model a state machine that would be a mess of `if/elif` chains in Python — but in Rust, the compiler *guarantees* you handle every state.
 
 ---
 
@@ -105,14 +105,6 @@ class Boss:
         # forgot "enraged"? Python won't tell you.
 ```
 
-In TypeScript:
-
-```typescript
-type BossPhase = "phase1" | "phase2" | "enraged";
-// Better — but the compiler won't force exhaustive matching
-// in a switch statement without extra config.
-```
-
 In Rust, if you `match` on `BossPhase` and forget a variant, the compiler refuses to build. This is not a style preference — it's a correctness guarantee. When you add Phase 2 attacks in Stage 25, the compiler will point to every `match` that needs updating.
 
 ### The Boss Struct
@@ -180,19 +172,18 @@ impl Boss {
 
 **`saturating_sub(1)`** prevents underflow. `0u8 - 1` would panic in debug or wrap in release. `saturating_sub` clamps to 0. Get in the habit of using it for any counter decrement.
 
-### Common Mistake: Returning References to Vec Elements
-
-You might be tempted to store `current_attack: &AttackPattern` on the struct. Don't:
-
-```rust
-// THIS WON'T COMPILE
-pub struct Boss {
-    patterns: Vec<AttackPattern>,
-    current_attack: &AttackPattern,  // ← borrows from patterns
-}
-```
-
-This creates a self-referential struct — `current_attack` borrows from `patterns`, but both live in the same struct. Rust's borrow checker cannot prove this is safe because `Vec` can reallocate. The solution is what we did: store an index (`current_pattern: usize`) and look up the pattern when needed.
+> [!warning] Common Mistake: Returning References to Vec Elements
+> You might be tempted to store `current_attack: &AttackPattern` on the struct. Don't:
+>
+> ```rust
+> // THIS WON'T COMPILE
+> pub struct Boss {
+>     patterns: Vec<AttackPattern>,
+>     current_attack: &AttackPattern,  // ← borrows from patterns
+> }
+> ```
+>
+> This creates a self-referential struct — `current_attack` borrows from `patterns`, but both live in the same struct. Rust's borrow checker cannot prove this is safe because `Vec` can reallocate. The solution is what we did: store an index (`current_pattern: usize`) and look up the pattern when needed.
 
 ### Test It
 
@@ -256,17 +247,16 @@ mod tests {
 }
 ```
 
-### Checkpoint: What You Have
-
-After Stage 23, your boss module contains:
-
-- `AttackArea` enum — four hit zone shapes
-- `AttackPattern` struct — data-driven attack definition
-- `BossPhase` enum — three-state phase machine
-- `Boss` struct — HP, patterns, cooldown-aware cycling
-- Tests proving the pattern rotation works
-
-The boss exists, but it doesn't fight yet. It has a body and a repertoire of attacks, but no way to use them against the player. That's next — we wire the boss into the combat loop and teach the player to read telegraphs.
+> [!check] Checkpoint: What You Have
+> After Stage 23, your boss module contains:
+>
+> - `AttackArea` enum — four hit zone shapes
+> - `AttackPattern` struct — data-driven attack definition
+> - `BossPhase` enum — three-state phase machine
+> - `Boss` struct — HP, patterns, cooldown-aware cycling
+> - Tests proving the pattern rotation works
+>
+> The boss exists, but it doesn't fight yet. It has a body and a repertoire of attacks, but no way to use them against the player. That's next — we wire the boss into the combat loop and teach the player to read telegraphs.
 
 ---
 
@@ -500,35 +490,33 @@ Notice: all three attacks are `dodgeable: true`. Phase 1 is fair. The player can
 
 Then everything changes.
 
-### Common Mistake: Matching on References
+> [!warning] Common Mistake: Matching on References
+> When you destructure `BossTurnResult` in a match, you're matching on a reference. This trips up newcomers:
+>
+> ```rust
+> // This works — result is &BossTurnResult, ref binds to references
+> let BossTurnResult::Telegraph { ref pattern_name, damage, .. } = *result else {
+>     // ...
+> };
+>
+> // This also works — match ergonomics handle the reference
+> match result {
+>     BossTurnResult::Telegraph { pattern_name, damage, .. } => { /* ... */ }
+>     BossTurnResult::Recovering => { /* ... */ }
+> }
+> ```
+>
+> Rust's match ergonomics automatically insert `ref` when matching on a reference. But if you try to move a `String` out of a reference, you'll get a "cannot move out of borrowed content" error. Use `ref` explicitly or `.clone()` when you need ownership.
 
-When you destructure `BossTurnResult` in a match, you're matching on a reference. This trips up newcomers:
-
-```rust
-// This works — result is &BossTurnResult, ref binds to references
-let BossTurnResult::Telegraph { ref pattern_name, damage, .. } = *result else {
-    // ...
-};
-
-// This also works — match ergonomics handle the reference
-match result {
-    BossTurnResult::Telegraph { pattern_name, damage, .. } => { /* ... */ }
-    BossTurnResult::Recovering => { /* ... */ }
-}
-```
-
-Rust's match ergonomics automatically insert `ref` when matching on a reference. But if you try to move a `String` out of a reference, you'll get a "cannot move out of borrowed content" error. Use `ref` explicitly or `.clone()` when you need ownership.
-
-### Checkpoint
-
-After Stage 24:
-
-- Boss executes turns: telegraph → attack → cooldown cycle
-- Player responds: dodge, reposition, tank, or counter-attack
-- Telegraph rendering with ratatui styled text
-- A complete Tier 1 boss (Undead Giant) with 3 Phase 1 patterns
-
-The fight works, but it's static. The boss never changes behavior — it cycles the same three attacks from full HP to death. Time to shatter that predictability with phase transitions.
+> [!check] Checkpoint
+> After Stage 24:
+>
+> - Boss executes turns: telegraph → attack → cooldown cycle
+> - Player responds: dodge, reposition, tank, or counter-attack
+> - Telegraph rendering with ratatui styled text
+> - A complete Tier 1 boss (Undead Giant) with 3 Phase 1 patterns
+>
+> The fight works, but it's static. The boss never changes behavior — it cycles the same three attacks from full HP to death. Time to shatter that predictability with phase transitions.
 
 ---
 
@@ -786,31 +774,29 @@ AttackPattern {
 
 **Hint:** Add this to the patterns Vec in `create_undead_giant()`. It won't appear until the boss enters Phase 2 because `min_phase: BossPhase::Phase2` gates it.
 
-### Common Mistake: Forgetting Exhaustive Matches
+> [!warning] Common Mistake: Forgetting Exhaustive Matches
+> When you add `min_phase` to `AttackPattern`, every place you construct an `AttackPattern` needs updating. The compiler catches this immediately:
+>
+> ```
+> error[E0063]: missing field `min_phase` in initializer of `AttackPattern`
+>   --> src/boss.rs:142:9
+>    |
+> 142 |         AttackPattern {
+>    |         ^^^^^^^^^^^^^ missing `min_phase`
+> ```
+>
+> This is the enum + struct synergy. The compiler is your co-pilot. In Python, you'd discover the missing field at runtime — probably during a demo.
 
-When you add `min_phase` to `AttackPattern`, every place you construct an `AttackPattern` needs updating. The compiler catches this immediately:
-
-```
-error[E0063]: missing field `min_phase` in initializer of `AttackPattern`
-  --> src/boss.rs:142:9
-   |
-142 |         AttackPattern {
-   |         ^^^^^^^^^^^^^ missing `min_phase`
-```
-
-This is the enum + struct synergy. The compiler is your co-pilot. In Python, you'd discover the missing field at runtime — probably during a demo.
-
-### Checkpoint
-
-After Stage 25:
-
-- Phase transitions trigger at 60% and 30% HP thresholds
-- `min_phase` gates patterns — Phase 2 unlocks undodgeable AoE attacks
-- `phase_includes` provides clean phase ordering logic
-- Dramatic transition text renders as centered styled paragraphs
-- The combat loop checks for transitions after every damage event
-
-The boss now evolves mid-fight. But Phase 2 is a warning shot — the real test comes when the boss drops below 30% and enters a desperate, devastating Enraged state.
+> [!check] Checkpoint
+> After Stage 25:
+>
+> - Phase transitions trigger at 60% and 30% HP thresholds
+> - `min_phase` gates patterns — Phase 2 unlocks undodgeable AoE attacks
+> - `phase_includes` provides clean phase ordering logic
+> - Dramatic transition text renders as centered styled paragraphs
+> - The combat loop checks for transitions after every damage event
+>
+> The boss now evolves mid-fight. But Phase 2 is a warning shot — the real test comes when the boss drops below 30% and enters a desperate, devastating Enraged state.
 
 ---
 
@@ -1066,18 +1052,17 @@ fn enrage_increases_damage_and_dodge_cost() {
 
 **Fill in the assertions.** The answers are in the methods you wrote above — the compiler will confirm you're right.
 
-### Checkpoint
-
-After Stage 26:
-
-- Enraged phase applies 1.5x damage multiplier to all attacks
-- Dodge cost increases to 25 stamina during Enraged
-- Stamina-drain AoE (`Maddening Howl`) creates stamina pressure
-- `apply_hit` handles both HP damage and stamina drain
-- Boss HP bar renders with phase-colored indicators and `[ENRAGED]` blink
-- The stamina economy creates a genuine death spiral for passive players
-
-Two phases down. The boss fights work. But every boss is hand-crafted — we define each one individually with hardcoded patterns. Time to build a system that *generates* bosses from a shared library, so the same seed always produces the same nightmare.
+> [!check] Checkpoint
+> After Stage 26:
+>
+> - Enraged phase applies 1.5x damage multiplier to all attacks
+> - Dodge cost increases to 25 stamina during Enraged
+> - Stamina-drain AoE (`Maddening Howl`) creates stamina pressure
+> - `apply_hit` handles both HP damage and stamina drain
+> - Boss HP bar renders with phase-colored indicators and `[ENRAGED]` blink
+> - The stamina economy creates a genuine death spiral for passive players
+>
+> Two phases down. The boss fights work. But every boss is hand-crafted — we define each one individually with hardcoded patterns. Time to build a system that *generates* bosses from a shared library, so the same seed always produces the same nightmare.
 
 ---
 
@@ -1347,7 +1332,7 @@ impl AttackLibrary {
 The pool maps floor tiers to boss definitions. Each definition is a name, title, archetype, and HP value. The seed selects which boss from the tier appears:
 
 ```rust
-use rand::seq::SliceRandom;
+use rand::seq::IndexedRandom;
 use rand_chacha::ChaCha8Rng;
 
 pub struct BossDefinition {
@@ -1461,7 +1446,7 @@ pub fn spawn_boss(tier: u8, rng: &mut ChaCha8Rng, library: &AttackLibrary) -> Bo
 }
 ```
 
-**`choose(rng)`** is from `rand::seq::SliceRandom` (rand 0.9). It picks a random element using the provided RNG. Since we use `ChaCha8Rng` seeded from the dungeon seed, the same seed always picks the same boss.
+**`choose(rng)`** is from `rand::seq::IndexedRandom` (rand 0.9). It picks a random element using the provided RNG. Since we use `ChaCha8Rng` seeded from the dungeon seed, the same seed always picks the same boss.
 
 ### Seeded Determinism: Why It Matters
 
@@ -1471,7 +1456,7 @@ Two players with seed `"old-yharnam"` on floor 3 will face the same boss with th
 - Speedrunning: practice a specific seed's boss sequence
 - Fair daily challenges: everyone faces the same dungeon
 
-The key is that *all* randomness flows through the seeded `ChaCha8Rng`. Never use `rand::thread_rng()` for gameplay decisions.
+The key is that *all* randomness flows through the seeded `ChaCha8Rng`. Never use `rand::rng()` for gameplay decisions.
 
 ### Try It Yourself: Verify Seed Determinism
 
@@ -1498,33 +1483,31 @@ fn same_seed_same_boss() {
 }
 ```
 
-### Common Mistake: Cloning vs Borrowing the Library
+> [!warning] Common Mistake: Cloning vs Borrowing the Library
+> You might try to move patterns out of the library:
+>
+> ```rust
+> // WON'T COMPILE — can't move out of a shared reference
+> let patterns: Vec<AttackPattern> = library.attacks
+>     .iter()
+>     .filter(...)
+>     .map(|a| a.pattern)  // ← tries to move
+>     .collect();
+> ```
+>
+> The fix is `.map(|a| a.pattern.clone())`. The library is shared (multiple bosses reference it), so you clone the patterns into each boss. This is fine — patterns are small data, and cloning happens once per boss spawn.
 
-You might try to move patterns out of the library:
-
-```rust
-// WON'T COMPILE — can't move out of a shared reference
-let patterns: Vec<AttackPattern> = library.attacks
-    .iter()
-    .filter(...)
-    .map(|a| a.pattern)  // ← tries to move
-    .collect();
-```
-
-The fix is `.map(|a| a.pattern.clone())`. The library is shared (multiple bosses reference it), so you clone the patterns into each boss. This is fine — patterns are small data, and cloning happens once per boss spawn.
-
-### Checkpoint
-
-After Stage 27:
-
-- `BossArchetype` enum categorizes boss behavior styles
-- `AttackLibrary` stores all attacks tagged by archetype and phase
-- `boss_pool()` maps tiers to boss definitions
-- `spawn_boss` assembles a complete boss from seed + tier + library
-- Seeded RNG guarantees deterministic boss selection
-- The system scales: add a new boss by adding a `BossDefinition` and archetype attacks
-
-One stage left. The boss is dead — the arena falls silent, echoes drift upward from the corpse, and the stairs beckon. What happens in that moment of victory?
+> [!check] Checkpoint
+> After Stage 27:
+>
+> - `BossArchetype` enum categorizes boss behavior styles
+> - `AttackLibrary` stores all attacks tagged by archetype and phase
+> - `boss_pool()` maps tiers to boss definitions
+> - `spawn_boss` assembles a complete boss from seed + tier + library
+> - Seeded RNG guarantees deterministic boss selection
+> - The system scales: add a new boss by adding a `BossDefinition` and archetype attacks
+>
+> One stage left. The boss is dead — the arena falls silent, echoes drift upward from the corpse, and the stairs beckon. What happens in that moment of victory?
 
 ---
 
@@ -1735,19 +1718,18 @@ pub fn boss_intro_text(boss: &Boss) -> Vec<String> {
 
 Simple, effective. The empty strings create visual breathing room. In Bloodborne, the boss name appears in the center of the screen with the title below — our text-mode equivalent.
 
-### Checkpoint: The Complete Boss System
-
-After Stage 28, you have a complete boss fight system:
-
-| Component | Stage | What it does |
-|-----------|-------|-------------|
-| `Boss` struct | 23 | HP, phases, cooldown-aware pattern cycling |
-| `AttackPattern` | 23 | Data-driven attacks with area, range, dodgeability |
-| Phase 1 combat | 24 | Telegraph → respond → punish loop |
-| Phase transitions | 25 | HP-threshold state machine with dramatic text |
-| Enraged phase | 26 | Damage multiplier, stamina pressure, drain AoE |
-| Boss pool | 27 | Seeded selection from tiered archetype library |
-| Victory | 28 | Rewards, stair unlock, narrative payoff |
+> [!check] Checkpoint: The Complete Boss System
+> After Stage 28, you have a complete boss fight system:
+>
+> | Component | Stage | What it does |
+> |-----------|-------|-------------|
+> | `Boss` struct | 23 | HP, phases, cooldown-aware pattern cycling |
+> | `AttackPattern` | 23 | Data-driven attacks with area, range, dodgeability |
+> | Phase 1 combat | 24 | Telegraph → respond → punish loop |
+> | Phase transitions | 25 | HP-threshold state machine with dramatic text |
+> | Enraged phase | 26 | Damage multiplier, stamina pressure, drain AoE |
+> | Boss pool | 27 | Seeded selection from tiered archetype library |
+> | Victory | 28 | Rewards, stair unlock, narrative payoff |
 
 ---
 
@@ -1764,17 +1746,17 @@ This act was about **state machines**. Every boss fight is a state machine — p
 - **`std::mem::discriminant`** — compare enum variants without comparing data
 - **`matches!` macro** — concise single-variant pattern checks
 - **Seeded RNG** — `ChaCha8Rng` for deterministic procedural generation
-- **`SliceRandom::choose`** — seed-deterministic random selection from collections
+- **`IndexedRandom::choose`** — seed-deterministic random selection from collections
 
-### The Python/TypeScript Comparison
+### The Python Comparison
 
-| Concept | Python | TypeScript | Rust |
-|---------|--------|-----------|------|
-| Phase state | String or int | Union type | Enum (exhaustive match) |
-| Attack data | Dict | Interface | Struct (compile-time fields) |
-| Phase check | `if/elif` chain | `switch` (non-exhaustive) | `match` (exhaustive) |
-| Self-referential data | Works (GC) | Works (GC) | Forbidden (use indices) |
-| Overflow protection | Automatic (bigint) | Automatic (number) | Explicit (`saturating_*`) |
+| Concept | Python | Rust |
+|---------|--------|------|
+| Phase state | String or int | Enum (exhaustive match) |
+| Attack data | Dict | Struct (compile-time fields) |
+| Phase check | `if/elif` chain | `match` (exhaustive) |
+| Self-referential data | Works (GC) | Forbidden (use indices) |
+| Overflow protection | Automatic (bigint) | Explicit (`saturating_*`) |
 
 The Rust approach is more work upfront — you define every type, handle every case, think about ownership. But the result is a boss system where adding a new phase, a new attack, or a new archetype is guided by compiler errors instead of runtime crashes.
 

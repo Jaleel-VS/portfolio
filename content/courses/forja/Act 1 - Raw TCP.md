@@ -2,7 +2,7 @@
 
 > *You will build an HTTP server from nothing. No frameworks, no libraries — just you, a TCP socket, and the Rust standard library. By the end of this act, you'll understand what happens between the moment a browser sends a request and the moment it renders a page.*
 
-**Prerequisites**: A Mac with [Rust installed](https://rustup.rs/) (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`), a terminal (Ghostty), and a text editor (nvim). You should be comfortable writing Python or TypeScript — we'll reference both throughout.
+**Prerequisites**: A Mac with [Rust installed](https://rustup.rs/) (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`), a terminal (Ghostty), and a text editor (nvim). You should be comfortable writing Python — we'll reference it throughout.
 
 **Project location**: `~/juk/forja/forja/`
 
@@ -14,7 +14,7 @@
 
 Every forge starts cold. Before you can shape metal, you need to light the fire and lay out your tools. This stage solves the most fundamental problem: getting a Rust project running on your machine so you have a working anvil to hammer on for the rest of the course.
 
-Before we touch networking, let's make sure Rust is working and understand the project structure. If you've used `npm init` or `pip init`, Cargo is Rust's equivalent — it's the build tool, package manager, and test runner all in one.
+Before we touch networking, let's make sure Rust is working and understand the project structure. If you've used `pip init`, Cargo is Rust's equivalent — it's the build tool, package manager, and test runner all in one.
 
 ### 1.1 — Create the project
 
@@ -41,9 +41,9 @@ ls -la
 │   └── main.rs
 ```
 
-Two things. That's it. Compare this to a fresh `create-react-app` with 30,000 files in `node_modules/` — Rust has no runtime dependencies by default.
+Two things. That's it. Rust has no runtime dependencies by default.
 
-### 1.2 — Cargo.toml: your package.json
+### 1.2 — Cargo.toml: your pyproject.toml
 
 Open `Cargo.toml`:
 
@@ -54,7 +54,7 @@ version = "0.1.0"
 edition = "2024"
 ```
 
-This is like `package.json` in Node.js or `pyproject.toml` in Python. It declares your project's name, version, and which Rust edition to use. Dependencies will go here later (under `[dependencies]`), but we won't need any external crates for Act 1 — the standard library has everything we need.
+This is like `pyproject.toml` in Python. It declares your project's name, version, and which Rust edition to use. Dependencies will go here later (under `[dependencies]`), but we won't need any external crates for Act 1 — the standard library has everything we need.
 
 ### 1.3 — Your first Rust program
 
@@ -68,12 +68,12 @@ fn main() {
 
 Let's break this down — every single token matters in Rust:
 
-- **`fn`** — declares a function. Like `def` in Python or `function` in JavaScript.
+- **`fn`** — declares a function. Like `def` in Python.
 - **`main()`** — the entry point. Every Rust binary must have exactly one `main` function. Like `if __name__ == "__main__"` in Python, but enforced by the compiler.
 - **`println!`** — prints text to the terminal. The `!` means it's a *macro*, not a regular function. For now, think of macros as "functions that can do extra magic at compile time." `println!` needs to be a macro because it accepts a variable number of arguments — something regular Rust functions can't do.
 - **`"Hello, world!"`** — a string literal. Double quotes only — single quotes are for individual characters (`'a'`), unlike Python where they're interchangeable.
 - **`;`** — semicolons are required at the end of statements. Coming from Python, this will feel annoying for a day, then you'll stop noticing.
-- **`{ }`** — curly braces define blocks, like JavaScript. No colons-and-indentation like Python.
+- **`{ }`** — curly braces define blocks. No colons-and-indentation like Python.
 
 ### 1.4 — Build and run
 
@@ -90,9 +90,11 @@ Hello, world!
 
 `cargo run` does two things: compiles your code (`cargo build`) and then runs the resulting binary. The compiled binary lives at `target/debug/forja`.
 
-**What just happened under the hood**: Rust compiled your source code into a native binary — actual machine code, not bytecode. There's no interpreter, no VM, no runtime. When you run `target/debug/forja`, it's as direct as running a C program. This is why Rust programs start instantly — no Python interpreter startup, no Node.js V8 warmup.
+**What just happened under the hood**: Rust compiled your source code into a native binary — actual machine code, not bytecode. There's no interpreter, no VM, no runtime. When you run `target/debug/forja`, it's as direct as running a C program. This is why Rust programs start instantly — no Python interpreter startup.
 
-> **AWS connection**: This is why Lambda functions written in Rust have near-zero cold starts compared to Python or Node.js. There's no runtime to initialize — the binary just runs.
+> [!info] AWS Connection
+> This is why Lambda functions written in Rust have near-zero cold starts compared to Python. There's no runtime to initialize — the binary just runs.
+
 
 ### 1.5 — Let's customize it
 
@@ -107,8 +109,8 @@ fn main() {
 
 New concepts:
 
-- **`let`** — declares a variable. Like `let` in JavaScript or just `x = 5` in Python. In Rust, variables are *immutable by default* — you can't change `port` after this line. If you wanted to change it later, you'd write `let mut port = 7878;`. This is the opposite of most languages, and it's intentional: immutability prevents entire categories of bugs.
-- **`{port}`** — string interpolation inside `println!`. Like f-strings in Python (`f"port {port}"`) or template literals in JS (`` `port ${port}` ``). This only works inside macros like `println!` — you can't do this with regular strings (we'll see why later).
+- **`let`** — declares a variable. Like `x = 5` in Python. In Rust, variables are *immutable by default* — you can't change `port` after this line. If you wanted to change it later, you'd write `let mut port = 7878;`. This is the opposite of most languages, and it's intentional: immutability prevents entire categories of bugs.
+- **`{port}`** — string interpolation inside `println!`. Like f-strings in Python (`f"port {port}"`). This only works inside macros like `println!` — you can't do this with regular strings (we'll see why later).
 
 Run it:
 
@@ -122,61 +124,59 @@ Forja server will listen on port 7878
 
 > **Why port 7878?** It's "rust" typed on a phone keypad. It's the traditional example port in Rust tutorials. We'll use it throughout.
 
-### 1.6 — Common mistakes at this stage
+> [!warning] Common Mistake: Forgetting the semicolon
+> ```rust
+> fn main() {
+>     println!("hello")  // ← missing semicolon
+> }
+> ```
+> ```
+> error: expected `;`
+> ```
+> Rust's error messages are excellent — they'll tell you exactly what's wrong and often suggest the fix.
 
-**Forgetting the semicolon:**
-```rust
-fn main() {
-    println!("hello")  // ← missing semicolon
-}
-```
-```
-error: expected `;`
-```
-Rust's error messages are excellent — they'll tell you exactly what's wrong and often suggest the fix.
+> [!warning] Common Mistake: Using single quotes for strings
+> ```rust
+> let name = 'forja';  // ← wrong! Single quotes are for chars only
+> ```
+> ```
+> error: character literal may only contain one codepoint
+> ```
+> Use double quotes: `let name = "forja";`
 
-**Using single quotes for strings:**
-```rust
-let name = 'forja';  // ← wrong! Single quotes are for chars only
-```
-```
-error: character literal may only contain one codepoint
-```
-Use double quotes: `let name = "forja";`
+> [!warning] Common Mistake: Trying to mutate an immutable variable
+> ```rust
+> let port = 7878;
+> port = 8080;  // ← error!
+> ```
+> ```
+> error[E0384]: cannot assign twice to immutable variable `port`
+> ```
+> The fix: `let mut port = 7878;` — but we don't need mutation here.
 
-**Trying to mutate an immutable variable:**
-```rust
-let port = 7878;
-port = 8080;  // ← error!
-```
-```
-error[E0384]: cannot assign twice to immutable variable `port`
-```
-The fix: `let mut port = 7878;` — but we don't need mutation here.
+> [!check] Checkpoint
+> Your tools are laid out and the forge is lit. But a forge that only prints text is a forge with no metal — next, we feed it a TCP socket and start listening for connections from the outside world.
+>
+> Your `src/main.rs` should be:
+>
+> ```rust
+> fn main() {
+> let port = 7878;
+> println!("Forja server will listen on port {port}");
+> }
+> ```
+>
+> Your `Cargo.toml` should be:
+>
+> ```toml
+> [package]
+> name = "forja"
+> version = "0.1.0"
+> edition = "2024"
+> ```
+>
+> Run `cargo run` and confirm you see: `Forja server will listen on port 7878`
 
-### Stage 1 checkpoint
-
-Your tools are laid out and the forge is lit. But a forge that only prints text is a forge with no metal — next, we feed it a TCP socket and start listening for connections from the outside world.
-
-Your `src/main.rs` should be:
-
-```rust
-fn main() {
-    let port = 7878;
-    println!("Forja server will listen on port {port}");
-}
-```
-
-Your `Cargo.toml` should be:
-
-```toml
-[package]
-name = "forja"
-version = "0.1.0"
-edition = "2024"
-```
-
-Run `cargo run` and confirm you see: `Forja server will listen on port 7878`
 
 ---
 
@@ -204,7 +204,9 @@ When you type `http://localhost:7878` in a browser, here's what happens at the n
 
 A **socket** is the programming interface to this process. It's identified by an IP address + port number. Think of the IP address as a building's street address, and the port as the apartment number.
 
-> **AWS connection**: This three-way handshake happens billions of times a day on AWS. When your ALB (Application Load Balancer) accepts a connection from a client, it's doing exactly what we're about to do — calling `accept()` on a TCP socket. The ALB then opens a *second* TCP connection to your backend (EC2 instance, ECS container, Lambda), making it a reverse proxy. NLBs (Network Load Balancers) operate at this TCP layer directly — they forward the raw TCP connection without understanding HTTP at all.
+> [!info] AWS Connection
+> This three-way handshake happens billions of times a day on AWS. When your ALB (Application Load Balancer) accepts a connection from a client, it's doing exactly what we're about to do — calling `accept()` on a TCP socket. The ALB then opens a *second* TCP connection to your backend (EC2 instance, ECS container, Lambda), making it a reverse proxy. NLBs (Network Load Balancers) operate at this TCP layer directly — they forward the raw TCP connection without understanding HTTP at all.
+
 
 ### 2.2 — Binding to a port
 
@@ -221,7 +223,7 @@ fn main() {
 
 Let's unpack every piece:
 
-- **`use std::net::TcpListener;`** — an import statement. Like `from socket import socket` in Python or `import net from 'net'` in Node.js. `std` is the standard library, `net` is the networking module, and `TcpListener` is the specific type we want. Rust doesn't auto-import anything (unlike Python's builtins) — you must be explicit.
+- **`use std::net::TcpListener;`** — an import statement. Like `from socket import socket` in Python. `std` is the standard library, `net` is the networking module, and `TcpListener` is the specific type we want. Rust doesn't auto-import anything (unlike Python's builtins) — you must be explicit.
 
 - **`TcpListener::bind("127.0.0.1:7878")`** — creates a TCP listener bound to this address. The `::` syntax calls an *associated function* (like a static method in Python/JS). `bind` is `TcpListener`'s constructor — its signature is:
   ```rust
@@ -343,13 +345,13 @@ fn main() {
 
 Several new concepts here:
 
-- **`use std::io::Read;`** — imports the `Read` trait. `TcpStream` implements `Read`, which gives it the `.read()` method. In Rust, you must import a trait before you can call its methods — even if the type already implements it. This is different from Python/JS where methods are always available.
+- **`use std::io::Read;`** — imports the `Read` trait. `TcpStream` implements `Read`, which gives it the `.read()` method. In Rust, you must import a trait before you can call its methods — even if the type already implements it. This is different from Python where methods are always available.
 
 - **`let mut stream`** — the `mut` keyword makes this variable mutable. We need this because `.read()` takes `&mut self` — it modifies the stream's internal state (advancing the read position). Without `mut`, the compiler would refuse to let us call `.read()`.
 
 - **`let mut buffer = [0u8; 1024];`** — creates a fixed-size array of 1024 bytes, all initialized to zero.
   - `[0u8; 1024]` — array syntax: `[value; count]`. `0u8` means "the number 0, as an unsigned 8-bit integer." The `u8` suffix is a type annotation on the literal.
-  - This is a *stack-allocated* buffer — no heap allocation, no garbage collector. In Python, you'd write `buffer = bytearray(1024)`. In Node.js, `Buffer.alloc(1024)`.
+  - This is a *stack-allocated* buffer — no heap allocation, no garbage collector. In Python, you'd write `buffer = bytearray(1024)`.
   - Why 1024? It's enough for a simple HTTP request. Real servers use larger buffers or read in a loop — we'll improve this later.
 
 - **`stream.read(&mut buffer)`** — reads bytes from the TCP stream into our buffer. The signature (from the `Read` trait) is:
@@ -390,23 +392,24 @@ Accept: */*
 
 Now try it with a browser — open `http://localhost:7878` in Chrome or Safari. You'll see a much longer request with many more headers (Accept-Language, Accept-Encoding, Connection, etc.). Browsers are chatty.
 
-### 2.5 — Common mistakes at this stage
+> [!warning] Common Mistake: "Address already in use"
+> ```
+> thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value:
+> Os { code: 48, kind: AddrInUse, message: "Address already in use" }'
+> ```
+> This means another process (maybe a previous run of your server that you forgot to kill) is already using port 7878. Fix it:
+> ```bash
 
-**"Address already in use":**
-```
-thread 'main' panicked at 'called `Result::unwrap()` on an `Err` value:
-Os { code: 48, kind: AddrInUse, message: "Address already in use" }'
-```
-This means another process (maybe a previous run of your server that you forgot to kill) is already using port 7878. Fix it:
-```bash
 # Find what's using the port:
 lsof -i :7878
 # Kill it:
 kill -9 <PID>
 ```
-Or just use a different port. This error is the same `EADDRINUSE` you'd get in Node.js or Python.
+Or just use a different port. This error is the same `EADDRINUSE` you'd get in Python.
 
-> **AWS connection**: This is why ECS tasks and Lambda functions don't let you pick arbitrary ports — the platform manages port allocation to avoid conflicts. When you configure an ALB target group, you're telling the ALB which port your application is listening on.
+> [!info] AWS Connection
+> This is why ECS tasks and Lambda functions don't let you pick arbitrary ports — the platform manages port allocation to avoid conflicts. When you configure an ALB target group, you're telling the ALB which port your application is listening on.
+
 
 **Forgetting `use std::io::Read;`:**
 ```
@@ -427,36 +430,36 @@ error[E0596]: cannot borrow `stream` as mutable, as it is not declared as mutabl
 ```
 Again, the compiler tells you the fix. This is Rust's philosophy: the compiler is your pair programmer.
 
-### Stage 2 checkpoint
+> [!check] Checkpoint
+> You've opened the forge door and raw bytes are flowing in. But those bytes are just a wall of text — you can't tell a GET from a POST, a path from a header. Next, we'll parse that raw stream into something meaningful.
+>
+> Your `src/main.rs`:
+>
+> ```rust
+> use std::io::Read;
+> use std::net::TcpListener;
+>
+> fn main() {
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Listening on port 7878");
+>
+>     for stream in listener.incoming() {
+>         let mut stream = stream.unwrap();
+>         println!("Connection established!");
+>
+>         let mut buffer = [0u8; 1024];
+>         let bytes_read = stream.read(&mut buffer).unwrap();
+>
+>         let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+>         println!("Received {} bytes:\n{}", bytes_read, request);
+>     }
+> }
+> ```
+>
+> **Test it:**
+> ```bash
+> cargo run
 
-You've opened the forge door and raw bytes are flowing in. But those bytes are just a wall of text — you can't tell a GET from a POST, a path from a header. Next, we'll parse that raw stream into something meaningful.
-
-Your `src/main.rs`:
-
-```rust
-use std::io::Read;
-use std::net::TcpListener;
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Listening on port 7878");
-
-    for stream in listener.incoming() {
-        let mut stream = stream.unwrap();
-        println!("Connection established!");
-
-        let mut buffer = [0u8; 1024];
-        let bytes_read = stream.read(&mut buffer).unwrap();
-
-        let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-        println!("Received {} bytes:\n{}", bytes_read, request);
-    }
-}
-```
-
-**Test it:**
-```bash
-cargo run
 # In another terminal:
 curl http://localhost:7878
 ```
@@ -497,7 +500,9 @@ The request line has three parts:
 - **Path**: `/`, `/index.html`, `/api/users` — what resource to access
 - **Version**: `HTTP/1.1` — which HTTP version
 
-> **AWS connection**: API Gateway parses exactly this format. When you define a route like `GET /users/{id}`, API Gateway is matching against the method and path from the request line. CloudFront does the same thing when evaluating cache behaviors — it looks at the path pattern to decide which origin to forward to.
+> [!info] AWS Connection
+> API Gateway parses exactly this format. When you define a route like `GET /users/{id}`, API Gateway is matching against the method and path from the request line. CloudFront does the same thing when evaluating cache behaviors — it looks at the path pattern to decide which origin to forward to.
+
 
 ### 3.2 — Extracting the request line
 
@@ -590,91 +595,90 @@ POST /submit HTTP/1.1
 
 You're parsing HTTP. Every web framework does exactly this — Express's `app.get('/hello', handler)` is matching against the method and path you just extracted.
 
-### 3.4 — Common mistakes at this stage
+> [!warning] Common Mistake: Trying to use `stream` after moving it
+> ```rust
+> for stream in listener.incoming() {
+>     let stream = stream.unwrap();
+>     handle_connection(stream);
+>     println!("{}", stream.peer_addr().unwrap()); // ← error!
+> }
+> ```
+> ```
+> error[E0382]: borrow of moved value: `stream`
+>   --> src/main.rs:25:20
+>    |
+> 23 |         let stream = stream.unwrap();
+>    |             ------ move occurs because `stream` has type `TcpStream`
+> 24 |         handle_connection(stream);
+>    |                           ------ value moved here
+> 25 |         println!("{}", stream.peer_addr().unwrap());
+>    |                        ^^^^^^ value borrowed here after move
+> ```
+> Once you pass `stream` to `handle_connection`, it's gone. The function *owns* it now. If you need to use the peer address in `main`, extract it *before* the move:
+> ```rust
+> let stream = stream.unwrap();
+> let addr = stream.peer_addr().unwrap();
+> handle_connection(stream);
+> println!("{addr}");
+> ```
 
-**Trying to use `stream` after moving it:**
-```rust
-for stream in listener.incoming() {
-    let stream = stream.unwrap();
-    handle_connection(stream);
-    println!("{}", stream.peer_addr().unwrap()); // ← error!
-}
-```
-```
-error[E0382]: borrow of moved value: `stream`
-  --> src/main.rs:25:20
-   |
-23 |         let stream = stream.unwrap();
-   |             ------ move occurs because `stream` has type `TcpStream`
-24 |         handle_connection(stream);
-   |                           ------ value moved here
-25 |         println!("{}", stream.peer_addr().unwrap());
-   |                        ^^^^^^ value borrowed here after move
-```
-Once you pass `stream` to `handle_connection`, it's gone. The function *owns* it now. If you need to use the peer address in `main`, extract it *before* the move:
-```rust
-let stream = stream.unwrap();
-let addr = stream.peer_addr().unwrap();
-handle_connection(stream);
-println!("{addr}");
-```
+> [!warning] Common Mistake: Type annotation confusion with `collect()`
+> ```rust
+> let parts = request_line.split_whitespace().collect(); // ← error!
+> ```
+> ```
+> error[E0282]: type annotations needed
+> ```
+> `collect()` can produce many different collection types (`Vec`, `HashSet`, `String`, etc.), so Rust needs you to specify which one. Either annotate the variable or use turbofish syntax:
+> ```rust
+> let parts: Vec<&str> = request_line.split_whitespace().collect();
+> // or:
+> let parts = request_line.split_whitespace().collect::<Vec<&str>>();
+> ```
 
-**Type annotation confusion with `collect()`:**
-```rust
-let parts = request_line.split_whitespace().collect(); // ← error!
-```
-```
-error[E0282]: type annotations needed
-```
-`collect()` can produce many different collection types (`Vec`, `HashSet`, `String`, etc.), so Rust needs you to specify which one. Either annotate the variable or use turbofish syntax:
-```rust
-let parts: Vec<&str> = request_line.split_whitespace().collect();
-// or:
-let parts = request_line.split_whitespace().collect::<Vec<&str>>();
-```
+> [!check] Checkpoint
+> You can now read the client's intent — method, path, version. But a forge that only listens and never speaks back is useless. Next, we'll send our first HTTP response and close the loop.
+>
+> Your `src/main.rs`:
+>
+> ```rust
+> use std::io::Read;
+> use std::net::{TcpListener, TcpStream};
+>
+> fn handle_connection(mut stream: TcpStream) {
+> let mut buffer = [0u8; 1024];
+> let bytes_read = stream.read(&mut buffer).unwrap();
+> let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+>
+> let request_line = request.lines().next().unwrap_or("");
+> let parts: Vec<&str> = request_line.split_whitespace().collect();
+>
+> if parts.len() >= 3 {
+> let method = parts[0];
+> let path = parts[1];
+> let version = parts[2];
+> println!("{method} {path} {version}");
+> } else {
+> println!("Malformed request: {request_line}");
+> }
+> }
+>
+> fn main() {
+> let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+> println!("Listening on port 7878");
+>
+> for stream in listener.incoming() {
+> let stream = stream.unwrap();
+> handle_connection(stream);
+> }
+> }
+> ```
 
-### Stage 3 checkpoint
 
-You can now read the client's intent — method, path, version. But a forge that only listens and never speaks back is useless. Next, we'll send our first HTTP response and close the loop.
+> [!warning] Common Mistake: Test it
+> ```bash
+> cargo run
 
-Your `src/main.rs`:
-
-```rust
-use std::io::Read;
-use std::net::{TcpListener, TcpStream};
-
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0u8; 1024];
-    let bytes_read = stream.read(&mut buffer).unwrap();
-    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-
-    let request_line = request.lines().next().unwrap_or("");
-    let parts: Vec<&str> = request_line.split_whitespace().collect();
-
-    if parts.len() >= 3 {
-        let method = parts[0];
-        let path = parts[1];
-        let version = parts[2];
-        println!("{method} {path} {version}");
-    } else {
-        println!("Malformed request: {request_line}");
-    }
-}
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Listening on port 7878");
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        handle_connection(stream);
-    }
-}
-```
-
-**Test it:**
-```bash
-cargo run
 # In another terminal:
 curl http://localhost:7878/hello
 # Server prints: GET /hello HTTP/1.1
@@ -713,7 +717,9 @@ Key headers:
 - **`Content-Type`** — tells the client what kind of data the body contains. `text/html` for HTML, `application/json` for JSON, `text/plain` for plain text. Without this, the browser guesses (and often guesses wrong).
 - **`Content-Length`** — the size of the body in bytes. The client uses this to know when it's received the complete response.
 
-> **AWS connection**: When CloudFront caches a response, it stores these headers along with the body. The `Content-Type` header determines how the browser renders the response. If your Lambda function returns JSON but forgets to set `Content-Type: application/json`, the browser might try to render it as HTML — a common bug in API Gateway setups.
+> [!info] AWS Connection
+> When CloudFront caches a response, it stores these headers along with the body. The `Content-Type` header determines how the browser renders the response. If your Lambda function returns JSON but forgets to set `Content-Type: application/json`, the browser might try to render it as HTML — a common bug in API Gateway setups.
+
 
 ### 4.2 — Writing a response
 
@@ -761,7 +767,7 @@ New concepts:
 
 - **`use std::io::{Read, Write};`** — imports multiple items from the same module. Like Python's `from io import Read, Write`. We need the `Write` trait for `.write_all()`.
 
-- **`format!(...)`** — like `println!` but returns a `String` instead of printing. Like Python's f-string or JS template literal, but as a macro. The result is a heap-allocated `String` (owned data), not a `&str` (borrowed slice).
+- **`format!(...)`** — like `println!` but returns a `String` instead of printing. Like Python's f-string, but as a macro. The result is a heap-allocated `String` (owned data), not a `&str` (borrowed slice).
 
 - **`\r\n`** — CRLF line endings. HTTP requires these — `\n` alone won't work. This is a common gotcha when building HTTP by hand.
 
@@ -862,7 +868,9 @@ New concepts:
 
 - **`.to_string()`** — converts a `&str` (borrowed string slice) to a `String` (owned string). We need this because `format!()` returns a `String`, and all arms of a `match` must return the same type. The string literals are `&str`, so we convert them.
 
-> **AWS connection**: This path-based routing is exactly what API Gateway does. When you define routes like `GET /users` and `POST /orders`, API Gateway matches the incoming request's method and path against your route definitions. You just built a tiny version of that.
+> [!info] AWS Connection
+> This path-based routing is exactly what API Gateway does. When you define routes like `GET /users` and `POST /orders`, API Gateway matches the incoming request's method and path against your route definitions. You just built a tiny version of that.
+
 
 ### 4.5 — Test it
 
@@ -884,61 +892,61 @@ curl http://localhost:7878/anything-else
 
 Open each URL in your browser to see them rendered.
 
-### Stage 4 checkpoint
+> [!check] Checkpoint
+> The forge now speaks — you've completed the full HTTP request-response cycle. But we've been ignoring half the request: the headers. They carry critical metadata like authentication tokens, content types, and the client's identity. Next, we'll parse them.
+>
+> Your `src/main.rs`:
+>
+> ```rust
+> use std::io::{Read, Write};
+> use std::net::{TcpListener, TcpStream};
+>
+> fn handle_connection(mut stream: TcpStream) {
+>     let mut buffer = [0u8; 1024];
+>     let bytes_read = stream.read(&mut buffer).unwrap();
+>     let request = String::from_utf8_lossy(&buffer[..bytes_read]);
+>
+>     let request_line = request.lines().next().unwrap_or("");
+>     let parts: Vec<&str> = request_line.split_whitespace().collect();
+>
+>     let (method, path) = if parts.len() >= 3 {
+>         (parts[0], parts[1])
+>     } else {
+>         ("GET", "/")
+>     };
+>
+>     println!("{method} {path}");
+>
+>     let body = match path {
+>         "/" => "<html><body><h1>Welcome to Forja!</h1></body></html>".to_string(),
+>         "/about" => "<html><body><h1>About Forja</h1><p>A Rust HTTP server.</p></body></html>".to_string(),
+>         _ => format!("<html><body><h1>You requested: {path}</h1></body></html>"),
+>     };
+>
+>     let response = format!(
+>         "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+>         body.len(),
+>         body
+>     );
+>
+>     stream.write_all(response.as_bytes()).unwrap();
+> }
+>
+> fn main() {
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Listening on port 7878");
+>
+>     for stream in listener.incoming() {
+>         let stream = stream.unwrap();
+>         handle_connection(stream);
+>     }
+> }
+> ```
+>
+> **Test it:**
+> ```bash
+> cargo run
 
-The forge now speaks — you've completed the full HTTP request-response cycle. But we've been ignoring half the request: the headers. They carry critical metadata like authentication tokens, content types, and the client's identity. Next, we'll parse them.
-
-Your `src/main.rs`:
-
-```rust
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0u8; 1024];
-    let bytes_read = stream.read(&mut buffer).unwrap();
-    let request = String::from_utf8_lossy(&buffer[..bytes_read]);
-
-    let request_line = request.lines().next().unwrap_or("");
-    let parts: Vec<&str> = request_line.split_whitespace().collect();
-
-    let (method, path) = if parts.len() >= 3 {
-        (parts[0], parts[1])
-    } else {
-        ("GET", "/")
-    };
-
-    println!("{method} {path}");
-
-    let body = match path {
-        "/" => "<html><body><h1>Welcome to Forja!</h1></body></html>".to_string(),
-        "/about" => "<html><body><h1>About Forja</h1><p>A Rust HTTP server.</p></body></html>".to_string(),
-        _ => format!("<html><body><h1>You requested: {path}</h1></body></html>"),
-    };
-
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
-        body.len(),
-        body
-    );
-
-    stream.write_all(response.as_bytes()).unwrap();
-}
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Listening on port 7878");
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        handle_connection(stream);
-    }
-}
-```
-
-**Test it:**
-```bash
-cargo run
 # In another terminal:
 curl -v http://localhost:7878/about
 # Should see full HTTP response with 200 OK and HTML body
@@ -978,7 +986,9 @@ Key headers:
 - **`Authorization`** — authentication credentials. `Bearer <token>` is the most common pattern (JWTs).
 - **`Accept`** — what response formats the client can handle.
 
-> **AWS connection**: ALBs use the `Host` header for host-based routing rules. CloudFront forwards (or strips) specific headers based on your cache policy. API Gateway reads `Authorization` to invoke your Lambda authorizer. WAF inspects headers for malicious patterns. Headers are the control plane of HTTP.
+> [!info] AWS Connection
+> ALBs use the `Host` header for host-based routing rules. CloudFront forwards (or strips) specific headers based on your cache policy. API Gateway reads `Authorization` to invoke your Lambda authorizer. WAF inspects headers for malicious patterns. Headers are the control plane of HTTP.
+
 
 ### 5.2 — Parsing headers into a HashMap
 
@@ -1107,101 +1117,100 @@ Headers: {
 }
 ```
 
-### 5.4 — Common mistakes at this stage
+> [!warning] Common Mistake: Lifetime issues with borrowed headers
+> If you tried to use `&str` instead of `String` in the HashMap:
+> ```rust
+> let mut headers: HashMap<&str, &str> = HashMap::new();
+> ```
+> This might work in simple cases, but gets tricky when you try to return headers from a function or store them in a struct. The `&str` values borrow from `request_str`, so they can't outlive it. Using owned `String`s avoids this entirely — it's a common Rust pattern to "own your data" at boundaries.
 
-**Lifetime issues with borrowed headers:**
-If you tried to use `&str` instead of `String` in the HashMap:
-```rust
-let mut headers: HashMap<&str, &str> = HashMap::new();
-```
-This might work in simple cases, but gets tricky when you try to return headers from a function or store them in a struct. The `&str` values borrow from `request_str`, so they can't outlive it. Using owned `String`s avoids this entirely — it's a common Rust pattern to "own your data" at boundaries.
+> [!warning] Common Mistake: Forgetting `to_string()` on the Cow
+> ```rust
+> let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
+> let mut lines = request_str.lines();
+> ```
+> `from_utf8_lossy` returns a `Cow<str>` (Copy-on-Write) — a type that's *either* a borrowed `&str` or an owned `String`. If you don't call `.to_string()`, the borrow checker might complain when you try to use `lines` after `request_str` is dropped. Converting to `String` makes ownership clear.
 
-**Forgetting `to_string()` on the Cow:**
-```rust
-let request_str = String::from_utf8_lossy(&buffer[..bytes_read]);
-let mut lines = request_str.lines();
-```
-`from_utf8_lossy` returns a `Cow<str>` (Copy-on-Write) — a type that's *either* a borrowed `&str` or an owned `String`. If you don't call `.to_string()`, the borrow checker might complain when you try to use `lines` after `request_str` is dropped. Converting to `String` makes ownership clear.
+> [!check] Checkpoint
+> Your server now understands the full anatomy of an HTTP request — method, path, and every header. But we're still building HTML strings by hand inside Rust code. Real web servers serve files from disk — HTML, CSS, JavaScript. That's next.
+>
+> Your `src/main.rs`:
+>
+> ```rust
+> use std::collections::HashMap;
+> use std::io::{Read, Write};
+> use std::net::{TcpListener, TcpStream};
+>
+> fn handle_connection(mut stream: TcpStream) {
+> let mut buffer = [0u8; 1024];
+> let bytes_read = stream.read(&mut buffer).unwrap();
+> let request_str = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+>
+> let mut lines = request_str.lines();
+>
+> let request_line = lines.next().unwrap_or("");
+> let parts: Vec<&str> = request_line.split_whitespace().collect();
+> let (method, path) = if parts.len() >= 3 {
+> (parts[0], parts[1])
+> } else {
+> ("GET", "/")
+> };
+>
+> let mut headers: HashMap<String, String> = HashMap::new();
+> for line in lines {
+> if line.is_empty() {
+> break;
+> }
+> if let Some((key, value)) = line.split_once(':') {
+> headers.insert(
+> key.trim().to_lowercase(),
+> value.trim().to_string(),
+> );
+> }
+> }
+>
+> println!("{method} {path}");
+> println!("Headers: {headers:#?}");
+>
+> let body = match path {
+> "/" => "<html><body><h1>Welcome to Forja!</h1></body></html>".to_string(),
+> "/about" => "<html><body><h1>About Forja</h1><p>A Rust HTTP server.</p></body></html>".to_string(),
+> "/headers" => {
+> let mut html = String::from("<html><body><h1>Your Headers</h1><table border='1'>");
+> for (key, value) in &headers {
+> html.push_str(&format!("<tr><td><b>{key}</b></td><td>{value}</td></tr>"));
+> }
+> html.push_str("</table></body></html>");
+> html
+> }
+> _ => format!("<html><body><h1>You requested: {path}</h1></body></html>"),
+> };
+>
+> let response = format!(
+> "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
+> body.len(),
+> body
+> );
+>
+> stream.write_all(response.as_bytes()).unwrap();
+> }
+>
+> fn main() {
+> let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+> println!("Listening on port 7878");
+>
+> for stream in listener.incoming() {
+> let stream = stream.unwrap();
+> handle_connection(stream);
+> }
+> }
+> ```
 
-### Stage 5 checkpoint
 
-Your server now understands the full anatomy of an HTTP request — method, path, and every header. But we're still building HTML strings by hand inside Rust code. Real web servers serve files from disk — HTML, CSS, JavaScript. That's next.
+> [!warning] Common Mistake: Test it
+> ```bash
+> cargo run
 
-Your `src/main.rs`:
-
-```rust
-use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0u8; 1024];
-    let bytes_read = stream.read(&mut buffer).unwrap();
-    let request_str = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
-
-    let mut lines = request_str.lines();
-
-    let request_line = lines.next().unwrap_or("");
-    let parts: Vec<&str> = request_line.split_whitespace().collect();
-    let (method, path) = if parts.len() >= 3 {
-        (parts[0], parts[1])
-    } else {
-        ("GET", "/")
-    };
-
-    let mut headers: HashMap<String, String> = HashMap::new();
-    for line in lines {
-        if line.is_empty() {
-            break;
-        }
-        if let Some((key, value)) = line.split_once(':') {
-            headers.insert(
-                key.trim().to_lowercase(),
-                value.trim().to_string(),
-            );
-        }
-    }
-
-    println!("{method} {path}");
-    println!("Headers: {headers:#?}");
-
-    let body = match path {
-        "/" => "<html><body><h1>Welcome to Forja!</h1></body></html>".to_string(),
-        "/about" => "<html><body><h1>About Forja</h1><p>A Rust HTTP server.</p></body></html>".to_string(),
-        "/headers" => {
-            let mut html = String::from("<html><body><h1>Your Headers</h1><table border='1'>");
-            for (key, value) in &headers {
-                html.push_str(&format!("<tr><td><b>{key}</b></td><td>{value}</td></tr>"));
-            }
-            html.push_str("</table></body></html>");
-            html
-        }
-        _ => format!("<html><body><h1>You requested: {path}</h1></body></html>"),
-    };
-
-    let response = format!(
-        "HTTP/1.1 200 OK\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{}",
-        body.len(),
-        body
-    );
-
-    stream.write_all(response.as_bytes()).unwrap();
-}
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Listening on port 7878");
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        handle_connection(stream);
-    }
-}
-```
-
-**Test it:**
-```bash
-cargo run
 # In another terminal:
 curl http://localhost:7878/headers
 # Should see an HTML table of headers
@@ -1374,7 +1383,7 @@ New concepts:
 - **`Path::new(path).extension().and_then(|e| e.to_str())`** — a chain of operations:
   - `Path::new(path)` — wraps the string in a `Path` type
   - `.extension()` — returns `Option<&OsStr>` — the file extension, or `None` if there isn't one
-  - `.and_then(|e| e.to_str())` — if there's an extension, try to convert it to a `&str`. `and_then` is like `.flatMap()` in JS — it chains `Option` operations. The `|e|` is a *closure* (anonymous function), like Python's `lambda e:` or JS's `(e) =>`.
+  - `.and_then(|e| e.to_str())` — if there's an extension, try to convert it to a `&str`. `and_then` chains `Option` operations. The `|e|` is a *closure* (anonymous function), like Python's `lambda e:`.
 
 - **`Some("html") => ...`** — pattern matching on `Option`. `Some("html")` matches when the extension is present and equals `"html"`. The `|` in `Some("jpg") | Some("jpeg")` means "or" — match either pattern.
 
@@ -1396,7 +1405,9 @@ The path `public/../../../etc/passwd` would resolve to `/etc/passwd` — the ser
 
 We'll fix this properly in Stage 7, but be aware: this is one of the most common web server vulnerabilities. Every production web server (nginx, Apache, S3 static hosting) has protections against this.
 
-> **AWS connection**: S3 static website hosting handles this automatically — you can't traverse out of the bucket. CloudFront + S3 Origin Access Control adds another layer. When you build your own server, you're responsible for these protections.
+> [!info] AWS Connection
+> S3 static website hosting handles this automatically — you can't traverse out of the bucket. CloudFront + S3 Origin Access Control adds another layer. When you build your own server, you're responsible for these protections.
+
 
 ### 6.4 — Test it
 
@@ -1435,104 +1446,104 @@ GET /app.js
 
 This is how every static file server works — nginx, Apache, S3 static hosting, CloudFront. They map URL paths to files on disk and set the `Content-Type` header based on the file extension.
 
-### Stage 6 checkpoint
+> [!check] Checkpoint
+> Your server now reads from the filesystem and serves real web pages with CSS and JavaScript. But there's a gaping hole: no error handling. A missing file returns nothing useful, and a malicious path like `/../../../etc/passwd` could expose your entire system. Time to harden the forge.
+>
+> Your `src/main.rs`:
+>
+> ```rust
+> use std::collections::HashMap;
+> use std::fs;
+> use std::io::{Read, Write};
+> use std::net::{TcpListener, TcpStream};
+> use std::path::Path;
+>
+> fn get_content_type(path: &str) -> &str {
+>     match Path::new(path).extension().and_then(|e| e.to_str()) {
+>         Some("html") => "text/html",
+>         Some("css") => "text/css",
+>         Some("js") => "application/javascript",
+>         Some("json") => "application/json",
+>         Some("png") => "image/png",
+>         Some("jpg") | Some("jpeg") => "image/jpeg",
+>         Some("svg") => "image/svg+xml",
+>         Some("ico") => "image/x-icon",
+>         _ => "application/octet-stream",
+>     }
+> }
+>
+> fn handle_connection(mut stream: TcpStream) {
+>     let mut buffer = [0u8; 1024];
+>     let bytes_read = stream.read(&mut buffer).unwrap();
+>     let request_str = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+>
+>     let mut lines = request_str.lines();
+>
+>     let request_line = lines.next().unwrap_or("");
+>     let parts: Vec<&str> = request_line.split_whitespace().collect();
+>     let (method, path) = if parts.len() >= 3 {
+>         (parts[0], parts[1])
+>     } else {
+>         ("GET", "/")
+>     };
+>
+>     let mut headers: HashMap<String, String> = HashMap::new();
+>     for line in lines {
+>         if line.is_empty() {
+>             break;
+>         }
+>         if let Some((key, value)) = line.split_once(':') {
+>             headers.insert(key.trim().to_lowercase(), value.trim().to_string());
+>         }
+>     }
+>
+>     println!("{method} {path}");
+>
+>     let file_path = if path == "/" {
+>         "public/index.html".to_string()
+>     } else {
+>         format!("public{path}")
+>     };
+>
+>     match fs::read(&file_path) {
+>         Ok(contents) => {
+>             let content_type = get_content_type(&file_path);
+>             let response_header = format!(
+>                 "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\r\n",
+>                 contents.len()
+>             );
+>             stream.write_all(response_header.as_bytes()).unwrap();
+>             stream.write_all(&contents).unwrap();
+>         }
+>         Err(_) => {
+>             let body = "<html><body><h1>404 Not Found</h1></body></html>";
+>             let response = format!(
+>                 "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}",
+>                 body.len()
+>             );
+>             stream.write_all(response.as_bytes()).unwrap();
+>         }
+>     }
+> }
+>
+> fn main() {
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Listening on port 7878");
+>     println!("Serving files from ./public/");
+>
+>     for stream in listener.incoming() {
+>         let stream = stream.unwrap();
+>         handle_connection(stream);
+>     }
+> }
+> ```
+>
+> Your `public/` directory should contain `index.html`, `style.css`, and `app.js`.
+>
+> **Test it:**
+> ```bash
+> cargo run
 
-Your server now reads from the filesystem and serves real web pages with CSS and JavaScript. But there's a gaping hole: no error handling. A missing file returns nothing useful, and a malicious path like `/../../../etc/passwd` could expose your entire system. Time to harden the forge.
-
-Your `src/main.rs`:
-
-```rust
-use std::collections::HashMap;
-use std::fs;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::path::Path;
-
-fn get_content_type(path: &str) -> &str {
-    match Path::new(path).extension().and_then(|e| e.to_str()) {
-        Some("html") => "text/html",
-        Some("css") => "text/css",
-        Some("js") => "application/javascript",
-        Some("json") => "application/json",
-        Some("png") => "image/png",
-        Some("jpg") | Some("jpeg") => "image/jpeg",
-        Some("svg") => "image/svg+xml",
-        Some("ico") => "image/x-icon",
-        _ => "application/octet-stream",
-    }
-}
-
-fn handle_connection(mut stream: TcpStream) {
-    let mut buffer = [0u8; 1024];
-    let bytes_read = stream.read(&mut buffer).unwrap();
-    let request_str = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
-
-    let mut lines = request_str.lines();
-
-    let request_line = lines.next().unwrap_or("");
-    let parts: Vec<&str> = request_line.split_whitespace().collect();
-    let (method, path) = if parts.len() >= 3 {
-        (parts[0], parts[1])
-    } else {
-        ("GET", "/")
-    };
-
-    let mut headers: HashMap<String, String> = HashMap::new();
-    for line in lines {
-        if line.is_empty() {
-            break;
-        }
-        if let Some((key, value)) = line.split_once(':') {
-            headers.insert(key.trim().to_lowercase(), value.trim().to_string());
-        }
-    }
-
-    println!("{method} {path}");
-
-    let file_path = if path == "/" {
-        "public/index.html".to_string()
-    } else {
-        format!("public{path}")
-    };
-
-    match fs::read(&file_path) {
-        Ok(contents) => {
-            let content_type = get_content_type(&file_path);
-            let response_header = format!(
-                "HTTP/1.1 200 OK\r\nContent-Type: {content_type}\r\nContent-Length: {}\r\n\r\n",
-                contents.len()
-            );
-            stream.write_all(response_header.as_bytes()).unwrap();
-            stream.write_all(&contents).unwrap();
-        }
-        Err(_) => {
-            let body = "<html><body><h1>404 Not Found</h1></body></html>";
-            let response = format!(
-                "HTTP/1.1 404 Not Found\r\nContent-Type: text/html\r\nContent-Length: {}\r\n\r\n{body}",
-                body.len()
-            );
-            stream.write_all(response.as_bytes()).unwrap();
-        }
-    }
-}
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Listening on port 7878");
-    println!("Serving files from ./public/");
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        handle_connection(stream);
-    }
-}
-```
-
-Your `public/` directory should contain `index.html`, `style.css`, and `app.js`.
-
-**Test it:**
-```bash
-cargo run
 # Open http://localhost:7878 in your browser
 # You should see a styled page with working CSS and JS
 ```
@@ -1559,12 +1570,14 @@ Status codes are three-digit numbers grouped by category:
 | 4xx | Client Error | 400 Bad Request, 403 Forbidden, 404 Not Found |
 | 5xx | Server Error | 500 Internal Server Error, 502 Bad Gateway, 503 Service Unavailable |
 
-> **AWS connection**: You see these everywhere in AWS:
+> [!info] AWS Connection
+> You see these everywhere in AWS:
 > - **502 Bad Gateway** — your ALB got a bad response from the backend (Lambda timeout, ECS container crash). This is the most common ALB error.
 > - **503 Service Unavailable** — no healthy targets in the target group.
 > - **504 Gateway Timeout** — the backend didn't respond in time (ALB default: 60s).
 > - **403 Forbidden** — S3 bucket policy denies access, or WAF blocked the request.
 > - **304 Not Modified** — CloudFront cache hit, no need to re-download.
+
 
 ### 7.2 — Path traversal protection
 
@@ -1765,15 +1778,15 @@ echo "GARBAGE" | nc localhost 7878
 
 Open `http://localhost:7878/nonexistent` in your browser — you'll see a styled 404 page instead of a blank error.
 
-### Stage 7 checkpoint
+> [!check] Checkpoint
+> Your server now handles errors gracefully and blocks path traversal attacks. But look at `handle_connection` — it's a sprawling function with parsing, routing, file serving, and error handling all tangled together. Time to forge proper structure with Rust structs and give your code the shape of a real framework.
+>
+> Your `src/main.rs` is the full listing above. Make sure your `public/` directory still has `index.html`, `style.css`, and `app.js` from Stage 6.
+>
+> **Test it:**
+> ```bash
+> cargo run
 
-Your server now handles errors gracefully and blocks path traversal attacks. But look at `handle_connection` — it's a sprawling function with parsing, routing, file serving, and error handling all tangled together. Time to forge proper structure with Rust structs and give your code the shape of a real framework.
-
-Your `src/main.rs` is the full listing above. Make sure your `public/` directory still has `index.html`, `style.css`, and `app.js` from Stage 6.
-
-**Test it:**
-```bash
-cargo run
 # In another terminal:
 curl http://localhost:7878/           # 200 OK
 curl http://localhost:7878/nope       # 404 Not Found
@@ -1803,7 +1816,7 @@ class Request:
         self.headers = headers
 ```
 
-In Express.js, the framework gives you a `req` object. In Rust, we'll use a **struct** — Rust's equivalent of a class (but without inheritance).
+In Flask, the framework gives you a `request` object. In Rust, we'll use a **struct** — Rust's equivalent of a class (but without inheritance).
 
 ### 8.2 — Defining the Request struct
 
@@ -1873,7 +1886,7 @@ impl Request {
 
 Let's break down every new concept:
 
-- **`struct Request { ... }`** — defines a new type with named fields. Like a Python `@dataclass` or a TypeScript `interface`, but the fields are actual memory layout — Rust structs have zero overhead. Each field has a name and a type.
+- **`struct Request { ... }`** — defines a new type with named fields. Like a Python `@dataclass`, but the fields are actual memory layout — Rust structs have zero overhead. Each field has a name and a type.
 
 - **All fields are `String` (owned)** — not `&str` (borrowed). This is a deliberate choice. If we used `&str`, the `Request` would need to borrow from the buffer, and we'd need *lifetime annotations* to tell the compiler how long the borrows are valid. Using owned `String`s means the `Request` owns its data and can live as long as we want. This is the "clone at the boundary" pattern — common in Rust when you want simple ownership.
 
@@ -1898,7 +1911,7 @@ Let's break down every new concept:
       return None
   ```
 
-- **`Some(Request { method: ..., path: ..., headers })`** — constructs a `Request` and wraps it in `Some`. The `headers` field uses *field init shorthand* — when the variable name matches the field name, you can write `headers` instead of `headers: headers`. Like ES6 object shorthand in JavaScript.
+- **`Some(Request { method: ..., path: ..., headers })`** — constructs a `Request` and wraps it in `Some`. The `headers` field uses *field init shorthand* — when the variable name matches the field name, you can write `headers` instead of `headers: headers`.
 
 - **`fn header(&self, name: &str) -> Option<&str>`** — a method that takes `&self` (borrows the Request immutably). The `&self` is like Python's `self` parameter, but explicit about borrowing. `&self` means "I'm reading from the Request but not modifying it."
 
@@ -2124,54 +2137,53 @@ stream.write_all(header.as_bytes()).unwrap();
 stream.write_all(&contents).unwrap();
 ```
 
-### 8.5 — Common mistakes at this stage
+> [!warning] Common Mistake: Trying to use Request after moving it
+> ```rust
+> let request = Request::from_stream(&mut stream).unwrap();
+> handle_request(request);
+> println!("{}", request.method); // ← error! request was moved
+> ```
+> ```
+> error[E0382]: borrow of moved value: `request`
+> ```
+> If `handle_request` takes `Request` by value, it consumes it. Pass by reference instead: `handle_request(&request)`.
 
-**Trying to use Request after moving it:**
-```rust
-let request = Request::from_stream(&mut stream).unwrap();
-handle_request(request);
-println!("{}", request.method); // ← error! request was moved
-```
-```
-error[E0382]: borrow of moved value: `request`
-```
-If `handle_request` takes `Request` by value, it consumes it. Pass by reference instead: `handle_request(&request)`.
+> [!warning] Common Mistake: Forgetting that builder methods consume self
+> ```rust
+> let response = Response::new(200, "OK");
+> response.header("X-Foo", "bar"); // ← error! response was moved
+> response.send(&mut stream);      // ← error! response was moved
+> ```
+> Each builder method consumes `self` and returns a new `Response`. You must chain them or reassign:
+> ```rust
+> // Chain (preferred):
+> Response::new(200, "OK").header("X-Foo", "bar").send(&mut stream);
+>
+> // Or reassign:
+> let response = Response::new(200, "OK");
+> let response = response.header("X-Foo", "bar");
+> response.send(&mut stream);
+> ```
 
-**Forgetting that builder methods consume self:**
-```rust
-let response = Response::new(200, "OK");
-response.header("X-Foo", "bar"); // ← error! response was moved
-response.send(&mut stream);      // ← error! response was moved
-```
-Each builder method consumes `self` and returns a new `Response`. You must chain them or reassign:
-```rust
-// Chain (preferred):
-Response::new(200, "OK").header("X-Foo", "bar").send(&mut stream);
+> [!warning] Common Mistake: String vs &str confusion
+> ```rust
+> struct Request {
+>     method: &str,  // ← error! missing lifetime
+> }
+> ```
+> ```
+> error[E0106]: missing lifetime specifier
+> ```
+> Bare `&str` in a struct needs a lifetime annotation (`&'a str`). Use `String` for owned data in structs until you're comfortable with lifetimes.
+>
+> ### 8.6 — Test it
+>
+> ```bash
+> cargo run
+> ```
+>
+> ```bash
 
-// Or reassign:
-let response = Response::new(200, "OK");
-let response = response.header("X-Foo", "bar");
-response.send(&mut stream);
-```
-
-**String vs &str confusion:**
-```rust
-struct Request {
-    method: &str,  // ← error! missing lifetime
-}
-```
-```
-error[E0106]: missing lifetime specifier
-```
-Bare `&str` in a struct needs a lifetime annotation (`&'a str`). Use `String` for owned data in structs until you're comfortable with lifetimes.
-
-### 8.6 — Test it
-
-```bash
-cargo run
-```
-
-```bash
 # All previous tests should still work:
 curl http://localhost:7878/
 curl http://localhost:7878/style.css
@@ -2187,245 +2199,245 @@ curl -X POST http://localhost:7878/
 
 Open `http://localhost:7878` in your browser — everything should work exactly as before, but the code is now clean and extensible.
 
-### Stage 8 checkpoint — Complete final code
+> [!check] Checkpoint
+> You've forged the raw metal of Act 1 into clean, structured types. Your server has proper `Request` and `Response` abstractions — the building blocks every web framework is made of. In Act 2, you'll use these types to build a real router with path parameters, query strings, and JSON APIs.
+>
+> Your complete `src/main.rs`:
+>
+> ```rust
+> use std::collections::HashMap;
+> use std::fs;
+> use std::io::{Read, Write};
+> use std::net::{TcpListener, TcpStream};
+> use std::path::{Path, PathBuf};
+>
+> // --- Request ---
+>
+> struct Request {
+>     method: String,
+>     path: String,
+>     version: String,
+>     headers: HashMap<String, String>,
+> }
+>
+> impl Request {
+>     fn from_stream(stream: &mut TcpStream) -> Option<Request> {
+>         let mut buffer = [0u8; 1024];
+>         let bytes_read = match stream.read(&mut buffer) {
+>             Ok(0) => return None,
+>             Ok(n) => n,
+>             Err(_) => return None,
+>         };
+>
+>         let raw = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+>         let mut lines = raw.lines();
+>
+>         let request_line = lines.next()?;
+>         let parts: Vec<&str> = request_line.split_whitespace().collect();
+>         if parts.len() < 3 {
+>             return None;
+>         }
+>
+>         let mut headers = HashMap::new();
+>         for line in lines {
+>             if line.is_empty() {
+>                 break;
+>             }
+>             if let Some((key, value)) = line.split_once(':') {
+>                 headers.insert(key.trim().to_lowercase(), value.trim().to_string());
+>             }
+>         }
+>
+>         Some(Request {
+>             method: parts[0].to_string(),
+>             path: parts[1].to_string(),
+>             version: parts[2].to_string(),
+>             headers,
+>         })
+>     }
+>
+>     fn header(&self, name: &str) -> Option<&str> {
+>         self.headers.get(name).map(|s| s.as_str())
+>     }
+> }
+>
+> // --- Response ---
+>
+> struct Response {
+>     status_code: u16,
+>     reason: String,
+>     headers: HashMap<String, String>,
+>     body: Vec<u8>,
+> }
+>
+> impl Response {
+>     fn new(status_code: u16, reason: &str) -> Response {
+>         Response {
+>             status_code,
+>             reason: reason.to_string(),
+>             headers: HashMap::new(),
+>             body: Vec::new(),
+>         }
+>     }
+>
+>     fn header(mut self, key: &str, value: &str) -> Response {
+>         self.headers.insert(key.to_string(), value.to_string());
+>         self
+>     }
+>
+>     fn body_html(mut self, html: &str) -> Response {
+>         self.body = html.as_bytes().to_vec();
+>         self.headers.insert("content-type".to_string(), "text/html".to_string());
+>         self
+>     }
+>
+>     fn body_bytes(mut self, bytes: Vec<u8>, content_type: &str) -> Response {
+>         self.body = bytes;
+>         self.headers.insert("content-type".to_string(), content_type.to_string());
+>         self
+>     }
+>
+>     fn send(mut self, stream: &mut TcpStream) {
+>         self.headers.insert(
+>             "content-length".to_string(),
+>             self.body.len().to_string(),
+>         );
+>
+>         let status_line = format!("HTTP/1.1 {} {}\r\n", self.status_code, self.reason);
+>         stream.write_all(status_line.as_bytes()).unwrap();
+>
+>         for (key, value) in &self.headers {
+>             let header_line = format!("{key}: {value}\r\n");
+>             stream.write_all(header_line.as_bytes()).unwrap();
+>         }
+>
+>         stream.write_all(b"\r\n").unwrap();
+>         stream.write_all(&self.body).unwrap();
+>     }
+> }
+>
+> // --- Helpers ---
+>
+> fn get_content_type(path: &str) -> &str {
+>     match Path::new(path).extension().and_then(|e| e.to_str()) {
+>         Some("html") => "text/html",
+>         Some("css") => "text/css",
+>         Some("js") => "application/javascript",
+>         Some("json") => "application/json",
+>         Some("png") => "image/png",
+>         Some("jpg") | Some("jpeg") => "image/jpeg",
+>         Some("svg") => "image/svg+xml",
+>         Some("ico") => "image/x-icon",
+>         _ => "application/octet-stream",
+>     }
+> }
+>
+> fn error_page(status: u16, reason: &str, message: &str) -> String {
+>     format!(
+>         "<!DOCTYPE html>\
+>         <html><head><title>{status} {reason}</title>\
+>         <style>\
+>         body {{ font-family: sans-serif; max-width: 600px; margin: 80px auto; text-align: center; color: #ccc; background: #1a1a2e; }}\
+>         h1 {{ font-size: 72px; margin: 0; color: #e94560; }}\
+>         p {{ color: #888; }}\
+>         </style></head>\
+>         <body><h1>{status}</h1><h2>{reason}</h2><p>{message}</p></body></html>"
+>     )
+> }
+>
+> fn safe_path(requested: &str) -> Option<PathBuf> {
+>     let base = Path::new("public").canonicalize().ok()?;
+>     let file_path = if requested == "/" {
+>         base.join("index.html")
+>     } else {
+>         base.join(requested.trim_start_matches('/'))
+>     };
+>     let resolved = file_path.canonicalize().ok()?;
+>     if resolved.starts_with(&base) {
+>         Some(resolved)
+>     } else {
+>         None
+>     }
+> }
+>
+> // --- Handler ---
+>
+> fn handle_connection(mut stream: TcpStream) {
+>     let request = match Request::from_stream(&mut stream) {
+>         Some(req) => req,
+>         None => {
+>             Response::new(400, "Bad Request")
+>                 .body_html(&error_page(400, "Bad Request", "Could not parse request."))
+>                 .send(&mut stream);
+>             return;
+>         }
+>     };
+>
+>     println!(
+>         "{} {} ({})",
+>         request.method,
+>         request.path,
+>         request.header("user-agent").unwrap_or("-")
+>     );
+>
+>     if request.method != "GET" {
+>         Response::new(405, "Method Not Allowed")
+>             .body_html(&error_page(
+>                 405,
+>                 "Method Not Allowed",
+>                 &format!("{} is not supported.", request.method),
+>             ))
+>             .send(&mut stream);
+>         return;
+>     }
+>
+>     match safe_path(&request.path) {
+>         Some(file_path) => match fs::read(&file_path) {
+>             Ok(contents) => {
+>                 let ct = get_content_type(&file_path.to_string_lossy());
+>                 Response::new(200, "OK")
+>                     .body_bytes(contents, ct)
+>                     .send(&mut stream);
+>             }
+>             Err(_) => {
+>                 Response::new(500, "Internal Server Error")
+>                     .body_html(&error_page(
+>                         500,
+>                         "Internal Server Error",
+>                         "Failed to read file.",
+>                     ))
+>                     .send(&mut stream);
+>             }
+>         },
+>         None => {
+>             Response::new(404, "Not Found")
+>                 .body_html(&error_page(
+>                     404,
+>                     "Not Found",
+>                     &format!("{} was not found.", request.path),
+>                 ))
+>                 .send(&mut stream);
+>         }
+>     }
+> }
+>
+> fn main() {
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Forja v0.1.0");
+>     println!("Listening on http://127.0.0.1:7878");
+>     println!("Serving files from ./public/");
+>
+>     for stream in listener.incoming() {
+>         let stream = stream.unwrap();
+>         handle_connection(stream);
+>     }
+> }
+> ```
+>
+> **Test it:**
+> ```bash
+> cargo run
 
-You've forged the raw metal of Act 1 into clean, structured types. Your server has proper `Request` and `Response` abstractions — the building blocks every web framework is made of. In Act 2, you'll use these types to build a real router with path parameters, query strings, and JSON APIs.
-
-Your complete `src/main.rs`:
-
-```rust
-use std::collections::HashMap;
-use std::fs;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-use std::path::{Path, PathBuf};
-
-// --- Request ---
-
-struct Request {
-    method: String,
-    path: String,
-    version: String,
-    headers: HashMap<String, String>,
-}
-
-impl Request {
-    fn from_stream(stream: &mut TcpStream) -> Option<Request> {
-        let mut buffer = [0u8; 1024];
-        let bytes_read = match stream.read(&mut buffer) {
-            Ok(0) => return None,
-            Ok(n) => n,
-            Err(_) => return None,
-        };
-
-        let raw = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
-        let mut lines = raw.lines();
-
-        let request_line = lines.next()?;
-        let parts: Vec<&str> = request_line.split_whitespace().collect();
-        if parts.len() < 3 {
-            return None;
-        }
-
-        let mut headers = HashMap::new();
-        for line in lines {
-            if line.is_empty() {
-                break;
-            }
-            if let Some((key, value)) = line.split_once(':') {
-                headers.insert(key.trim().to_lowercase(), value.trim().to_string());
-            }
-        }
-
-        Some(Request {
-            method: parts[0].to_string(),
-            path: parts[1].to_string(),
-            version: parts[2].to_string(),
-            headers,
-        })
-    }
-
-    fn header(&self, name: &str) -> Option<&str> {
-        self.headers.get(name).map(|s| s.as_str())
-    }
-}
-
-// --- Response ---
-
-struct Response {
-    status_code: u16,
-    reason: String,
-    headers: HashMap<String, String>,
-    body: Vec<u8>,
-}
-
-impl Response {
-    fn new(status_code: u16, reason: &str) -> Response {
-        Response {
-            status_code,
-            reason: reason.to_string(),
-            headers: HashMap::new(),
-            body: Vec::new(),
-        }
-    }
-
-    fn header(mut self, key: &str, value: &str) -> Response {
-        self.headers.insert(key.to_string(), value.to_string());
-        self
-    }
-
-    fn body_html(mut self, html: &str) -> Response {
-        self.body = html.as_bytes().to_vec();
-        self.headers.insert("content-type".to_string(), "text/html".to_string());
-        self
-    }
-
-    fn body_bytes(mut self, bytes: Vec<u8>, content_type: &str) -> Response {
-        self.body = bytes;
-        self.headers.insert("content-type".to_string(), content_type.to_string());
-        self
-    }
-
-    fn send(mut self, stream: &mut TcpStream) {
-        self.headers.insert(
-            "content-length".to_string(),
-            self.body.len().to_string(),
-        );
-
-        let status_line = format!("HTTP/1.1 {} {}\r\n", self.status_code, self.reason);
-        stream.write_all(status_line.as_bytes()).unwrap();
-
-        for (key, value) in &self.headers {
-            let header_line = format!("{key}: {value}\r\n");
-            stream.write_all(header_line.as_bytes()).unwrap();
-        }
-
-        stream.write_all(b"\r\n").unwrap();
-        stream.write_all(&self.body).unwrap();
-    }
-}
-
-// --- Helpers ---
-
-fn get_content_type(path: &str) -> &str {
-    match Path::new(path).extension().and_then(|e| e.to_str()) {
-        Some("html") => "text/html",
-        Some("css") => "text/css",
-        Some("js") => "application/javascript",
-        Some("json") => "application/json",
-        Some("png") => "image/png",
-        Some("jpg") | Some("jpeg") => "image/jpeg",
-        Some("svg") => "image/svg+xml",
-        Some("ico") => "image/x-icon",
-        _ => "application/octet-stream",
-    }
-}
-
-fn error_page(status: u16, reason: &str, message: &str) -> String {
-    format!(
-        "<!DOCTYPE html>\
-        <html><head><title>{status} {reason}</title>\
-        <style>\
-        body {{ font-family: sans-serif; max-width: 600px; margin: 80px auto; text-align: center; color: #ccc; background: #1a1a2e; }}\
-        h1 {{ font-size: 72px; margin: 0; color: #e94560; }}\
-        p {{ color: #888; }}\
-        </style></head>\
-        <body><h1>{status}</h1><h2>{reason}</h2><p>{message}</p></body></html>"
-    )
-}
-
-fn safe_path(requested: &str) -> Option<PathBuf> {
-    let base = Path::new("public").canonicalize().ok()?;
-    let file_path = if requested == "/" {
-        base.join("index.html")
-    } else {
-        base.join(requested.trim_start_matches('/'))
-    };
-    let resolved = file_path.canonicalize().ok()?;
-    if resolved.starts_with(&base) {
-        Some(resolved)
-    } else {
-        None
-    }
-}
-
-// --- Handler ---
-
-fn handle_connection(mut stream: TcpStream) {
-    let request = match Request::from_stream(&mut stream) {
-        Some(req) => req,
-        None => {
-            Response::new(400, "Bad Request")
-                .body_html(&error_page(400, "Bad Request", "Could not parse request."))
-                .send(&mut stream);
-            return;
-        }
-    };
-
-    println!(
-        "{} {} ({})",
-        request.method,
-        request.path,
-        request.header("user-agent").unwrap_or("-")
-    );
-
-    if request.method != "GET" {
-        Response::new(405, "Method Not Allowed")
-            .body_html(&error_page(
-                405,
-                "Method Not Allowed",
-                &format!("{} is not supported.", request.method),
-            ))
-            .send(&mut stream);
-        return;
-    }
-
-    match safe_path(&request.path) {
-        Some(file_path) => match fs::read(&file_path) {
-            Ok(contents) => {
-                let ct = get_content_type(&file_path.to_string_lossy());
-                Response::new(200, "OK")
-                    .body_bytes(contents, ct)
-                    .send(&mut stream);
-            }
-            Err(_) => {
-                Response::new(500, "Internal Server Error")
-                    .body_html(&error_page(
-                        500,
-                        "Internal Server Error",
-                        "Failed to read file.",
-                    ))
-                    .send(&mut stream);
-            }
-        },
-        None => {
-            Response::new(404, "Not Found")
-                .body_html(&error_page(
-                    404,
-                    "Not Found",
-                    &format!("{} was not found.", request.path),
-                ))
-                .send(&mut stream);
-        }
-    }
-}
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Forja v0.1.0");
-    println!("Listening on http://127.0.0.1:7878");
-    println!("Serving files from ./public/");
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        handle_connection(stream);
-    }
-}
-```
-
-**Test it:**
-```bash
-cargo run
 # In another terminal:
 curl -v http://localhost:7878/
 curl -v http://localhost:7878/style.css
@@ -2461,7 +2473,9 @@ Your server works, but it has limitations:
 - **1024-byte buffer** — large requests get truncated. Act 2 implements proper buffered reading.
 - **No logging** — just `println!`. Act 2 adds structured logging.
 
-> **AWS connection**: The single-threaded limitation is exactly why services like Lambda exist — each invocation gets its own execution environment, so concurrency is handled by the platform, not your code. When you run on EC2 or ECS, *you* are responsible for handling concurrent connections — which is what Act 2 is all about.
+> [!info] AWS Connection
+> The single-threaded limitation is exactly why services like Lambda exist — each invocation gets its own execution environment, so concurrency is handled by the platform, not your code. When you run on EC2 or ECS, *you* are responsible for handling concurrent connections — which is what Act 2 is all about.
+
 
 ### What to explore next
 

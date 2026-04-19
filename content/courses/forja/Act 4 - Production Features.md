@@ -33,7 +33,9 @@ Open your browser's dev tools, load a page with 20 images, and watch the "Connec
 
 HTTP/1.0 closed the connection after every response. HTTP/1.1 changed the default: connections stay open unless someone sends `Connection: close`. This is the single biggest performance improvement in HTTP/1.1.
 
-**AWS connection:** Keep-alive is what ALB uses to maintain connection pools to your targets. When you configure an ALB target group, the "deregistration delay" and "idle timeout" settings are keep-alive parameters. ALB holds persistent connections to your backend and multiplexes requests over them. Without keep-alive support in your server, ALB would open and close a TCP connection for every single request it forwards — destroying performance.
+> [!info] AWS Connection
+> Keep-alive is what ALB uses to maintain connection pools to your targets. When you configure an ALB target group, the "deregistration delay" and "idle timeout" settings are keep-alive parameters. ALB holds persistent connections to your backend and multiplexes requests over them. Without keep-alive support in your server, ALB would open and close a TCP connection for every single request it forwards — destroying performance.
+
 
 ### What your server does now (the problem)
 
@@ -128,21 +130,20 @@ let body = response.body();
 response.set_header("Content-Length", &body.len().to_string());
 ```
 
-### Common mistake: partial reads
-
-Your 8192-byte buffer might not contain the complete request. A POST with a large body arrives in multiple TCP segments. For now, a simple approach:
-
-```rust
-// Read Content-Length from headers, then read remaining body bytes
-fn parse_content_length(headers: &str) -> Option<usize> {
-    headers.lines()
-        .find(|l| l.to_lowercase().starts_with("content-length:"))
-        .and_then(|l| l.split(':').nth(1))
-        .and_then(|v| v.trim().parse().ok())
-}
-```
-
-You'll need to keep reading from the stream until you have `header_length + content_length` bytes. This is fiddly — real HTTP parsers handle this with state machines. For Forja, handling GET requests (no body) in the keep-alive loop is enough to prove the concept.
+> [!warning] Common Mistake: partial reads
+> Your 8192-byte buffer might not contain the complete request. A POST with a large body arrives in multiple TCP segments. For now, a simple approach:
+>
+> ```rust
+> // Read Content-Length from headers, then read remaining body bytes
+> fn parse_content_length(headers: &str) -> Option<usize> {
+>     headers.lines()
+>         .find(|l| l.to_lowercase().starts_with("content-length:"))
+>         .and_then(|l| l.split(':').nth(1))
+>         .and_then(|v| v.trim().parse().ok())
+> }
+> ```
+>
+> You'll need to keep reading from the stream until you have `header_length + content_length` bytes. This is fiddly — real HTTP parsers handle this with state machines. For Forja, handling GET requests (no body) in the keep-alive loop is enough to prove the concept.
 
 ### Test it
 
@@ -160,15 +161,14 @@ nc localhost 7878
 # Type nothing, wait 30 seconds — server should close the connection
 ```
 
-### Checkpoint
-
-Connections now persist across multiple requests — no more handshake tax on every resource. But keep-alive introduces a new question: how does the client know where one response ends and the next begins? `Content-Length` works when you know the size upfront, but what about streaming data? That's what chunked transfer encoding solves, and it's next.
-
-Your `handle_connection` now:
-- Loops, reading multiple requests per connection
-- Times out idle connections after 30 seconds
-- Respects `Connection: close`
-- Sets `Content-Length` on every response
+> [!check] Checkpoint
+> Connections now persist across multiple requests — no more handshake tax on every resource. But keep-alive introduces a new question: how does the client know where one response ends and the next begins? `Content-Length` works when you know the size upfront, but what about streaming data? That's what chunked transfer encoding solves, and it's next.
+>
+> Your `handle_connection` now:
+> - Loops, reading multiple requests per connection
+> - Times out idle connections after 30 seconds
+> - Respects `Connection: close`
+> - Sets `Content-Length` on every response
 
 ---
 
@@ -186,7 +186,9 @@ Content-Length requires you to know the response size before you start sending. 
 
 Chunked transfer encoding lets you stream the response in pieces. Each chunk is prefixed with its size in hex, and a zero-length chunk signals the end.
 
-**AWS connection:** This is how API Gateway streams Lambda responses back to clients. When you enable Lambda response streaming, API Gateway uses `Transfer-Encoding: chunked` to send data as your Lambda produces it, rather than buffering the entire response. CloudFront also uses chunked encoding when it doesn't know the origin's response size upfront.
+> [!info] AWS Connection
+> This is how API Gateway streams Lambda responses back to clients. When you enable Lambda response streaming, API Gateway uses `Transfer-Encoding: chunked` to send data as your Lambda produces it, rather than buffering the entire response. CloudFront also uses chunked encoding when it doesn't know the origin's response size upfront.
+
 
 ### The wire format
 
@@ -253,9 +255,8 @@ end_chunked(&mut stream).await?;
 3. Modify your response builder: if a response has no `Content-Length`, use chunked encoding
 4. Make sure keep-alive still works after a chunked response
 
-### Common mistake: forgetting the final chunk
-
-If you don't send the `0\r\n\r\n` terminator, the client hangs forever waiting for more data. curl will sit there spinning. Always send the final chunk, even if your stream errors out — wrap it in a cleanup block.
+> [!warning] Common Mistake: forgetting the final chunk
+> If you don't send the `0\r\n\r\n` terminator, the client hangs forever waiting for more data. curl will sit there spinning. Always send the final chunk, even if your stream errors out — wrap it in a cleanup block.
 
 ### Test it
 
@@ -274,15 +275,14 @@ curl -v http://localhost:7878/stream http://localhost:7878/api/hello
 # Second request should reuse the connection
 ```
 
-### Checkpoint
-
-Your server now has two ways to deliver response bodies — fixed-length and chunked streaming. But both modes send every byte as-is over the wire. A typical JSON response is 70-80% redundant whitespace and repeated keys. Next, we'll compress responses with gzip to slash bandwidth usage.
-
-Your server now supports two response modes:
-- **Fixed-length**: `Content-Length` header, body sent all at once
-- **Chunked**: `Transfer-Encoding: chunked`, body sent in pieces
-
-Both work with keep-alive connections.
+> [!check] Checkpoint
+> Your server now has two ways to deliver response bodies — fixed-length and chunked streaming. But both modes send every byte as-is over the wire. A typical JSON response is 70-80% redundant whitespace and repeated keys. Next, we'll compress responses with gzip to slash bandwidth usage.
+>
+> Your server now supports two response modes:
+> - **Fixed-length**: `Content-Length` header, body sent all at once
+> - **Chunked**: `Transfer-Encoding: chunked`, body sent in pieces
+>
+> Both work with keep-alive connections.
 
 ---
 
@@ -296,7 +296,9 @@ A typical JSON API response is 70-80% whitespace and repeated keys. A 50KB JSON 
 
 Every production HTTP server supports compression. If yours doesn't, you're wasting bandwidth on every single response.
 
-**AWS connection:** This is exactly what CloudFront does — compress at the edge. When you enable "Compress Objects Automatically" in a CloudFront distribution, it checks `Accept-Encoding: gzip` in the request and compresses the response body before sending it to the client. ALB doesn't compress — it expects your backend to handle it. So if you're running behind ALB without CloudFront, your server needs to compress.
+> [!info] AWS Connection
+> This is exactly what CloudFront does — compress at the edge. When you enable "Compress Objects Automatically" in a CloudFront distribution, it checks `Accept-Encoding: gzip` in the request and compresses the response body before sending it to the client. ALB doesn't compress — it expects your backend to handle it. So if you're running behind ALB without CloudFront, your server needs to compress.
+
 
 ### The protocol
 
@@ -378,17 +380,19 @@ fn maybe_compress(request: &Request, response: &mut Response) {
 4. Handle the edge cases: small bodies, already-compressed content types, client doesn't accept gzip
 5. Make sure `Content-Length` reflects the compressed size
 
-### Common mistakes
+> [!warning] Common Mistake: Forgetting `encoder.finish()`
+> — gzip has a footer with a checksum. If you drop the encoder without calling `finish()`, the output is truncated and clients will reject it with a decompression error.
 
-**Forgetting `encoder.finish()`** — gzip has a footer with a checksum. If you drop the encoder without calling `finish()`, the output is truncated and clients will reject it with a decompression error.
+> [!warning] Common Mistake: Compressing chunked responses
+> — if you're streaming chunks (Stage 24), you need to either compress each chunk individually (wasteful — gzip works better with more data) or buffer the whole response first (defeats the purpose of streaming). The standard approach: don't compress chunked/streaming responses, or use a streaming gzip encoder that flushes per-chunk. For Forja, skip compression on chunked responses.
 
-**Compressing chunked responses** — if you're streaming chunks (Stage 24), you need to either compress each chunk individually (wasteful — gzip works better with more data) or buffer the whole response first (defeats the purpose of streaming). The standard approach: don't compress chunked/streaming responses, or use a streaming gzip encoder that flushes per-chunk. For Forja, skip compression on chunked responses.
+> [!warning] Common Mistake: Double compression
+> — if your static file is already `style.css.gz`, don't gzip it again. Check for existing `Content-Encoding` headers.
+>
+> ### Test it
+>
+> ```bash
 
-**Double compression** — if your static file is already `style.css.gz`, don't gzip it again. Check for existing `Content-Encoding` headers.
-
-### Test it
-
-```bash
 # Request with gzip support
 curl -v -H "Accept-Encoding: gzip" http://localhost:7878/api/hello | gunzip
 # Response headers should include: Content-Encoding: gzip
@@ -409,15 +413,14 @@ curl -s --compressed http://localhost:7878/api/hello
 # --compressed tells curl to send Accept-Encoding and auto-decompress
 ```
 
-### Checkpoint
-
-Responses are now compressed on the wire — less bandwidth, faster page loads. But your API is still locked to same-origin requests: any frontend on a different domain gets blocked by the browser's CORS policy. Next, we'll add the headers that let browsers call your API from anywhere.
-
-Your server now:
-- Checks `Accept-Encoding` for gzip support
-- Compresses response bodies with flate2
-- Sets `Content-Encoding: gzip` and correct `Content-Length`
-- Skips compression for small bodies, images, and streaming responses
+> [!check] Checkpoint
+> Responses are now compressed on the wire — less bandwidth, faster page loads. But your API is still locked to same-origin requests: any frontend on a different domain gets blocked by the browser's CORS policy. Next, we'll add the headers that let browsers call your API from anywhere.
+>
+> Your server now:
+> - Checks `Accept-Encoding` for gzip support
+> - Compresses response bodies with flate2
+> - Sets `Content-Encoding: gzip` and correct `Content-Length`
+> - Skips compression for small bodies, images, and streaming responses
 
 ---
 
@@ -431,7 +434,9 @@ You build an API at `api.example.com`. Your frontend is at `app.example.com`. A 
 
 Every web developer has hit this wall. CORS is the browser's security mechanism that prevents JavaScript on one origin from making requests to a different origin. Without proper CORS headers, your API is useless to any frontend that isn't served from the exact same origin.
 
-**AWS connection:** This is what API Gateway's CORS configuration does. When you enable CORS on an API Gateway endpoint, it adds the `Access-Control-*` headers and handles OPTIONS preflight requests. AWS WAF can also inject CORS headers. Here, you're implementing what those services do for you.
+> [!info] AWS Connection
+> This is what API Gateway's CORS configuration does. When you enable CORS on an API Gateway endpoint, it adds the `Access-Control-*` headers and handles OPTIONS preflight requests. AWS WAF can also inject CORS headers. Here, you're implementing what those services do for you.
+
 
 ### How CORS works
 
@@ -532,9 +537,8 @@ fn add_cors_headers(response: &mut Response, config: &CorsConfig, origin: &str) 
 3. For all other responses, add `Access-Control-Allow-Origin` based on the request's `Origin` header
 4. Wire it up as middleware that runs on every response
 
-### Common mistake: `*` vs specific origin with credentials
-
-If your API uses cookies or `Authorization` headers, `Access-Control-Allow-Origin: *` won't work — browsers require the specific origin. You also need `Access-Control-Allow-Credentials: true`. This trips up everyone at least once.
+> [!warning] Common Mistake: `*` vs specific origin with credentials
+> If your API uses cookies or `Authorization` headers, `Access-Control-Allow-Origin: *` won't work — browsers require the specific origin. You also need `Access-Control-Allow-Credentials: true`. This trips up everyone at least once.
 
 ### Test it
 
@@ -569,14 +573,13 @@ fetch('http://localhost:7878/api/hello')
 Without CORS headers: `TypeError: Failed to fetch` (CORS error in console).
 With CORS headers: you see the response body.
 
-### Checkpoint
-
-Browsers can now call your API from any origin — the CORS wall is down. But with the door open to the world, you need a bouncer. Without rate limiting, a single client can flood your server with thousands of requests per second and starve everyone else. That's next.
-
-Your server now:
-- Responds to OPTIONS preflight requests with proper CORS headers
-- Adds `Access-Control-Allow-Origin` to all responses when `Origin` is present
-- Is callable from any frontend JavaScript application
+> [!check] Checkpoint
+> Browsers can now call your API from any origin — the CORS wall is down. But with the door open to the world, you need a bouncer. Without rate limiting, a single client can flood your server with thousands of requests per second and starve everyone else. That's next.
+>
+> Your server now:
+> - Responds to OPTIONS preflight requests with proper CORS headers
+> - Adds `Access-Control-Allow-Origin` to all responses when `Origin` is present
+> - Is callable from any frontend JavaScript application
 
 ---
 
@@ -590,7 +593,9 @@ Without rate limiting, a single client can send thousands of requests per second
 
 Rate limiting is the first line of defense. It says: "You get N requests per time window. After that, slow down."
 
-**AWS connection:** Rate limiting is what AWS WAF does. When you create a WAF rate-based rule, you're setting a token bucket per IP address — exactly what you're about to build. API Gateway also has throttling (10,000 requests/second default per account, configurable per stage/method). The difference: WAF operates at the edge (CloudFront), API Gateway at the service level. Your implementation is the service-level version.
+> [!info] AWS Connection
+> Rate limiting is what AWS WAF does. When you create a WAF rate-based rule, you're setting a token bucket per IP address — exactly what you're about to build. API Gateway also has throttling (10,000 requests/second default per account, configurable per stage/method). The difference: WAF operates at the edge (CloudFront), API Gateway at the service level. Your implementation is the service-level version.
+
 
 ### Token bucket algorithm
 
@@ -695,30 +700,32 @@ Note `tokio::sync::Mutex`, not `std::sync::Mutex`. You're in async code — a st
 4. Check the rate limiter before routing — if denied, return 429 with `Retry-After` header
 5. **Bonus:** Add a cleanup task that periodically removes stale buckets (IPs that haven't been seen in 5 minutes) to prevent memory leaks
 
-### Common mistakes
+> [!warning] Common Mistake: Using `std::sync::Mutex` in async code
+> — if the lock is held across an `.await`, you'll deadlock or block the Tokio runtime. Use `tokio::sync::Mutex` for async-safe locking.
 
-**Using `std::sync::Mutex` in async code** — if the lock is held across an `.await`, you'll deadlock or block the Tokio runtime. Use `tokio::sync::Mutex` for async-safe locking.
+> [!warning] Common Mistake: Memory leak from stale buckets
+> — every unique IP that hits your server gets a HashMap entry. Without cleanup, this grows forever. In production, you'd use an LRU cache or a periodic sweep:
+>
+> ```rust
+> // Periodic cleanup — spawn as a background task
+> async fn cleanup_stale_buckets(limiter: Arc<Mutex<RateLimiter>>) {
+>     let mut interval = tokio::time::interval(Duration::from_secs(60));
+>     loop {
+>         interval.tick().await;
+>         let mut limiter = limiter.lock().await;
+>         let cutoff = Instant::now() - Duration::from_secs(300);
+>         limiter.buckets.retain(|_, bucket| bucket.last_refill > cutoff);
+>     }
+> }
+> ```
 
-**Memory leak from stale buckets** — every unique IP that hits your server gets a HashMap entry. Without cleanup, this grows forever. In production, you'd use an LRU cache or a periodic sweep:
+> [!warning] Common Mistake: Lock contention
+> — every request locks the entire HashMap. For a high-traffic server, this becomes a bottleneck. Production rate limiters use sharded maps (like `dashmap` crate) or per-IP atomic counters. For Forja, the Mutex approach is fine.
+>
+> ### Test it
+>
+> ```bash
 
-```rust
-// Periodic cleanup — spawn as a background task
-async fn cleanup_stale_buckets(limiter: Arc<Mutex<RateLimiter>>) {
-    let mut interval = tokio::time::interval(Duration::from_secs(60));
-    loop {
-        interval.tick().await;
-        let mut limiter = limiter.lock().await;
-        let cutoff = Instant::now() - Duration::from_secs(300);
-        limiter.buckets.retain(|_, bucket| bucket.last_refill > cutoff);
-    }
-}
-```
-
-**Lock contention** — every request locks the entire HashMap. For a high-traffic server, this becomes a bottleneck. Production rate limiters use sharded maps (like `dashmap` crate) or per-IP atomic counters. For Forja, the Mutex approach is fine.
-
-### Test it
-
-```bash
 # Rapid-fire requests — should get 429 after the bucket empties
 for i in $(seq 1 15); do
   echo "Request $i: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:7878/api/hello)"
@@ -735,15 +742,14 @@ curl -v http://localhost:7878/api/hello  # (after exhausting tokens)
 # Should include: Retry-After: 1
 ```
 
-### Checkpoint
-
-Your server now defends itself against abusive clients. But there's one glaring vulnerability left: everything travels in plaintext. Passwords, API keys, user data — all visible to anyone on the network path. Next, we add TLS encryption so your server speaks HTTPS, the same encryption that ALB and CloudFront terminate for you.
-
-Your server now:
-- Tracks request rates per client IP using token bucket
-- Returns 429 Too Many Requests with `Retry-After` when rate exceeded
-- Cleans up stale entries to prevent memory leaks
-- Uses `tokio::sync::Mutex` for async-safe shared state
+> [!check] Checkpoint
+> Your server now defends itself against abusive clients. But there's one glaring vulnerability left: everything travels in plaintext. Passwords, API keys, user data — all visible to anyone on the network path. Next, we add TLS encryption so your server speaks HTTPS, the same encryption that ALB and CloudFront terminate for you.
+>
+> Your server now:
+> - Tracks request rates per client IP using token bucket
+> - Returns 429 Too Many Requests with `Retry-After` when rate exceeded
+> - Cleans up stale entries to prevent memory leaks
+> - Uses `tokio::sync::Mutex` for async-safe shared state
 
 ---
 
@@ -757,7 +763,9 @@ Everything your server has sent so far is plaintext. Anyone on the network path 
 
 TLS encrypts the connection between client and server. It's not optional for production. Browsers mark HTTP sites as "Not Secure." Search engines penalize them. Modern HTTP features (HTTP/2, service workers) require HTTPS.
 
-**AWS connection:** TLS termination is what ALB and CloudFront handle for you. When you attach an ACM certificate to an ALB listener, the ALB handles the TLS handshake and forwards decrypted traffic to your backend over HTTP. CloudFront does the same at the edge. Here, you're doing what ALB does — terminating TLS at your server. This is what happens when you run a bare EC2 instance without a load balancer in front.
+> [!info] AWS Connection
+> TLS termination is what ALB and CloudFront handle for you. When you attach an ACM certificate to an ALB listener, the ALB handles the TLS handshake and forwards decrypted traffic to your backend over HTTP. CloudFront does the same at the edge. Here, you're doing what ALB does — terminating TLS at your server. This is what happens when you run a bare EC2 instance without a load balancer in front.
+
 
 ### The plan
 
@@ -889,25 +897,28 @@ This is Rust generics earning their keep. One function handles both plain TCP an
 5. Make `handle_connection` generic over `AsyncRead + AsyncWrite`
 6. **Bonus:** Support both HTTP (port 7878) and HTTPS (port 7879) simultaneously — two listeners, one router
 
-### Common mistakes
+> [!warning] Common Mistake: Self-signed cert rejected by curl
+> — curl (and browsers) don't trust self-signed certificates. Use `curl -k` or `curl --insecure` to skip verification during development:
+>
+> ```bash
+> curl -k https://localhost:7878/api/hello
+> ```
+>
+> In a browser, you'll get a "Your connection is not private" warning. Click through it (Advanced → Proceed).
 
-**Self-signed cert rejected by curl** — curl (and browsers) don't trust self-signed certificates. Use `curl -k` or `curl --insecure` to skip verification during development:
+> [!warning] Common Mistake: Wrong PEM parsing
+> — rustls 0.23 uses `pki_types::pem::PemObject` trait for PEM parsing. The old `rustls_pemfile` crate is no longer needed. If you see examples using `rustls_pemfile::certs()`, that's the old API.
 
-```bash
-curl -k https://localhost:7878/api/hello
-```
+> [!warning] Common Mistake: Certificate doesn't include the hostname
+> — if your Subject Alternative Names don't include `localhost` or `127.0.0.1`, TLS clients will reject the connection even though encryption works. Always include the hostnames you'll connect with.
 
-In a browser, you'll get a "Your connection is not private" warning. Click through it (Advanced → Proceed).
+> [!warning] Common Mistake: Handshake failure with plain HTTP clients
+> — if someone sends a plain HTTP request to your HTTPS port, the TLS handshake fails (the first bytes aren't a TLS ClientHello). This is normal — log it and move on. Don't crash.
+>
+> ### Test it
+>
+> ```bash
 
-**Wrong PEM parsing** — rustls 0.23 uses `pki_types::pem::PemObject` trait for PEM parsing. The old `rustls_pemfile` crate is no longer needed. If you see examples using `rustls_pemfile::certs()`, that's the old API.
-
-**Certificate doesn't include the hostname** — if your Subject Alternative Names don't include `localhost` or `127.0.0.1`, TLS clients will reject the connection even though encryption works. Always include the hostnames you'll connect with.
-
-**Handshake failure with plain HTTP clients** — if someone sends a plain HTTP request to your HTTPS port, the TLS handshake fails (the first bytes aren't a TLS ClientHello). This is normal — log it and move on. Don't crash.
-
-### Test it
-
-```bash
 # Basic HTTPS request (skip cert verification for self-signed)
 curl -kv https://localhost:7878/api/hello
 # Look for: "SSL connection using TLSv1.3"
@@ -926,15 +937,14 @@ echo | openssl s_client -connect localhost:7878 2>/dev/null | openssl x509 -text
 # Shows certificate details — issuer, subject, SANs, validity
 ```
 
-### Checkpoint
-
-Your server now encrypts every byte on the wire — passwords, tokens, and data are safe from eavesdroppers. You've added keep-alive, chunked streaming, compression, CORS, rate limiting, and TLS. But are these features actually helping? How many requests per second can your server handle? Where's the bottleneck? Next, we measure before we optimize.
-
-Your server now:
-- Generates a self-signed TLS certificate at startup
-- Accepts HTTPS connections using rustls (pure Rust, no OpenSSL)
-- Handles TLS handshake failures gracefully
-- All existing features (keep-alive, chunked, compression, CORS, rate limiting) work over TLS
+> [!check] Checkpoint
+> Your server now encrypts every byte on the wire — passwords, tokens, and data are safe from eavesdroppers. You've added keep-alive, chunked streaming, compression, CORS, rate limiting, and TLS. But are these features actually helping? How many requests per second can your server handle? Where's the bottleneck? Next, we measure before we optimize.
+>
+> Your server now:
+> - Generates a self-signed TLS certificate at startup
+> - Accepts HTTPS connections using rustls (pure Rust, no OpenSSL)
+> - Handles TLS handshake failures gracefully
+> - All existing features (keep-alive, chunked, compression, CORS, rate limiting) work over TLS
 
 ---
 
@@ -948,7 +958,9 @@ You've added keep-alive, compression, TLS — but are they actually helping? How
 
 Without benchmarks, you're guessing. And guessing about performance is almost always wrong.
 
-**AWS connection:** This is what you do before right-sizing EC2 instances. "Should I use a t3.medium or a c6g.large?" depends entirely on your server's performance profile. Load testing tells you the requests/second per vCPU, which tells you the instance type and count you need. It's also what you do before setting ALB target group health check thresholds and Auto Scaling policies.
+> [!info] AWS Connection
+> This is what you do before right-sizing EC2 instances. "Should I use a t3.medium or a c6g.large?" depends entirely on your server's performance profile. Load testing tells you the requests/second per vCPU, which tells you the instance type and count you need. It's also what you do before setting ALB target group health check thresholds and Auto Scaling policies.
+
 
 ### Install a load testing tool
 
@@ -1069,19 +1081,17 @@ if elapsed.as_millis() > 10 {
 4. Identify your bottleneck — is it the rate limiter lock? TLS handshakes? Response building?
 5. Try one optimization based on what you find and re-benchmark to verify it helped
 
-### Common mistake: benchmarking over localhost
+> [!warning] Common Mistake: benchmarking over localhost
+> Localhost benchmarks measure your server's raw throughput without network latency. That's useful for comparing configurations, but it doesn't reflect real-world performance. When you deploy to EC2 (Stage 30), you'll benchmark over a real network and see very different numbers — especially for TLS, where the handshake round trips dominate.
 
-Localhost benchmarks measure your server's raw throughput without network latency. That's useful for comparing configurations, but it doesn't reflect real-world performance. When you deploy to EC2 (Stage 30), you'll benchmark over a real network and see very different numbers — especially for TLS, where the handshake round trips dominate.
-
-### Checkpoint
-
-You now have hard numbers — not guesses — about your server's performance. But these are localhost benchmarks: no real network latency, no real clients, no real traffic. The final stage puts your server on the internet, where you'll see how all these features perform over a real network with real TLS handshakes and real round trips.
-
-You now have:
-- Baseline performance numbers for your server
-- A benchmark matrix comparing features (keep-alive, TLS, compression)
-- Request timing instrumentation
-- Data to make informed decisions about optimization and instance sizing
+> [!check] Checkpoint
+> You now have hard numbers — not guesses — about your server's performance. But these are localhost benchmarks: no real network latency, no real clients, no real traffic. The final stage puts your server on the internet, where you'll see how all these features perform over a real network with real TLS handshakes and real round trips.
+>
+> You now have:
+> - Baseline performance numbers for your server
+> - A benchmark matrix comparing features (keep-alive, TLS, compression)
+> - Request timing instrumentation
+> - Data to make informed decisions about optimization and instance sizing
 
 ---
 
@@ -1095,7 +1105,9 @@ You've built an HTTP server from scratch. It handles persistent connections, str
 
 This is what happens before you add ALB, ECS, or Lambda. Before the managed services, before the abstractions — there's a binary on a Linux box listening on a port. That's what you're deploying.
 
-**AWS connection:** You're deploying like a bare EC2 service — this is what happens before you add ALB/ECS/Lambda. Every abstraction layer you use at work (ECS tasks, Lambda functions, Fargate containers) ultimately runs a binary on a Linux machine. Today you see the bottom of the stack.
+> [!info] AWS Connection
+> You're deploying like a bare EC2 service — this is what happens before you add ALB/ECS/Lambda. Every abstraction layer you use at work (ECS tasks, Lambda functions, Fargate containers) ultimately runs a binary on a Linux machine. Today you see the bottom of the stack.
+
 
 ### Step 1: Cross-compile for Linux
 
@@ -1282,34 +1294,36 @@ No framework. No Express. No Flask. No nginx. Just your code.
 7. Run `hey` from your Mac against the public IP — record the numbers
 8. Compare with your localhost benchmarks from Stage 29
 
-### Common mistakes
+> [!warning] Common Mistake: Binding to 127.0.0.1
+> — the #1 reason "it works locally but not from outside." Use `0.0.0.0`.
 
-**Binding to 127.0.0.1** — the #1 reason "it works locally but not from outside." Use `0.0.0.0`.
+> [!warning] Common Mistake: Security group missing the port
+> — EC2 security groups deny all inbound by default. If curl hangs (no response, no error), it's almost certainly the security group.
 
-**Security group missing the port** — EC2 security groups deny all inbound by default. If curl hangs (no response, no error), it's almost certainly the security group.
+> [!warning] Common Mistake: Forgetting to open the firewall on the instance
+> — Amazon Linux 2023 doesn't run `firewalld` by default, but if you're using a different AMI, check `sudo firewall-cmd --list-all`.
 
-**Forgetting to open the firewall on the instance** — Amazon Linux 2023 doesn't run `firewalld` by default, but if you're using a different AMI, check `sudo firewall-cmd --list-all`.
+> [!warning] Common Mistake: Binary built for wrong architecture
+> — if you cross-compiled for x86_64 but launched a Graviton (ARM) instance, the binary won't run. Check with `file target/release/forja`.
+>
+> ### Cleanup
+>
+> Don't forget to terminate your instance when you're done — t3.micro is cheap but not free:
+>
+> ```bash
+> aws ec2 terminate-instances --instance-ids <instance-id>
+> ```
 
-**Binary built for wrong architecture** — if you cross-compiled for x86_64 but launched a Graviton (ARM) instance, the binary won't run. Check with `file target/release/forja`.
+> [!check] Checkpoint
+> The metal has been forged, tempered, and tested in the real world. Your server is no longer a localhost experiment — it's serving encrypted, compressed, rate-limited responses from an AWS data center to real clients on the internet.
+>
+> Your server is deployed and serving real traffic from the internet. You have:
+> - A release binary running on EC2
+> - TLS encryption (self-signed, but real TLS 1.3)
+> - All production features working over a real network
+> - Performance numbers from real-world benchmarks
+> - A systemd service for reliability
 
-### Cleanup
-
-Don't forget to terminate your instance when you're done — t3.micro is cheap but not free:
-
-```bash
-aws ec2 terminate-instances --instance-ids <instance-id>
-```
-
-### Checkpoint
-
-The metal has been forged, tempered, and tested in the real world. Your server is no longer a localhost experiment — it's serving encrypted, compressed, rate-limited responses from an AWS data center to real clients on the internet.
-
-Your server is deployed and serving real traffic from the internet. You have:
-- A release binary running on EC2
-- TLS encryption (self-signed, but real TLS 1.3)
-- All production features working over a real network
-- Performance numbers from real-world benchmarks
-- A systemd service for reliability
 
 ---
 

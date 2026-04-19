@@ -282,59 +282,59 @@ What the API server sees: someone queried prefix `F3BBB`. That prefix matches ~8
 
 What a network eavesdropper sees: an HTTPS request to `api.pwnedpasswords.com/range/F3BBB`. Even without TLS, the prefix alone is useless — it maps to hundreds of passwords.
 
-### Checkpoint
-
-Run these tests:
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_sha1_hex() {
-        // Known SHA-1 hash of "password"
-        assert_eq!(
-            sha1_hex("password"),
-            "5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8"
-        );
-    }
-
-    #[test]
-    fn test_sha1_hex_splits_correctly() {
-        let hash = sha1_hex("password");
-        let prefix = &hash[..5];
-        let suffix = &hash[5..];
-
-        assert_eq!(prefix, "5BAA6");
-        assert_eq!(suffix.len(), 35);
-    }
-
-    // Integration test — requires network access.
-    // Run manually: cargo test -- --ignored
-    #[test]
-    #[ignore]
-    fn test_known_breached_password() {
-        let result = check_password("password").unwrap();
-        assert!(result > 0, "The password 'password' should be in HIBP");
-    }
-}
-```
-
-Breach checking tells you if a password has *already* been exposed. But what about passwords that are weak, reused, or aging — problems that haven't caused a breach *yet*? Stage 21 builds the Audit, a comprehensive security scanner for your entire vault.
+> [!check] Checkpoint
+> Run these tests:
+>
+> ```rust
+> #[cfg(test)]
+> mod tests {
+>     use super::*;
+>
+>     #[test]
+>     fn test_sha1_hex() {
+>         // Known SHA-1 hash of "password"
+>         assert_eq!(
+>             sha1_hex("password"),
+>             "5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8"
+>         );
+>     }
+>
+>     #[test]
+>     fn test_sha1_hex_splits_correctly() {
+>         let hash = sha1_hex("password");
+>         let prefix = &hash[..5];
+>         let suffix = &hash[5..];
+>
+>         assert_eq!(prefix, "5BAA6");
+>         assert_eq!(suffix.len(), 35);
+>     }
+>
+>     // Integration test — requires network access.
+>     // Run manually: cargo test -- --ignored
+>     #[test]
+>     #[ignore]
+>     fn test_known_breached_password() {
+>         let result = check_password("password").unwrap();
+>         assert!(result > 0, "The password 'password' should be in HIBP");
+>     }
+> }
+> ```
+>
+> Breach checking tells you if a password has *already* been exposed. But what about passwords that are weak, reused, or aging — problems that haven't caused a breach *yet*? Stage 21 builds the Audit, a comprehensive security scanner for your entire vault.
 
 ### What to Try
 2. Check a long random password from your generator — it should come back clean
 3. Disconnect from the internet and run a breach check — does your error handling work?
 4. Try `iv breach-check --all` with a vault containing both weak and strong passwords
 
-### Common Mistakes
+> [!warning] Common Mistake: Forgetting to uppercase the hash
+> HIBP returns uppercase hex suffixes. If your SHA-1 output is lowercase, the suffix comparison will never match. The `format!("{:02X}", byte)` format specifier produces uppercase — `{:02x}` would produce lowercase.
 
-**Forgetting to uppercase the hash.** HIBP returns uppercase hex suffixes. If your SHA-1 output is lowercase, the suffix comparison will never match. The `format!("{:02X}", byte)` format specifier produces uppercase — `{:02x}` would produce lowercase.
+> [!warning] Common Mistake: Not handling network errors gracefully
+> The user might be offline, behind a firewall, or HIBP might be down. Your CLI should print a helpful message ("Could not reach the breach database. Check your internet connection.") rather than panicking.
 
-**Not handling network errors gracefully.** The user might be offline, behind a firewall, or HIBP might be down. Your CLI should print a helpful message ("Could not reach the breach database. Check your internet connection.") rather than panicking.
-
-**Sending the full hash.** If you accidentally send all 40 characters instead of just the first 5, you've defeated the entire purpose of k-anonymity. The API would still work (it only reads the first 5), but your request URL would contain the full hash — visible in logs, proxy servers, and browser history.
+> [!warning] Common Mistake: Sending the full hash
+> If you accidentally send all 40 characters instead of just the first 5, you've defeated the entire purpose of k-anonymity. The API would still work (it only reads the first 5), but your request URL would contain the full hash — visible in logs, proxy servers, and browser history.
 
 ---
 
@@ -525,15 +525,14 @@ pub fn print_report(findings: &[Finding]) {
 }
 ```
 
-### Checkpoint
-
-After implementing the check functions, test with a vault containing:
-- A relic with password `"abc"` (should trigger Critical: short, plus missing character classes)
-- Two relics with the same password (should trigger Critical: reuse)
-- A relic with `updated_at` set to 6 months ago (should trigger Critical: age)
-- A relic with a strong, unique, recent password and TOTP (should produce zero findings)
-
-The audit reveals weaknesses, but the most critical remediation — changing the master password itself — requires re-encrypting the entire vault atomically. Stage 22 builds the Key Reforging ceremony.
+> [!check] Checkpoint
+> After implementing the check functions, test with a vault containing:
+> - A relic with password `"abc"` (should trigger Critical: short, plus missing character classes)
+> - Two relics with the same password (should trigger Critical: reuse)
+> - A relic with `updated_at` set to 6 months ago (should trigger Critical: age)
+> - A relic with a strong, unique, recent password and TOTP (should produce zero findings)
+>
+> The audit reveals weaknesses, but the most critical remediation — changing the master password itself — requires re-encrypting the entire vault atomically. Stage 22 builds the Key Reforging ceremony.
 
 ### What to Try
 
@@ -541,13 +540,14 @@ The audit reveals weaknesses, but the most critical remediation — changing the
 2. Fix all the findings and run the audit again — you should see the "All clear!" message
 3. Pipe the output to a file (`iv audit > report.txt`) — notice the color codes appear as escape sequences. We'll fix this with `--no-color` in Act 5
 
-### Common Mistakes
+> [!warning] Common Mistake: Comparing passwords directly for reuse detection
+> This works but consider: if you later add `secrecy::SecretString` (Stage 27), you won't be able to use passwords as HashMap keys directly. For now, direct comparison is fine — just know it'll need refactoring.
 
-**Comparing passwords directly for reuse detection.** This works but consider: if you later add `secrecy::SecretString` (Stage 27), you won't be able to use passwords as HashMap keys directly. For now, direct comparison is fine — just know it'll need refactoring.
+> [!warning] Common Mistake: Forgetting `PartialOrd` and `Ord` on `Severity`
+> The `sort_by` call needs these traits. Derive order matters — Rust derives `Ord` based on variant declaration order, so declare `Critical` first if you want it to sort first.
 
-**Forgetting `PartialOrd` and `Ord` on `Severity`.** The `sort_by` call needs these traits. Derive order matters — Rust derives `Ord` based on variant declaration order, so declare `Critical` first if you want it to sort first.
-
-**Using `text-xs` severity labels.** Just kidding — this isn't a frontend. But the principle applies: make the output scannable. A wall of text is worse than no audit at all.
+> [!warning] Common Mistake: Using `text-xs` severity labels
+> Just kidding — this isn't a frontend. But the principle applies: make the output scannable. A wall of text is worse than no audit at all.
 
 ---
 
@@ -652,28 +652,31 @@ You *could*, but a new salt is strictly better:
 - **Limits exposure.** If an attacker captured the old salt + ciphertext and was brute-forcing offline, a new salt invalidates all their work.
 - **Matches KMS behavior.** When KMS rotates a key, it generates entirely new cryptographic material — it doesn't derive from the old key.
 
-### Checkpoint
-
-Test these scenarios:
-1. Change password successfully — verify you can unlock with the new password
-2. Enter wrong current password — should fail at step 1
-3. Enter mismatched new passwords — should fail at step 2
-4. Kill the process during step 5 (before the rename) — verify the old vault still works
-5. Change password, then check that `iv get` still returns correct relic data
-
-The vault can be re-keyed safely. But the session management from Act 2 still lacks one critical feature — automatic expiry after inactivity. Stage 23 adds the lock timeout that seals the vault when you walk away.
-
-### Common Mistakes
-
-**Forgetting to update the session cache.** If you change the password but don't update the cached key in tmpfs, the next command will try to decrypt with the old key and fail. The user will think the password change corrupted their vault.
-
-**Not generating a fresh nonce.** The new key is different, so technically reusing the old nonce is safe (nonce reuse is only catastrophic with the *same* key). But generating a fresh nonce is cheap and eliminates any doubt.
-
-**Zeroizing the old key.** After the password change succeeds, the old derived key should be zeroized. You'll formalize this in Stage 27 with the `secrecy` crate, but for now, be aware that the old key is sitting in memory until the variable goes out of scope.
+> [!check] Checkpoint
+> Test these scenarios:
+> 1. Change password successfully — verify you can unlock with the new password
+> 2. Enter wrong current password — should fail at step 1
+> 3. Enter mismatched new passwords — should fail at step 2
+> 4. Kill the process during step 5 (before the rename) — verify the old vault still works
+> 5. Change password, then check that `iv get` still returns correct relic data
+>
+> The vault can be re-keyed safely. But the session management from Act 2 still lacks one critical feature — automatic expiry after inactivity. Stage 23 adds the lock timeout that seals the vault when you walk away.
+>
+> > [!warning] Common Mistake: Forgetting to update the session cache
+> > If you change the password but don't update the cached key in tmpfs, the next command will try to decrypt with the old key and fail. The user will think the password change corrupted their vault.
+>
+> > [!warning] Common Mistake: Not generating a fresh nonce
+> > The new key is different, so technically reusing the old nonce is safe (nonce reuse is only catastrophic with the *same* key). But generating a fresh nonce is cheap and eliminates any doubt.
+>
+> > [!warning] Common Mistake: Zeroizing the old key
+> > After the password change succeeds, the old derived key should be zeroized. You'll formalize this in Stage 27 with the `secrecy` crate, but for now, be aware that the old key is sitting in memory until the variable goes out of scope.
 
 ---
 
 ## Stage 23 — The Lock Timeout (Medium)
+
+> [!note] Building on Stage 13
+> In Stage 13, we built basic session timeout — the vault locks after N minutes of inactivity, and we added the config file where users set `lock_timeout_minutes`. But that implementation only *checked* the timeout; it didn't *enforce* it automatically. Now we harden it: automatic key zeroization when the session expires, `touch_session` calls after every vault operation to keep the timer fresh, and `is_session_valid` checks at the start of every command so stale sessions are caught before they're used.
 
 An unlocked vault on an unattended terminal is an open invitation. Every minute the session stays active without user interaction is another minute an attacker — or a curious coworker — has full access to every credential. This stage adds an inactivity timer that automatically zeroizes the cached key and re-seals the vault, limiting the blast radius of a forgotten terminal session.
 
@@ -799,25 +802,24 @@ fn ensure_unlocked(config: &Config) -> Result<DerivedKey, IronvaultError> {
 }
 ```
 
-### Checkpoint
-
-1. Set `lock_timeout_minutes = 1` in your config for testing
-2. Unlock the vault, run `iv list` — should work
-3. Wait 70 seconds, run `iv list` — should prompt for password
-4. Run `iv lock` — should lock immediately
-5. Run `iv list` — should prompt for password
-
-The vault auto-locks after inactivity. But there's one final operation the Watchtower needs — the ability to completely and securely destroy the vault when it's no longer needed. Stage 24 builds the Sentinel.
+> [!check] Checkpoint
+> 1. Set `lock_timeout_minutes = 1` in your config for testing
+> 2. Unlock the vault, run `iv list` — should work
+> 3. Wait 70 seconds, run `iv list` — should prompt for password
+> 4. Run `iv lock` — should lock immediately
+> 5. Run `iv list` — should prompt for password
+>
+> The vault auto-locks after inactivity. But there's one final operation the Watchtower needs — the ability to completely and securely destroy the vault when it's no longer needed. Stage 24 builds the Sentinel.
 
 ### What to Try — every command should prompt for the password (maximum security, minimum convenience)
 - Set the timeout to 1440 minutes (24 hours) — basically never locks (minimum security, maximum convenience)
 - Think about the tradeoff: what timeout would you use for your real password manager?
 
-### Common Mistakes
+> [!warning] Common Mistake: Using file modification time instead of an explicit timestamp
+> You might think "just check when the lock file was last modified." But file modification times can be unreliable — some filesystems have coarse granularity, and tools like `touch` or backup software can change mtime. An explicit `last_activity` field in the JSON is unambiguous.
 
-**Using file modification time instead of an explicit timestamp.** You might think "just check when the lock file was last modified." But file modification times can be unreliable — some filesystems have coarse granularity, and tools like `touch` or backup software can change mtime. An explicit `last_activity` field in the JSON is unambiguous.
-
-**Race conditions between check and use.** If the session expires between `is_session_valid()` and the actual vault operation, the cached key file might be gone. Handle this gracefully — if the key cache read fails, fall back to prompting for the password.
+> [!warning] Common Mistake: Race conditions between check and use
+> If the session expires between `is_session_valid()` and the actual vault operation, the cached key file might be gone. Handle this gracefully — if the key cache read fails, fall back to prompting for the password.
 
 ---
 
@@ -929,28 +931,28 @@ On modern SSDs, a single overwrite pass is sufficient. SSDs use wear leveling, w
 
 For Ironvault's threat model, a single random overwrite is appropriate. If you need to defend against nation-state forensics on SSDs, you need full-disk encryption (LUKS, FileVault) — not per-file deletion.
 
-### Checkpoint
-
-1. Create a test vault with a few relics
-2. Run `iv destroy` and type something wrong — should cancel
-3. Run `iv destroy` and type `DESTROY MY VAULT` — should succeed
-4. Verify the vault directory is gone
-5. Try `iv list` — should tell you no vault exists
-
-The Watchtower is complete — breach detection, auditing, key rotation, auto-lock, and secure destruction. In Act 5, you'll temper the steel with data portability, backups, secure memory handling, and the final polish that turns Ironvault into a tool you'd trust with real credentials.
+> [!check] Checkpoint
+> 1. Create a test vault with a few relics
+> 2. Run `iv destroy` and type something wrong — should cancel
+> 3. Run `iv destroy` and type `DESTROY MY VAULT` — should succeed
+> 4. Verify the vault directory is gone
+> 5. Try `iv list` — should tell you no vault exists
+>
+> The Watchtower is complete — breach detection, auditing, key rotation, auto-lock, and secure destruction. In Act 5, you'll temper the steel with data portability, backups, secure memory handling, and the final polish that turns Ironvault into a tool you'd trust with real credentials.
 
 ### What to Try
 
 - After destroying, check if any vault data remains with `hexdump` or `xxd` on the directory (it shouldn't — the directory is gone)
 - Think about what happens if the process crashes between the overwrite and the delete — the file still exists but contains random noise, not your passwords. That's the safe failure mode.
 
-### Common Mistakes
+> [!warning] Common Mistake: Using `"yes"` or `"y"` as the confirmation
+> Too easy to type accidentally. The exact phrase `DESTROY MY VAULT` requires deliberate intent. This is the same reason AWS makes you type the resource name to confirm deletion.
 
-**Using `"yes"` or `"y"` as the confirmation.** Too easy to type accidentally. The exact phrase `DESTROY MY VAULT` requires deliberate intent. This is the same reason AWS makes you type the resource name to confirm deletion.
+> [!warning] Common Mistake: Forgetting to handle the tmpfs key cache
+> If you destroy the vault but leave the derived key in `/dev/shm/ironvault-<uid>`, someone could theoretically use it to decrypt a backup. Clean up everything.
 
-**Forgetting to handle the tmpfs key cache.** If you destroy the vault but leave the derived key in `/dev/shm/ironvault-<uid>`, someone could theoretically use it to decrypt a backup. Clean up everything.
-
-**Not checking if files exist before deleting.** `fs::remove_file` on a nonexistent file returns an error. Always check with `.exists()` first, or use `if let Err(e) = fs::remove_file(path)` and ignore `NotFound` errors.
+> [!warning] Common Mistake: Not checking if files exist before deleting
+> `fs::remove_file` on a nonexistent file returns an error. Always check with `.exists()` first, or use `if let Err(e) = fs::remove_file(path)` and ignore `NotFound` errors.
 
 ---
 

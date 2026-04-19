@@ -40,7 +40,7 @@ serde_json = "1"
 serde_yaml = "0.9"
 chrono = { version = "0.4.44", features = ["serde"] }
 crossterm = "0.29"
-rand = "0.8"
+rand = "0.9"
 ```
 
 ---
@@ -49,7 +49,8 @@ rand = "0.8"
 
 A horror game where monsters are just scenery is a haunted house tour, not a survival experience. Combat is where the game's data model gets tested under pressure: player state must transition between exploring, fighting, and dead; damage must be calculated with randomness; items must have effects. More importantly, modeling combat as a state machine with Rust enums shows you how the type system prevents impossible states — a dead player can't attack, a fleeing player can't use items. The compiler enforces the horror's rules.
 
-**Difficulty: Hard (60-90 min)**
+*Difficulty: Hard (60-90 min)*
+
 
 ### Story Beat
 
@@ -59,7 +60,7 @@ A horror game where monsters are just scenery is a haunted house tour, not a sur
 
 ### Concept: Enums as State Machines
 
-Combat is a state machine. A player is either exploring, fighting, or dead. Rust's enums model this perfectly — each state can carry different data, and the compiler ensures you handle every case. This is where Rust's type system shines compared to Python/TS, where you'd use string flags and hope for the best.
+Combat is a state machine. A player is either exploring, fighting, or dead. Rust's enums model this perfectly — each state can carry different data, and the compiler ensures you handle every case. This is where Rust's type system shines compared to Python, where you'd use string flags and hope for the best.
 
 ### Instructions
 
@@ -128,7 +129,7 @@ pub enum CombatEvent {
 /// Roll damage: base_attack +/- 30% randomness, minus defense.
 /// Returns at least 1 damage (you always scratch them).
 pub fn calculate_damage(attack: i32, defense: i32) -> i32 {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     // Vary attack by +/- 30%
     let variance = (attack as f64 * 0.3) as i32;
     let roll = rng.gen_range(-variance..=variance);
@@ -172,7 +173,7 @@ pub fn combat_round(
     let msg = if monster.attack_messages.is_empty() {
         format!("The {} attacks you for {} damage!", monster.name, monster_dmg)
     } else {
-        let idx = rand::thread_rng().gen_range(0..monster.attack_messages.len());
+        let idx = rand::rng().gen_range(0..monster.attack_messages.len());
         format!("{} ({} damage)", monster.attack_messages[idx], monster_dmg)
     };
 
@@ -198,7 +199,7 @@ pub fn attempt_flee(
     monster: &Monster,
 ) -> Vec<CombatEvent> {
     let mut events = Vec::new();
-    let roll: f64 = rand::thread_rng().gen();
+    let roll: f64 = rand::rng().gen();
 
     if roll < 0.4 {
         events.push(CombatEvent::PlayerFled);
@@ -486,31 +487,21 @@ class InCombat(PlayerState):
         # ...
 ```
 
-In TypeScript, a discriminated union:
-
-```typescript
-type PlayerState =
-  | { kind: "exploring" }
-  | { kind: "inCombat"; monsterId: string; monsterHp: number }
-  | { kind: "dead" };
-```
-
-Rust's enum is closest to the TS version, but with a critical difference: **the compiler forces you to handle every variant**. If you add a new state like `Stunned`, every `match` on `PlayerState` will fail to compile until you handle it. In Python/TS, you'd get a runtime error — maybe in production, maybe at 3am.
+Rust's enum carries different data per variant, and the compiler forces you to handle every variant with a critical difference: **the compiler forces you to handle every variant**. If you add a new state like `Stunned`, every `match` on `PlayerState` will fail to compile until you handle it. In Python, you'd get a runtime error — maybe in production, maybe at 3am.
 
 This is called **exhaustive matching**, and it's one of the reasons Rust code tends to have fewer bugs at runtime.
 
 Monsters fight back, players can die and respawn. But every room interaction is still hardcoded in Rust — adding a new puzzle means recompiling. The castle needs a way to script its own behaviors.
 
-### Checkpoint: Cargo.toml additions
+> [!check] Checkpoint: Cargo.toml additions
+> ```toml
 
-```toml
 # Make sure these are in [dependencies]:
-rand = "0.8"
+rand = "0.9"
 ```
 
-### Checkpoint: src/combat.rs
-
-The complete file is everything from Steps 1-3 above combined into a single module. Add `pub mod combat;` to your `src/main.rs`.
+> [!check] Checkpoint: src/combat.rs
+> The complete file is everything from Steps 1-3 above combined into a single module. Add `pub mod combat;` to your `src/main.rs`.
 
 ---
 
@@ -518,7 +509,8 @@ The complete file is everything from Steps 1-3 above combined into a single modu
 
 Hardcoding every room interaction in Rust means recompiling for every new puzzle, trap, or secret passage. Data-driven design separates *what happens* (YAML files) from *how it happens* (the Rust engine). This is the same pattern used by Unity, Godot, and every real game engine — designers create content without touching code. You're building a mini scripting engine, and the serde skills you learned in Act 1 make it almost trivial.
 
-**Difficulty: Hard (60-90 min)**
+*Difficulty: Hard (60-90 min)*
+
 
 ### Story Beat
 
@@ -935,19 +927,17 @@ type: on_enter
 
 This is called **internally tagged** representation. It's much more natural for hand-written YAML/JSON. The `#[serde(rename = "on_enter")]` on each variant controls the exact string used.
 
-In Python, you'd parse this manually with `if data["type"] == "on_enter"`. In TypeScript, you'd use a discriminated union with a `type` field — which is actually the same pattern, but without compile-time exhaustiveness checking.
+In Python, you'd parse this manually with `if data["type"] == "on_enter"`.
 
 Rooms come alive with scripts — candles ignite, secrets reveal themselves, traps spring. But there's no record of who survived. The castle needs a wall of names: a leaderboard that remembers the fastest, the bravest, and the dead.
 
-### Checkpoint: Cargo.toml additions
+> [!check] Checkpoint: Cargo.toml additions
+> ```toml
+> serde_yaml = "0.9"
+> ```
 
-```toml
-serde_yaml = "0.9"
-```
-
-### Checkpoint: src/room_script.rs
-
-The complete file is Steps 1 + 3 combined. Add `pub mod room_script;` to `src/main.rs`.
+> [!check] Checkpoint: src/room_script.rs
+> The complete file is Steps 1 + 3 combined. Add `pub mod room_script;` to `src/main.rs`.
 
 ---
 
@@ -955,7 +945,8 @@ The complete file is Steps 1 + 3 combined. Add `pub mod room_script;` to `src/ma
 
 A game without stakes is a sandbox. The leaderboard gives players a reason to replay — to escape faster, kill more monsters, explore more rooms. Building it teaches you `chrono` for time handling (a skill every backend developer needs), sorted collections, and the full persistence cycle: load from disk, update in memory, save back. The leaderboard is also the first feature that persists across server restarts, proving your save system works end-to-end.
 
-**Difficulty: Medium (30-60 min)**
+*Difficulty: Medium (30-60 min)*
+
 
 ### Story Beat
 
@@ -965,7 +956,7 @@ A game without stakes is a sandbox. The leaderboard gives players a reason to re
 
 ### Concept: Working with Time (chrono) and Sorted Collections
 
-You'll use the `chrono` crate for timestamps and durations, and learn how Rust handles time differently from Python/TS. You'll also implement a sorted leaderboard with `Vec::sort_by` and persist it to JSON.
+You'll use the `chrono` crate for timestamps and durations, and learn how Rust handles time differently from Python. You'll also implement a sorted leaderboard with `Vec::sort_by` and persist it to JSON.
 
 ### Instructions
 
@@ -1229,15 +1220,14 @@ Rust has two time ecosystems:
 | Serde | No built-in | `#[derive(Serialize)]` |
 | Arithmetic | Limited | Full (`DateTime - DateTime = TimeDelta`) |
 
-In Python, you'd use `datetime.now()` and `timedelta` — chrono is the closest Rust equivalent. In TypeScript, you'd use `Date.now()` and do millisecond math — chrono is much more ergonomic.
+In Python, you'd use `datetime.now()` and `timedelta` — chrono is the closest Rust equivalent.
 
 The key insight: `Utc::now()` returns a `DateTime<Utc>`, and subtracting two `DateTime` values gives you a `TimeDelta`. This is type-safe — you can't accidentally subtract a date from a duration.
 
 Escape times are tracked, names are etched in stone. But the terminal is still monochrome — white text on black void. It's time to paint the darkness in shades of blood and shadow.
 
-### Checkpoint: src/leaderboard.rs
-
-The complete file is Steps 1 + 2 combined. Add `pub mod leaderboard;` to `src/main.rs`.
+> [!check] Checkpoint: src/leaderboard.rs
+> The complete file is Steps 1 + 2 combined. Add `pub mod leaderboard;` to `src/main.rs`.
 
 ---
 
@@ -1245,7 +1235,8 @@ The complete file is Steps 1 + 2 combined. Add `pub mod leaderboard;` to `src/ma
 
 Plain white text on a black terminal is functional but lifeless. ANSI colors transform the experience — red for damage, green for healing, dim grey for whispers, bold magenta for monster names. This stage is deliberately easy after the complexity of combat and scripting. It's a reward: a few lines of code that make everything you've built *feel* like a horror game. The crossterm crate's `Stylize` trait is also a beautiful example of Rust's extension trait pattern.
 
-**Difficulty: Easy (5-10 min)**
+*Difficulty: Easy (5-10 min)*
+
 
 ### Story Beat
 
@@ -1440,7 +1431,7 @@ If colors don't appear and you see raw escape codes like `[31m`, your terminal d
 
 The `Stylize` trait is a great example of Rust's **extension trait** pattern. crossterm implements `Stylize` for `&str`, `String`, and `char` — types it doesn't own. This is possible because of Rust's **orphan rule exception**: you can implement your own trait for foreign types.
 
-In Python, you'd monkey-patch `str` or use a function: `colored("text", "red")`. In TypeScript, you might extend `String.prototype` (frowned upon) or use a function: `chalk.red("text")`.
+In Python, you'd monkey-patch `str` or use a function: `colored("text", "red")`.
 
 Rust's approach is cleaner — the trait is opt-in (you must `use Stylize`), type-safe, and doesn't modify the original type. The method chain `.red().bold()` reads naturally and composes well.
 
@@ -1448,9 +1439,8 @@ Rust's approach is cleaner — the trait is opt-in (you must `use Stylize`), typ
 
 The castle bleeds color. But underneath the paint, messages are still raw text — no structure, no types, no way to tell where one ends and another begins. Time to speak in runes.
 
-### Checkpoint: src/colors.rs
-
-The complete file is Step 1 above. Add `pub mod colors;` to `src/main.rs`.
+> [!check] Checkpoint: src/colors.rs
+> The complete file is Step 1 above. Add `pub mod colors;` to `src/main.rs`.
 
 ---
 
@@ -1458,7 +1448,8 @@ The complete file is Step 1 above. Add `pub mod colors;` to `src/main.rs`.
 
 Raw text over TCP works for netcat, but it's fragile — you can't tell where one message ends and another begins, you can't distinguish message types, and you can't send binary data. Every production network service uses a framing protocol, and building one from scratch teaches you byte-level thinking: endianness, length prefixes, type tags. This is the same pattern behind HTTP/2 frames, WebSocket frames, and every binary protocol at AWS.
 
-**Difficulty: Hard (60-90 min)**
+*Difficulty: Hard (60-90 min)*
+
 
 ### Story Beat
 
@@ -1813,7 +1804,7 @@ When you write `42u32.to_be_bytes()`, Rust gives you `[0, 0, 0, 42]` — the num
 
 This matters because the client and server might be on different architectures. Big-endian is the universal convention for network protocols — it's literally called "network byte order." Every protocol you've used (TCP, HTTP, DNS) uses it.
 
-In Python, `struct.pack('>L', 42)` does the same thing — `>` means big-endian, `L` means unsigned 32-bit. In TypeScript/Node.js, `Buffer.alloc(4).writeUInt32BE(42)`.
+In Python, `struct.pack('>L', 42)` does the same thing — `>` means big-endian, `L` means unsigned 32-bit.
 
 Rust makes this explicit and safe — there's no way to accidentally use the wrong byte order because you have to call either `to_be_bytes()` (big-endian) or `to_le_bytes()` (little-endian). No silent bugs from platform differences.
 
@@ -1821,9 +1812,8 @@ Rust makes this explicit and safe — there's no way to accidentally use the wro
 
 The protocol is defined, frames flow cleanly, and netcat still works alongside the binary client. The castle speaks two languages now. There's only one thing left: open the gates to the world.
 
-### Checkpoint: src/protocol.rs
-
-The complete file is Steps 1-4 combined. Add `pub mod protocol;` to `src/main.rs`.
+> [!check] Checkpoint: src/protocol.rs
+> The complete file is Steps 1-4 combined. Add `pub mod protocol;` to `src/main.rs`.
 
 ---
 
@@ -1831,7 +1821,8 @@ The complete file is Steps 1-4 combined. Add `pub mod protocol;` to `src/main.rs
 
 Code that only runs on your laptop isn't a game — it's a prototype. Deploying to a real server where friends can connect is the difference between "I'm learning Rust" and "I built something." Release builds, cross-compilation, systemd services, and security groups are the last-mile skills that turn a project into a product. Rust's single-binary deployment story makes this dramatically simpler than Python or Node — one `scp`, one `systemctl start`, and the castle is open to the world.
 
-**Difficulty: Hard (60-90 min)**
+*Difficulty: Hard (60-90 min)*
+
 
 ### Story Beat
 
@@ -2079,32 +2070,31 @@ done
 
 ### Rust Aside: Why Rust Deploys So Well
 
-Compare deploying Shadowkeep to deploying a Python or Node.js game server:
+Compare deploying Shadowkeep to deploying a Python game server:
 
-| Concern | Rust | Python | Node.js |
-|---------|------|--------|---------|
-| Binary | Single static binary | Python runtime + venv + deps | Node runtime + node_modules |
-| Size | 3-8 MB | 50-200 MB (with deps) | 30-100 MB (with deps) |
-| Dependencies | Zero (static musl) | System Python, pip, venv | System Node, npm |
-| Startup | ~10ms | ~500ms-2s | ~200ms-1s |
-| Memory (idle) | ~2 MB | ~30 MB | ~20 MB |
-| Memory (100 players) | ~10 MB | ~100 MB | ~60 MB |
-| Crash recovery | systemd restart (instant) | Same, but slower startup | Same, but slower startup |
+| Concern | Rust | Python |
+|---------|------|--------|
+| Binary | Single static binary | Python runtime + venv + deps |
+| Size | 3-8 MB | 50-200 MB (with deps) |
+| Dependencies | Zero (static musl) | System Python, pip, venv |
+| Startup | ~10ms | ~500ms-2s |
+| Memory (idle) | ~2 MB | ~30 MB |
+| Memory (100 players) | ~10 MB | ~100 MB |
+| Crash recovery | systemd restart (instant) | Same, but slower startup |
 
 The single-binary deployment is Rust's killer feature for servers. `scp` one file, run it. No package managers, no virtual environments, no runtime version conflicts. This is why Rust is increasingly popular for CLI tools, game servers, and infrastructure software.
 
 **`cargo build --release` is your `docker build`** — except the output is a single file that runs anywhere (with musl), not a container image that needs a runtime.
 
-### Checkpoint: Deployment checklist
-
-- [ ] `cargo build --release` produces an optimized binary
-- [ ] `[profile.release]` in Cargo.toml has `lto = true`, `strip = true`
-- [ ] Binary copied to EC2 via `scp`
-- [ ] Security group allows TCP port 7878 from 0.0.0.0/0
-- [ ] systemd service file created and enabled
-- [ ] Server binds to `0.0.0.0:7878`
-- [ ] Friends can connect with `nc YOUR_IP 7878`
-- [ ] Leaderboard persists across server restarts
+> [!check] Checkpoint: Deployment checklist
+> - [ ] `cargo build --release` produces an optimized binary
+> - [ ] `[profile.release]` in Cargo.toml has `lto = true`, `strip = true`
+> - [ ] Binary copied to EC2 via `scp`
+> - [ ] Security group allows TCP port 7878 from 0.0.0.0/0
+> - [ ] systemd service file created and enabled
+> - [ ] Server binds to `0.0.0.0:7878`
+> - [ ] Friends can connect with `nc YOUR_IP 7878`
+> - [ ] Leaderboard persists across server restarts
 
 ---
 

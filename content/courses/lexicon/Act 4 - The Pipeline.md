@@ -27,13 +27,16 @@ This is the act where Lexicon becomes a *tool*. The kind of thing you'd actually
 
 **Project location:** `~/juk/lexicon/lexicon/`
 
+> [!important] Pedagogical Shift
+> Starting with Act 4, the training wheels come off. Instead of complete implementations, you'll find scaffolded code with `todo!()` placeholders. The surrounding code, types, and tests are provided — your job is to fill in the logic. This mirrors real-world development: you'll read existing code, understand the contract, and implement the missing pieces. If you get stuck, the hints after each `todo!()` will guide you.
+
 ---
 
 ## Stage 21 — The Tokenizer
 
 Raw text is messy — punctuation clings to words, accents decompose into invisible combining characters, and "don't" is one word or two depending on who you ask. The tokenizer is the front door of the entire check pipeline: every word that enters Lexicon passes through it. Getting tokenization wrong means every downstream component — bloom filter, trie, BK-tree — operates on garbage. This stage teaches you Unicode normalization (NFC), grapheme clusters, and the UAX#29 word boundary algorithm that handles the edge cases you'd never think of.
 
-*Difficulty: Medium* | *New concepts: Unicode word segmentation, NFC normalization, grapheme clusters, the `unicode-segmentation` crate*
+*Difficulty: Medium*
 
 ### The Problem
 
@@ -249,6 +252,8 @@ fn strip_possessive(word: &str) -> Option<&str> {
 
 The tokenizer above gives byte offsets within a single string. But for file checking (Stage 24), we need line and column numbers. Implement this function:
 
+> [!note] From this stage forward, you implement the core logic. The scaffolding and tests are provided.
+
 ```rust
 /// A positioned token with line and column information.
 #[derive(Debug, Clone, PartialEq)]
@@ -271,7 +276,7 @@ pub fn tokenize_document(text: &str) -> Vec<PositionedToken> {
     // 3. Convert byte_offset to a character column:
     //    column = line[..byte_offset].chars().count() + 1
     // 4. Build PositionedToken with 1-based line number
-    todo!()
+    todo!() // 👈 Your first todo!()
 }
 ```
 
@@ -357,17 +362,16 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Using `.split_whitespace()` instead of `unicode_words()`.** Whitespace splitting leaves punctuation attached to words. You'd need to hand-roll punctuation stripping, and you'd get it wrong for edge cases like `¡` and `¿` (Spanish inverted punctuation), `«»` (French/Portuguese quotation marks), and `—` (em dash).
-
-**Forgetting NFC normalization.** Your dictionary is in NFC. If the input text has decomposed characters (common when text is pasted from certain editors or web pages), lookups will fail silently — the word looks correct on screen but doesn't match the dictionary.
-
-**Using `char::to_lowercase()` instead of `str::to_lowercase()`.** The `char` method returns an iterator (because some characters lowercase to multiple characters — German `ß` uppercases to `SS`, and `SS` lowercases to `ss`). The `str` method handles this correctly and returns a `String`.
-
-**Confusing byte offsets with character offsets.** In UTF-8, `"é"` is 2 bytes but 1 character. `"¡"` is 2 bytes. If you use byte offsets as column numbers, your error positions will be wrong for any non-ASCII text. Always convert to character counts for display.
-
-With clean, normalized tokens flowing out of the tokenizer, we're ready to wire them into the check pipeline. Stage 22 orchestrates the bloom filter, trie, and BK-tree behind a single `Checker` facade.
+> [!warning] Common Mistakes
+> **Using `.split_whitespace()` instead of `unicode_words()`.** Whitespace splitting leaves punctuation attached to words. You'd need to hand-roll punctuation stripping, and you'd get it wrong for edge cases like `¡` and `¿` (Spanish inverted punctuation), `«»` (French/Portuguese quotation marks), and `—` (em dash).
+>
+> **Forgetting NFC normalization.** Your dictionary is in NFC. If the input text has decomposed characters (common when text is pasted from certain editors or web pages), lookups will fail silently — the word looks correct on screen but doesn't match the dictionary.
+>
+> **Using `char::to_lowercase()` instead of `str::to_lowercase()`.** The `char` method returns an iterator (because some characters lowercase to multiple characters — German `ß` uppercases to `SS`, and `SS` lowercases to `ss`). The `str` method handles this correctly and returns a `String`.
+>
+> **Confusing byte offsets with character offsets.** In UTF-8, `"é"` is 2 bytes but 1 character. `"¡"` is 2 bytes. If you use byte offsets as column numbers, your error positions will be wrong for any non-ASCII text. Always convert to character counts for display.
+>
+> With clean, normalized tokens flowing out of the tokenizer, we're ready to wire them into the check pipeline. Stage 22 orchestrates the bloom filter, trie, and BK-tree behind a single `Checker` facade.
 
 ### What Changed
 
@@ -379,7 +383,7 @@ You now have a tokenizer that handles real-world multilingual text. It normalize
 
 You've built three data structures that each do one thing well. Separately, they're components; together, they're a spell checker. This stage applies the facade pattern — wrapping the bloom filter, trie, and BK-tree behind a single `Checker` struct with a clean API. The orchestration logic (bloom rejects → trie confirms → BK-tree suggests) is where the architectural decisions from Acts 1-3 finally pay off as a coherent system.
 
-*Difficulty: Hard* | *New concepts: orchestrating multiple data structures, the facade pattern, `struct` composition, result aggregation*
+*Difficulty: Hard*
 
 ### The Architecture
 
@@ -468,15 +472,15 @@ impl Checker {
 
         // Size bloom filter for 1% false positive rate
         let num_words = words.len();
-        let bloom = BloomFilter::with_fp_rate(num_words, 0.01);
+        let bloom = BloomFilter::with_rate(num_words, 0.01);
 
         // Mutable reference needed for insertion — can't use the immutable
         // bloom created above. We need to build it:
-        let mut bloom = BloomFilter::with_fp_rate(num_words, 0.01);
+        let mut bloom = BloomFilter::with_rate(num_words, 0.01);
 
         for (word, freq) in words {
             trie.insert(word, *freq);
-            bloom.insert(word);
+            bloom.insert(word.as_bytes());
             bktree.insert(word.clone(), *freq);
         }
 
@@ -486,7 +490,7 @@ impl Checker {
     /// Check a single word against the dictionary.
     pub fn check_word(&self, word: &str) -> CheckResult {
         // Step 1: Bloom filter — fast rejection
-        if !self.bloom.contains(word) {
+        if !self.bloom.contains(word.as_bytes()) {
             // Bloom says "definitely not in dictionary."
             // Skip the trie, go straight to suggestions.
             return self.suggest(word);
@@ -684,15 +688,14 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Building the BK-tree but forgetting to populate it.** The BK-tree needs every dictionary word inserted. If you only populate the trie and bloom filter, suggestions will always be empty.
-
-**Double-counting bloom filter stats.** A bloom "rejection" (definitely not in dictionary) is different from a bloom "false positive" (bloom said maybe, trie said no). Track them separately — the false positive rate should be close to your target (1%).
-
-**Not normalizing before checking.** The checker receives tokens from the tokenizer (already normalized), but if someone calls `check_word()` directly with un-normalized input, it won't match the dictionary. Consider normalizing inside `check_word()` as a safety net.
-
-The engine is assembled. Feed it text, get back errors with positions and suggestions. But a library without a command-line interface is invisible to users. Stage 23 gives Lexicon a proper CLI with clap's derive API.
+> [!warning] Common Mistakes
+> **Building the BK-tree but forgetting to populate it.** The BK-tree needs every dictionary word inserted. If you only populate the trie and bloom filter, suggestions will always be empty.
+>
+> **Double-counting bloom filter stats.** A bloom "rejection" (definitely not in dictionary) is different from a bloom "false positive" (bloom said maybe, trie said no). Track them separately — the false positive rate should be close to your target (1%).
+>
+> **Not normalizing before checking.** The checker receives tokens from the tokenizer (already normalized), but if someone calls `check_word()` directly with un-normalized input, it won't match the dictionary. Consider normalizing inside `check_word()` as a safety net.
+>
+> The engine is assembled. Feed it text, get back errors with positions and suggestions. But a library without a command-line interface is invisible to users. Stage 23 gives Lexicon a proper CLI with clap's derive API.
 
 ### What Changed
 
@@ -704,7 +707,7 @@ You now have a `Checker` that orchestrates the full pipeline. Feed it text, get 
 
 A library is code for other code. A CLI is code for humans. This stage transforms Lexicon from something you `use` in tests into something you *run* from a terminal. clap's derive API lets you define your entire command structure — subcommands, flags, defaults, help text — as Rust types, and the compiler generates the parsing logic. It's the difference between a project and a product.
 
-*Difficulty: Medium* | *New concepts: clap derive API, `#[derive(Parser)]`, subcommands, `ValueEnum`, global arguments*
+*Difficulty: Medium*
 
 ### From Library to Tool
 
@@ -1050,17 +1053,16 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Forgetting `features = ["derive"]` in Cargo.toml.** Without it, `#[derive(Parser)]` doesn't exist and you get a confusing "cannot find derive macro" error.
-
-**Using `#[arg(default_value_t)]` without implementing `Display`.** clap needs `Display` to show the default in help text. If your type doesn't implement it, use `default_value = "string"` instead.
-
-**Conflicting short flags.** If two global args both use `-f`, clap panics at runtime. The `debug_assert()` test catches this at test time instead.
-
-**Not making flags `global = true`.** Without `global`, `--lang` only works before the subcommand: `lexicon --lang en check file.txt`. With `global`, it works anywhere: `lexicon check --lang en file.txt`. Users expect the latter.
-
-The CLI skeleton is wired up, but `lexicon check test.txt` doesn't actually read files yet. Stage 24 connects the CLI to the filesystem — reading files, formatting output, and returning proper exit codes for CI integration.
+> [!warning] Common Mistakes
+> **Forgetting `features = ["derive"]` in Cargo.toml.** Without it, `#[derive(Parser)]` doesn't exist and you get a confusing "cannot find derive macro" error.
+>
+> **Using `#[arg(default_value_t)]` without implementing `Display`.** clap needs `Display` to show the default in help text. If your type doesn't implement it, use `default_value = "string"` instead.
+>
+> **Conflicting short flags.** If two global args both use `-f`, clap panics at runtime. The `debug_assert()` test catches this at test time instead.
+>
+> **Not making flags `global = true`.** Without `global`, `--lang` only works before the subcommand: `lexicon --lang en check file.txt`. With `global`, it works anywhere: `lexicon check --lang en file.txt`. Users expect the latter.
+>
+> The CLI skeleton is wired up, but `lexicon check test.txt` doesn't actually read files yet. Stage 24 connects the CLI to the filesystem — reading files, formatting output, and returning proper exit codes for CI integration.
 
 ### What Changed
 
@@ -1072,7 +1074,7 @@ Lexicon is now a real CLI tool. `cargo run -- check test.txt` checks a file. `ca
 
 A CLI that parses arguments but can't read files is a facade with nothing behind it. This stage completes the end-to-end flow: read a file from disk, tokenize it, check every word, and report errors with precise line:column positions in both human-readable text and machine-readable JSON. The JSON output makes Lexicon composable — other tools, editors, and CI pipelines can consume its results programmatically.
 
-*Difficulty: Medium* | *New concepts: `std::fs`, `BufReader`, streaming vs. loading, `serde::Serialize` for JSON output*
+*Difficulty: Medium*
 
 ### Reading Files
 
@@ -1299,15 +1301,14 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Not handling non-UTF-8 files.** `std::fs::read_to_string()` returns an error for non-UTF-8 content. This is correct — Lexicon only handles text files. But give a clear error message: "Error: file.bin is not valid UTF-8 text."
-
-**Forgetting to flush stdout before `process::exit()`.** If you call `std::process::exit(1)` immediately after printing, the output buffer might not be flushed. Either call `stdout().flush()` first, or return the exit code from `main()` instead of calling `exit()`.
-
-**Hardcoding the file path in JSON output.** Use the path the user provided, not the canonicalized path. If they said `lexicon check ../README.md`, the JSON should say `"file": "../README.md"`, not `"file": "/home/user/project/README.md"`.
-
-File checking works, but every technical document is full of words that are correct in context but absent from standard dictionaries — "kubernetes", "async", "mutex". Without a custom dictionary, Lexicon would drown in false positives. Stage 25 adds the escape valve.
+> [!warning] Common Mistakes
+> **Not handling non-UTF-8 files.** `std::fs::read_to_string()` returns an error for non-UTF-8 content. This is correct — Lexicon only handles text files. But give a clear error message: "Error: file.bin is not valid UTF-8 text."
+>
+> **Forgetting to flush stdout before `process::exit()`.** If you call `std::process::exit(1)` immediately after printing, the output buffer might not be flushed. Either call `stdout().flush()` first, or return the exit code from `main()` instead of calling `exit()`.
+>
+> **Hardcoding the file path in JSON output.** Use the path the user provided, not the canonicalized path. If they said `lexicon check ../README.md`, the JSON should say `"file": "../README.md"`, not `"file": "/home/user/project/README.md"`.
+>
+> File checking works, but every technical document is full of words that are correct in context but absent from standard dictionaries — "kubernetes", "async", "mutex". Without a custom dictionary, Lexicon would drown in false positives. Stage 25 adds the escape valve.
 
 ### What Changed
 
@@ -1319,7 +1320,7 @@ File checking works, but every technical document is full of words that are corr
 
 No standard dictionary contains every word a user needs. Technical jargon, proper nouns, project-specific terms — they're all "misspellings" to a dictionary that only knows natural language. A custom dictionary is the pressure valve that makes a spell checker livable. This stage introduces layered configuration (global + per-project), file I/O for persistence, and the `HashSet` as a zero-false-positive lookup that sits in front of the probabilistic pipeline.
 
-*Difficulty: Easy* | *New concepts: `dirs` crate for home directory, file I/O, `HashSet` persistence, layered configuration*
+*Difficulty: Easy*
 
 ### Why Custom Dictionaries?
 
@@ -1482,7 +1483,7 @@ impl Checker {
         }
 
         // Then the standard pipeline: bloom -> trie -> bktree
-        if !self.bloom.contains(word) {
+        if !self.bloom.contains(word.as_bytes()) {
             return self.suggest(word);
         }
         if self.trie.contains(word) {
@@ -1576,15 +1577,14 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Not creating `~/.lexicon/` before writing.** `OpenOptions::new().create(true).append(true)` creates the *file* but not parent directories. You need `create_dir_all()` first.
-
-**Case-sensitive custom dictionary.** If the user adds "Kubernetes" but the tokenizer lowercases to "kubernetes", the lookup fails. Always normalize custom words on both insert and lookup.
-
-**Reading the custom dictionary on every word check.** Load it once when building the `Checker`, not on every call to `check_word()`. File I/O per word would destroy performance.
-
-Custom dictionaries tame false positives, but the workflow is still batch-oriented: run the checker, read the output, fix the file, run again. Stage 26 collapses that loop into a single interactive session where you navigate errors, accept suggestions, and save corrections — all without leaving the terminal.
+> [!warning] Common Mistakes
+> **Not creating `~/.lexicon/` before writing.** `OpenOptions::new().create(true).append(true)` creates the *file* but not parent directories. You need `create_dir_all()` first.
+>
+> **Case-sensitive custom dictionary.** If the user adds "Kubernetes" but the tokenizer lowercases to "kubernetes", the lookup fails. Always normalize custom words on both insert and lookup.
+>
+> **Reading the custom dictionary on every word check.** Load it once when building the `Checker`, not on every call to `check_word()`. File I/O per word would destroy performance.
+>
+> Custom dictionaries tame false positives, but the workflow is still batch-oriented: run the checker, read the output, fix the file, run again. Stage 26 collapses that loop into a single interactive session where you navigate errors, accept suggestions, and save corrections — all without leaving the terminal.
 
 ### What Changed
 
@@ -1596,7 +1596,7 @@ Lexicon now has a two-layer custom dictionary system. `lexicon dict add kubernet
 
 Batch checking is useful for CI; interactive checking is useful for humans. This stage builds a terminal UI where you navigate misspelled words, see suggestions in context, accept corrections with a keypress, and add words to your custom dictionary — all in a single session. It introduces raw mode, the alternate screen, and the event-loop pattern that underpins every terminal application from `vim` to `htop`.
 
-*Difficulty: Hard* | *New concepts: raw mode, alternate screen, crossterm event loop, terminal UI state machine*
+*Difficulty: Hard*
 
 ### What We're Building
 
@@ -1964,17 +1964,16 @@ mod tests {
 }
 ```
 
-### Common Mistakes
-
-**Not filtering `KeyEventKind::Press`.** crossterm 0.27+ reports key press, repeat, and release events. If you don't filter for `KeyEventKind::Press`, every keypress triggers your handler twice (once on press, once on release). This is the #1 crossterm gotcha.
-
-**Forgetting to restore the terminal on error.** If your render function panics, the terminal stays in raw mode. Use a `Drop` guard or the explicit cleanup pattern shown above.
-
-**Drawing past the terminal bounds.** `terminal::size()` returns `(width, height)`. If your text has more lines than `height - 6` (accounting for header and footer), you need scrolling. Start simple — just show the lines around the current error.
-
-**Byte offset vs character offset in replacement.** When replacing a word in a line, the column from `SpellingError` is in characters, but `String::replace_range` uses byte indices. Convert: `line.char_indices().nth(col - 1).map(|(i, _)| i)`.
-
-Interactive mode makes Lexicon a pleasure to use, but "it feels fast" isn't the same as "it meets spec." Stage 27 puts numbers on every component — throughput, latency, memory — and compares them against the targets from the design document.
+> [!warning] Common Mistakes
+> **Not filtering `KeyEventKind::Press`.** crossterm 0.27+ reports key press, repeat, and release events. If you don't filter for `KeyEventKind::Press`, every keypress triggers your handler twice (once on press, once on release). This is the #1 crossterm gotcha.
+>
+> **Forgetting to restore the terminal on error.** If your render function panics, the terminal stays in raw mode. Use a `Drop` guard or the explicit cleanup pattern shown above.
+>
+> **Drawing past the terminal bounds.** `terminal::size()` returns `(width, height)`. If your text has more lines than `height - 6` (accounting for header and footer), you need scrolling. Start simple — just show the lines around the current error.
+>
+> **Byte offset vs character offset in replacement.** When replacing a word in a line, the column from `SpellingError` is in characters, but `String::replace_range` uses byte indices. Convert: `line.char_indices().nth(col - 1).map(|(i, _)| i)`.
+>
+> Interactive mode makes Lexicon a pleasure to use, but "it feels fast" isn't the same as "it meets spec." Stage 27 puts numbers on every component — throughput, latency, memory — and compares them against the targets from the design document.
 
 ### What Changed
 
@@ -1986,7 +1985,7 @@ Lexicon now has a full interactive mode. You can navigate misspelled words, see 
 
 "It works" is necessary but not sufficient. A spell checker that takes 5 seconds to check a README will be abandoned after the first use. This stage establishes the discipline of measurement: you'll benchmark every component against concrete targets, profile with flamegraphs to find bottlenecks, and learn the optimization checklist that turns a slow prototype into a responsive tool. The numbers you collect here become the baseline for every future change.
 
-*Difficulty: Medium* | *New concepts: `std::time::Instant`, criterion benchmarks, flamegraph profiling, the `lexicon bench` command*
+*Difficulty: Medium*
 
 ### The Targets
 
@@ -2106,15 +2105,15 @@ use criterion::{criterion_group, criterion_main, Criterion, black_box};
 
 fn bench_bloom_lookup(c: &mut Criterion) {
     let words: Vec<(String, u32)> = load_test_dictionary();
-    let mut bloom = BloomFilter::with_fp_rate(words.len(), 0.01);
-    for (w, _) in &words { bloom.insert(w); }
+    let mut bloom = BloomFilter::with_rate(words.len(), 0.01);
+    for (w, _) in &words { bloom.insert(w.as_bytes()); }
 
     c.bench_function("bloom_contains_hit", |b| {
-        b.iter(|| bloom.contains(black_box("hello")))
+        b.iter(|| bloom.contains(black_box("hello").as_bytes()))
     });
 
     c.bench_function("bloom_contains_miss", |b| {
-        b.iter(|| bloom.contains(black_box("xyzzy")))
+        b.iter(|| bloom.contains(black_box("xyzzy").as_bytes()))
     });
 }
 
@@ -2246,20 +2245,19 @@ mod tests {
         // "zzzzz" should be rejected by bloom (not in dictionary)
         // This is hard to test without exposing stats, but we can verify
         // the bloom filter itself
-        assert!(!checker.bloom.contains("zzzzz"));
+        assert!(!checker.bloom.contains("zzzzz".as_bytes()));
     }
 }
 ```
 
-### Common Mistakes
-
-**Benchmarking debug builds.** `cargo bench` uses release mode by default, but if you're timing with `Instant` in a test, you might be in debug mode (10-50x slower). Always benchmark with `--release`.
-
-**Including dictionary load time in check throughput.** The "10k words < 1 second" target is for checking only — dictionary loading is measured separately. Build the checker once, then time the check loop.
-
-**Not using `black_box()` in criterion benchmarks.** Without `black_box()`, the compiler might optimize away the computation entirely (it can prove the result is unused). `black_box()` prevents this.
-
-With performance validated and a complete single-language tool in hand, Act 4 is done. Lexicon works — but it only speaks one language at a time. Act 5 teaches it to detect, load, and check English, Spanish, and Portuguese simultaneously.
+> [!warning] Common Mistakes
+> **Benchmarking debug builds.** `cargo bench` uses release mode by default, but if you're timing with `Instant` in a test, you might be in debug mode (10-50x slower). Always benchmark with `--release`.
+>
+> **Including dictionary load time in check throughput.** The "10k words < 1 second" target is for checking only — dictionary loading is measured separately. Build the checker once, then time the check loop.
+>
+> **Not using `black_box()` in criterion benchmarks.** Without `black_box()`, the compiler might optimize away the computation entirely (it can prove the result is unused). `black_box()` prevents this.
+>
+> With performance validated and a complete single-language tool in hand, Act 4 is done. Lexicon works — but it only speaks one language at a time. Act 5 teaches it to detect, load, and check English, Spanish, and Portuguese simultaneously.
 
 ### What Changed
 

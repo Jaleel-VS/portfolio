@@ -15,14 +15,15 @@ Source text (.rune file)
 
 **Prerequisites:** Acts 1 and 2 complete — you have a working lexer and parser that produce an AST. You understand Rust enums, pattern matching, `Box<T>`, `Vec<T>`, `HashMap`, `Result`, and the `?` operator.
 
-**What you'll learn:**
-- Tree-walking evaluation — the simplest execution model
-- Scope chains with `Vec<HashMap>` — how variables live and die
-- `Result` for control flow — using Rust's error system to implement `return` unwinding
-- `Rc<RefCell<T>>` — shared mutable state for arrays and objects
-- Closureless function calls with parameter binding
-- Built-in functions bridging Rust and Runescript
-- Runtime string interpolation
+> [!tip] What You'll Learn
+> - Tree-walking evaluation — the simplest execution model
+> - Scope chains with `Vec<HashMap>` — how variables live and die
+> - `Result` for control flow — using Rust's error system to implement `return` unwinding
+> - `Rc<RefCell<T>>` — shared mutable state for arrays and objects
+> - Closureless function calls with parameter binding
+> - Built-in functions bridging Rust and Runescript
+> - Runtime string interpolation
+
 
 **Estimated time:** 6–10 hours across all 8 stages.
 
@@ -46,6 +47,8 @@ flowchart TD
 
 ## Stage 15: The Grimoire — Medium
 
+*Difficulty: Medium*
+
 **Goal:** Implement the `Environment` struct — a scope chain that supports defining, getting, and setting variables across nested scopes.
 
 **Spec reference:** §6.2 (Environment — lexical scoping with scope chain)
@@ -65,7 +68,7 @@ The spec (§6.2) defines five operations:
 
 This is called a **scope chain** — a stack of dictionaries. Inner scopes shadow outer ones. When you enter a block `{ ... }`, a new scope is pushed. When you leave, it's popped, and all variables declared inside vanish.
 
-### Python/TS equivalent
+### Python equivalent
 
 In Python, you'd use a list of dicts:
 
@@ -450,12 +453,11 @@ mod tests {
 
 - `matches!(expr, pattern)` — a macro that returns `true` if the expression matches the pattern. Like a one-line `match` that returns a `bool`. Useful in assertions when you want to check the shape of an enum variant.
 
-### Common mistakes
-
-- **Forgetting `to_string()` when inserting into the HashMap** — `HashMap<String, Value>` needs owned `String` keys. If you pass `&str`, the compiler says: "expected `String`, found `&str`."
-- **Searching scopes front-to-back instead of back-to-front** — `self.scopes.iter()` goes from outermost to innermost. You need `.rev()` to search innermost first. Without it, inner scopes never shadow outer ones.
-- **Using `get` when you need `set`** — `get` returns `&Value` (immutable reference). You can't modify through it. `set` takes a new value and replaces the old one.
-- **Popping the global scope** — if you pop all scopes, the next `define` or `get` will panic on `.last_mut().unwrap()`. The guard in `pop_scope` prevents this.
+> [!warning] Common Mistakes
+> - **Forgetting `to_string()` when inserting into the HashMap** — `HashMap<String, Value>` needs owned `String` keys. If you pass `&str`, the compiler says: "expected `String`, found `&str`."
+> - **Searching scopes front-to-back instead of back-to-front** — `self.scopes.iter()` goes from outermost to innermost. You need `.rev()` to search innermost first. Without it, inner scopes never shadow outer ones.
+> - **Using `get` when you need `set`** — `get` returns `&Value` (immutable reference). You can't modify through it. `set` takes a new value and replaces the old one.
+> - **Popping the global scope** — if you pop all scopes, the next `define` or `get` will panic on `.last_mut().unwrap()`. The guard in `pop_scope` prevents this.
 
 ### Verify it works
 
@@ -468,18 +470,19 @@ All environment tests should pass. The `value.rs` and `ast.rs` files compile but
 
 The grimoire can store and retrieve names across nested scopes. Now we need the spell caster itself — the evaluator that walks the AST, starting with the simplest incantations: literals and arithmetic.
 
-### Checkpoint
-
-You now have three new files:
-- **`src/ast.rs`** — AST node types from spec §4
-- **`src/value.rs`** — Runtime value enum from spec §6.1 with `Display`
-- **`src/environment.rs`** — Scope chain from spec §6.2 with 9 tests
-
-The grimoire is ready. Time to start casting spells.
+> [!check] Checkpoint
+> You now have three new files:
+> - **`src/ast.rs`** — AST node types from spec §4
+> - **`src/value.rs`** — Runtime value enum from spec §6.1 with `Display`
+> - **`src/environment.rs`** — Scope chain from spec §6.2 with 9 tests
+>
+> The grimoire is ready. Time to start casting spells.
 
 ---
 
 ## Stage 16: Simple Incantations — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Create the evaluator that handles literal values and arithmetic expressions — the simplest spells that produce results from pure computation.
 
@@ -493,7 +496,7 @@ The evaluator's core loop is: receive an AST node, evaluate it, return a `Value`
 
 Once this works, you have a calculator. Not very exciting yet, but it proves the tree-walking architecture works. Every future stage adds more node types to the same recursive function.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def eval_expr(expr, env):
@@ -919,12 +922,11 @@ mod tests {
 }
 ```
 
-### Common mistakes
-
-- **Forgetting `*n` when matching `IntLit(n)`** — the pattern binds `n` as `&i64` (a reference). `Value::Int(n)` expects `i64`. The `*` dereferences it. For `Copy` types like `i64` and `bool`, this is automatic in many contexts, but explicit is clearer.
-- **Not handling division by zero** — Rust's integer division panics on divide-by-zero. You must check before dividing, or your interpreter crashes instead of producing a nice error.
-- **Matching `(BinOp::Div, Value::Int(a), Value::Int(b))` before the zero check** — match arms are checked top to bottom. Put the zero check first.
-- **Forgetting the `?` on recursive `eval_expr` calls** — without `?`, you get `Result<Value, RuneError>` instead of `Value`, and the next operation fails to type-check.
+> [!warning] Common Mistakes
+> - **Forgetting `*n` when matching `IntLit(n)`** — the pattern binds `n` as `&i64` (a reference). `Value::Int(n)` expects `i64`. The `*` dereferences it. For `Copy` types like `i64` and `bool`, this is automatic in many contexts, but explicit is clearer.
+> - **Not handling division by zero** — Rust's integer division panics on divide-by-zero. You must check before dividing, or your interpreter crashes instead of producing a nice error.
+> - **Matching `(BinOp::Div, Value::Int(a), Value::Int(b))` before the zero check** — match arms are checked top to bottom. Put the zero check first.
+> - **Forgetting the `?` on recursive `eval_expr` calls** — without `?`, you get `Result<Value, RuneError>` instead of `Value`, and the next operation fails to type-check.
 
 ### Verify it works
 
@@ -937,17 +939,18 @@ All evaluator tests should pass. You now have a working calculator that handles 
 
 The spell caster can evaluate pure expressions — but every value is ephemeral, computed and forgotten. Next, we give the grimoire its purpose: variables that persist across statements.
 
-### Checkpoint
-
-New/updated files:
-- **`src/error.rs`** — `RuneError` with message string
-- **`src/evaluator.rs`** — `Evaluator` struct with `eval_expr`, `eval_stmt`, `eval_program`, plus `eval_binary` and `type_name` helpers. 17 tests.
-
-The spell caster can evaluate pure expressions. Next: variables.
+> [!check] Checkpoint
+> New/updated files:
+> - **`src/error.rs`** — `RuneError` with message string
+> - **`src/evaluator.rs`** — `Evaluator` struct with `eval_expr`, `eval_stmt`, `eval_program`, plus `eval_binary` and `type_name` helpers. 17 tests.
+>
+> The spell caster can evaluate pure expressions. Next: variables.
 
 ---
 
 ## Stage 17: Variables and Assignment — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Evaluate `Let` statements, `Ident` lookups, and `Assign` expressions. Variables come alive — the grimoire records and recalls names.
 
@@ -964,7 +967,7 @@ Three operations:
 2. **`Ident(name)`** — look up the name in the environment, error if undefined
 3. **`Assign(target, expr)`** — evaluate the expression, update the target in the environment
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def eval_stmt(stmt, env):
@@ -1180,12 +1183,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Forgetting `.clone()` on `env.get()` result** — `get` returns `&Value`. If you try to return it directly, the compiler says: "cannot return reference to temporary value." You need to clone it into an owned `Value`.
-- **Using `define` instead of `set` for assignment** — `define` always creates in the current scope. If `hp` is defined in an outer scope and you `define` it in an inner scope, you've created a *new* variable that shadows the outer one instead of updating it. `set` searches outward and updates the first match.
-- **Forgetting that assignment returns a value** — `hp = 80` evaluates to `80`. This matters for chained assignments and expression statements. If you return `Value::Nil` from assignment, things like `let x = y = 5` won't work correctly.
-- **Not handling the `Assign` target correctly** — the target is `Box<Expr>`, not just a string. You need to match on `target.as_ref()` to check if it's an `Ident`. Later stages add `Index` and `FieldAccess` targets.
+> [!warning] Common Mistakes
+> - **Forgetting `.clone()` on `env.get()` result** — `get` returns `&Value`. If you try to return it directly, the compiler says: "cannot return reference to temporary value." You need to clone it into an owned `Value`.
+> - **Using `define` instead of `set` for assignment** — `define` always creates in the current scope. If `hp` is defined in an outer scope and you `define` it in an inner scope, you've created a *new* variable that shadows the outer one instead of updating it. `set` searches outward and updates the first match.
+> - **Forgetting that assignment returns a value** — `hp = 80` evaluates to `80`. This matters for chained assignments and expression statements. If you return `Value::Nil` from assignment, things like `let x = y = 5` won't work correctly.
+> - **Not handling the `Assign` target correctly** — the target is `Box<Expr>`, not just a string. You need to match on `target.as_ref()` to check if it's an `Ident`. Later stages add `Index` and `FieldAccess` targets.
 
 ### Verify it works
 
@@ -1197,18 +1199,19 @@ All tests should pass — the 17 from Stage 16 plus 6 new ones.
 
 Variables live in the grimoire and expressions can read them. But the spell caster still walks a straight path — it can't choose between branches or repeat an action. Next, we add truthiness, logical operators, and control flow.
 
-### Checkpoint
-
-Updated `src/evaluator.rs`:
-- `eval_expr` now handles `Ident` and `Assign`
-- `eval_stmt` now handles `Let`
-- 6 new tests covering variable declaration, lookup, assignment, and undefined variable errors
-
-Variables work. The grimoire records names and recalls them. Next: making decisions.
+> [!check] Checkpoint
+> Updated `src/evaluator.rs`:
+> - `eval_expr` now handles `Ident` and `Assign`
+> - `eval_stmt` now handles `Let`
+> - 6 new tests covering variable declaration, lookup, assignment, and undefined variable errors
+>
+> Variables work. The grimoire records names and recalls them. Next: making decisions.
 
 ---
 
 ## Stage 18: Truth and Consequence — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Implement truthiness rules, logical operators (`&&`, `||`), and control flow (`if`/`else`, `while`). The spell caster can now make decisions and repeat actions.
 
@@ -1235,9 +1238,9 @@ The spec (§6.4) defines clear rules:
 | `Function` | true |
 | `Object` | true |
 
-This is similar to Python's truthiness (where `0`, `""`, `[]`, `None` are falsy) and different from JavaScript (where `""` is falsy but `[]` is truthy).
+This is similar to Python's truthiness (where `0`, `""`, `[]`, `None` are falsy).
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def is_truthy(val):
@@ -1609,12 +1612,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Not short-circuiting `&&` and `||`** — if you evaluate both sides before checking, `false && undefined_var` will error instead of returning `false`. The short-circuit tests catch this.
-- **Forgetting to push/pop scope in blocks** — without scope management, `let` inside an `if` body leaks into the outer scope. The `eval_block_scope_isolation` test catches this.
-- **Infinite loops in `while`** — if your condition never becomes falsy, the evaluator hangs. Make sure your test conditions are bounded (like `count < 5`).
-- **Returning the wrong value from `&&`/`||`** — `1 && 42` should return `42`, not `true`. Logical operators return the *operand* that determined the result, not a boolean. This matches Python's behavior.
+> [!warning] Common Mistakes
+> - **Not short-circuiting `&&` and `||`** — if you evaluate both sides before checking, `false && undefined_var` will error instead of returning `false`. The short-circuit tests catch this.
+> - **Forgetting to push/pop scope in blocks** — without scope management, `let` inside an `if` body leaks into the outer scope. The `eval_block_scope_isolation` test catches this.
+> - **Infinite loops in `while`** — if your condition never becomes falsy, the evaluator hangs. Make sure your test conditions are bounded (like `count < 5`).
+> - **Returning the wrong value from `&&`/`||`** — `1 && 42` should return `42`, not `true`. Logical operators return the *operand* that determined the result, not a boolean. This matches Python's behavior.
 
 ### Verify it works
 
@@ -1626,20 +1628,21 @@ All tests should pass — 17 from Stage 16, 6 from Stage 17, plus 10 new ones = 
 
 The spell caster can branch and loop — the dungeon's traps can trigger conditionally, poison can tick over multiple rounds. But all logic lives in one flat scope. Next comes the hardest stage: summoning functions, with parameter binding and the return-unwinding ritual.
 
-### Checkpoint
-
-Updated `src/evaluator.rs`:
-- Added `is_truthy` function implementing §6.4
-- Updated `Binary` arm for short-circuit `&&`/`||`
-- Added `eval_block` helper with scope push/pop
-- `eval_stmt` now handles `Block`, `If`, `While`
-- 10 new tests covering truthiness, if/else, while, scope isolation, and short-circuit logic
-
-The spell caster can now make decisions and repeat actions. The dungeon is getting interesting. Next: summoning functions.
+> [!check] Checkpoint
+> Updated `src/evaluator.rs`:
+> - Added `is_truthy` function implementing §6.4
+> - Updated `Binary` arm for short-circuit `&&`/`||`
+> - Added `eval_block` helper with scope push/pop
+> - `eval_stmt` now handles `Block`, `If`, `While`
+> - 10 new tests covering truthiness, if/else, while, scope isolation, and short-circuit logic
+>
+> The spell caster can now make decisions and repeat actions. The dungeon is getting interesting. Next: summoning functions.
 
 ---
 
 ## Stage 19: The Summoning — Hard
+
+*Difficulty: Hard*
 
 **Goal:** Implement function declarations, function calls with parameter binding, and `return` with stack unwinding. This is the hardest stage — it introduces a new control flow mechanism that cuts across the entire evaluator.
 
@@ -1651,7 +1654,7 @@ The spell caster can now make decisions and repeat actions. The dungeon is getti
 
 Functions are the backbone of any real program. The spec examples (§10.3, §10.5, §10.6) use functions extensively — `heal(amount)`, `boss_attack(hunter)`, `on_enter(hunter)`. Without functions, you can't write reusable code.
 
-The tricky part is `return`. When a function executes `return 42`, it needs to immediately stop executing the function body — even if the `return` is nested inside an `if` inside a `while`. This is called **stack unwinding**, and it's the same problem that exceptions solve in Python/TS.
+The tricky part is `return`. When a function executes `return 42`, it needs to immediately stop executing the function body — even if the `return` is nested inside an `if` inside a `while`. This is called **stack unwinding**, and it's the same problem that exceptions solve in Python.
 
 Our solution: use Rust's `Result` type to propagate returns. We'll create a `ControlFlow` enum:
 
@@ -1681,7 +1684,7 @@ flowchart TD
     style H fill:#4a3,stroke:#2a1
 ```
 
-### Python/TS equivalent
+### Python equivalent
 
 In Python, `return` is a language-level statement that the interpreter handles natively. In our Rust interpreter, we have to implement it ourselves:
 
@@ -2143,13 +2146,12 @@ Now add function-specific tests:
     }
 ```
 
-### Common mistakes
-
-- **Forgetting to catch `ControlFlow::Return` in the `Call` handler** — if you let `Return` propagate past the call, it escapes the function and either hits `eval_program` (which errors) or propagates to the caller's caller (wrong behavior).
-- **Not popping the scope on error** — if the function body errors, you must still pop the scope before propagating the error. Otherwise the scope stack grows forever. The `Err(ControlFlow::Error(e))` arm handles this.
-- **Evaluating arguments in the function's scope** — arguments must be evaluated in the *caller's* scope, before pushing the function scope. `heal(hp - 10)` should use the caller's `hp`, not the function's.
-- **Confusing `eval_block` and `eval_block_no_scope`** — `eval_block` pushes/pops a scope (for if/while/block bodies). `eval_block_no_scope` doesn't (for function bodies, where the Call handler manages the scope). Using the wrong one either double-pushes or doesn't push at all.
-- **Forgetting to update existing tests for `ControlFlow`** — the return type change from `Result<Value, RuneError>` to `Result<Value, ControlFlow>` breaks all existing `eval_stmt` calls. Use the `eval_stmt_ok` helper.
+> [!warning] Common Mistakes
+> - **Forgetting to catch `ControlFlow::Return` in the `Call` handler** — if you let `Return` propagate past the call, it escapes the function and either hits `eval_program` (which errors) or propagates to the caller's caller (wrong behavior).
+> - **Not popping the scope on error** — if the function body errors, you must still pop the scope before propagating the error. Otherwise the scope stack grows forever. The `Err(ControlFlow::Error(e))` arm handles this.
+> - **Evaluating arguments in the function's scope** — arguments must be evaluated in the *caller's* scope, before pushing the function scope. `heal(hp - 10)` should use the caller's `hp`, not the function's.
+> - **Confusing `eval_block` and `eval_block_no_scope`** — `eval_block` pushes/pops a scope (for if/while/block bodies). `eval_block_no_scope` doesn't (for function bodies, where the Call handler manages the scope). Using the wrong one either double-pushes or doesn't push at all.
+> - **Forgetting to update existing tests for `ControlFlow`** — the return type change from `Result<Value, RuneError>` to `Result<Value, ControlFlow>` breaks all existing `eval_stmt` calls. Use the `eval_stmt_ok` helper.
 
 ### Verify it works
 
@@ -2161,17 +2163,18 @@ All tests should pass. This is the most complex stage — if the return unwindin
 
 Functions are summoned and return values unwind correctly through any depth of nesting. But user-defined functions can only call other user-defined functions — there's no `print`, no `len`, no way to interact with the world outside the script. Next, we forge the cantrips: built-in functions that bridge Rust and Runescript.
 
-### Checkpoint
-
-Updated files:
-- **`src/error.rs`** — added `ControlFlow` enum with `Return(Value)` and `Error(RuneError)`, plus `From<RuneError>` impl
-- **`src/evaluator.rs`** — `eval_stmt` and `eval_block` now return `Result<Value, ControlFlow>`. Added `FnDecl`, `Return`, `Call` handling. Added `eval_expr_cf`, `eval_block_no_scope`. 5 new function tests.
-
-Functions work. The summoning is complete. Next: the cantrips — built-in functions that bridge Rust and Runescript.
+> [!check] Checkpoint
+> Updated files:
+> - **`src/error.rs`** — added `ControlFlow` enum with `Return(Value)` and `Error(RuneError)`, plus `From<RuneError>` impl
+> - **`src/evaluator.rs`** — `eval_stmt` and `eval_block` now return `Result<Value, ControlFlow>`. Added `FnDecl`, `Return`, `Call` handling. Added `eval_expr_cf`, `eval_block_no_scope`. 5 new function tests.
+>
+> Functions work. The summoning is complete. Next: the cantrips — built-in functions that bridge Rust and Runescript.
 
 ---
 
 ## Stage 20: Cantrips — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Implement built-in functions from spec §7: `print`, `len`, `push`, `random`, `type_of`, `to_str`, `to_int`, and game stubs (`spawn_enemy`, `show_text`, `damage`, `heal`, `play_sound`).
 
@@ -2185,7 +2188,7 @@ User-defined functions are powerful, but some operations can't be written in Run
 
 The spec (§7) defines 13 built-in functions. In standalone mode, the game functions (`spawn_enemy`, `show_text`, etc.) print a description of what *would* happen (§7.1).
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 BUILTINS = {
@@ -2633,12 +2636,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Forgetting to call `register_builtins()`** — builtins aren't available until you register them. In tests, call it after creating the evaluator. In `main.rs`, call it before evaluating any program.
-- **Trying to mutate arrays in place with `push`** — since values are cloned when read from the environment, `push(arr, 5)` returns a new array but doesn't update `arr` in the environment. The user must write `arr = push(arr, 5)`. This is a limitation of our clone-based value system.
-- **Using `args[0]` after moving `args`** — if you destructure `args` with `into_iter()`, you can't index it anymore. Use `.pop()` (which takes from the end) or collect into a new structure.
-- **Not handling `BuiltinFn` in `type_name` and `is_truthy`** — if you add a new `Value` variant, you must update every `match` on `Value`. The compiler will tell you about missing arms.
+> [!warning] Common Mistakes
+> - **Forgetting to call `register_builtins()`** — builtins aren't available until you register them. In tests, call it after creating the evaluator. In `main.rs`, call it before evaluating any program.
+> - **Trying to mutate arrays in place with `push`** — since values are cloned when read from the environment, `push(arr, 5)` returns a new array but doesn't update `arr` in the environment. The user must write `arr = push(arr, 5)`. This is a limitation of our clone-based value system.
+> - **Using `args[0]` after moving `args`** — if you destructure `args` with `into_iter()`, you can't index it anymore. Use `.pop()` (which takes from the end) or collect into a new structure.
+> - **Not handling `BuiltinFn` in `type_name` and `is_truthy`** — if you add a new `Value` variant, you must update every `match` on `Value`. The compiler will tell you about missing arms.
 
 ### Verify it works
 
@@ -2650,18 +2652,19 @@ All tests should pass. The builtin tests verify that cantrips are callable from 
 
 The cantrips are forged — `print` speaks, `len` measures, `random` rolls the dice. But the language still lacks a fundamental data structure: arrays. Next, we add `[1, 2, 3]`, index access, and the `for-in` loop that iterates over them.
 
-### Checkpoint
-
-New/updated files:
-- **`src/value.rs`** — added `BuiltinFn` variant
-- **`src/builtins.rs`** — 12 built-in function implementations
-- **`src/evaluator.rs`** — `register_builtins()` method, `BuiltinFn` handling in `Call`, updated `type_name`/`is_truthy`. 5 new tests.
-
-The cantrips are ready. `print("Hello, hunter")` now works. Next: arrays and indexing.
+> [!check] Checkpoint
+> New/updated files:
+> - **`src/value.rs`** — added `BuiltinFn` variant
+> - **`src/builtins.rs`** — 12 built-in function implementations
+> - **`src/evaluator.rs`** — `register_builtins()` method, `BuiltinFn` handling in `Call`, updated `type_name`/`is_truthy`. 5 new tests.
+>
+> The cantrips are ready. `print("Hello, hunter")` now works. Next: arrays and indexing.
 
 ---
 
 ## Stage 21: Arrays and the Index — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Evaluate array literals, index expressions (`arr[0]`), index assignment (`arr[0] = 10`), and `for-in` loops. Add bounds checking with clear error messages.
 
@@ -2679,7 +2682,7 @@ Three operations:
 3. **Index write** `arr[0] = 10` — same but update the element
 4. **For-in loop** `for item in list { ... }` — iterate over an array
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def eval_expr(expr, env):
@@ -2969,12 +2972,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Negative index handling** — `*i as usize` on a negative `i64` wraps to a huge number, which fails the bounds check. This is correct behavior, but you could add a nicer error message: "Negative index -1 is not allowed."
-- **Forgetting to clone the array for index assignment** — `env.get` returns `&Value`. You can't modify through a shared reference. Clone the array, modify the clone, put it back.
-- **Not popping scope before `?` in for-in** — if the body returns or errors, you must pop the scope first. Otherwise the scope stack is corrupted for subsequent iterations or the caller.
-- **Using `eval_block` instead of `eval_block_no_scope` in for-in** — `eval_block` pushes its own scope, giving you a double scope. Use `eval_block_no_scope` when you manage the scope yourself.
+> [!warning] Common Mistakes
+> - **Negative index handling** — `*i as usize` on a negative `i64` wraps to a huge number, which fails the bounds check. This is correct behavior, but you could add a nicer error message: "Negative index -1 is not allowed."
+> - **Forgetting to clone the array for index assignment** — `env.get` returns `&Value`. You can't modify through a shared reference. Clone the array, modify the clone, put it back.
+> - **Not popping scope before `?` in for-in** — if the body returns or errors, you must pop the scope first. Otherwise the scope stack is corrupted for subsequent iterations or the caller.
+> - **Using `eval_block` instead of `eval_block_no_scope` in for-in** — `eval_block` pushes its own scope, giving you a double scope. Use `eval_block_no_scope` when you manage the scope yourself.
 
 ### Verify it works
 
@@ -2986,19 +2988,22 @@ All tests should pass.
 
 Arrays hold collections, indices reach into them, and `for-in` walks them one by one. One final piece of the evaluator remains: string interpolation and objects, so `"HP: {hp}"` resolves to `"HP: 85"` and `hunter.hp` reaches into the hunter's soul.
 
-### Checkpoint
-
-Updated `src/evaluator.rs`:
-- `eval_expr` handles `Array`, `Index`
-- `Assign` handles `Index` targets
-- `eval_stmt` handles `For`
-- 6 new tests covering array literals, indexing, bounds checking, index assignment, for-in loops, and scope isolation
-
-Arrays and loops work. The dungeon can now have lists of enemies. One stage left: string interpolation and objects.
+> [!check] Checkpoint
+> Updated `src/evaluator.rs`:
+> - `eval_expr` handles `Array`, `Index`
+> - `Assign` handles `Index` targets
+> - `eval_stmt` handles `For`
+> - 6 new tests covering array literals, indexing, bounds checking, index assignment, for-in loops, and scope isolation
+>
+> Arrays and loops work. The dungeon can now have lists of enemies. One stage left: string interpolation and objects.
 
 ---
 
 ## Stage 22: The Interpolation Ritual — Medium
+
+*Difficulty: Medium*
+
+> [!note] This stage covers three related features: string interpolation, objects, and field access. They're grouped together because objects need field access to be useful, and string interpolation needs both to be testable. Take each section one at a time.
 
 **Goal:** Implement runtime string interpolation from spec §6.5 — split on `{`/`}`, evaluate identifiers, concatenate. Add object literals and field access (`hunter.hp`).
 
@@ -3012,7 +3017,7 @@ String interpolation is what makes Runescript's output readable. Every example i
 
 Objects complete the type system. The spec (§9.2) pre-injects a `hunter` object into the global scope for testing, and the game scripts (§10.5, §10.6) pass `hunter` to functions and access `hunter.hp`.
 
-### Python/TS equivalent
+### Python equivalent
 
 Python has f-strings built into the language. We're implementing the same thing at the interpreter level:
 
@@ -3307,12 +3312,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Not handling unterminated `{`** — `"Hello {name"` (missing `}`) should produce a clear error, not panic or produce garbage.
-- **Trying to interpolate expressions** — our interpolator only handles simple variable names (`{hp}`), not expressions (`{hp + 10}` or `{hunter.hp}`). This is by design (§6.5 says "evaluate identifiers"). For field access in strings, the user assigns to a local variable first.
-- **Forgetting to clone the object map for field assignment** — same pattern as index assignment. `env.get` returns a reference; you must clone, modify, and put back.
-- **Not updating the `Assign` match exhaustively** — after adding `FieldAccess`, make sure the match arms are in order: `Ident`, `Index`, `FieldAccess`, then `_ => Err(...)`.
+> [!warning] Common Mistakes
+> - **Not handling unterminated `{`** — `"Hello {name"` (missing `}`) should produce a clear error, not panic or produce garbage.
+> - **Trying to interpolate expressions** — our interpolator only handles simple variable names (`{hp}`), not expressions (`{hp + 10}` or `{hunter.hp}`). This is by design (§6.5 says "evaluate identifiers"). For field access in strings, the user assigns to a local variable first.
+> - **Forgetting to clone the object map for field assignment** — same pattern as index assignment. `env.get` returns a reference; you must clone, modify, and put back.
+> - **Not updating the `Assign` match exhaustively** — after adding `FieldAccess`, make sure the match arms are in order: `Ident`, `Index`, `FieldAccess`, then `_ => Err(...)`.
 
 ### Verify it works
 
@@ -3322,17 +3326,16 @@ cargo test
 
 All tests should pass. You now have a complete evaluator that handles every node type in the Runescript AST.
 
-### Checkpoint
-
-Updated `src/evaluator.rs`:
-- `StringLit` now calls `interpolate_string` when `{` is present
-- Added `FieldAccess` to `eval_expr`
-- Added `FieldAccess` target to `Assign`
-- Added `interpolate_string` method
-- Added `register_hunter` method
-- 8 new tests covering interpolation, field access, field assignment, and edge cases
-
-The interpolation ritual is complete. Every rune type can now be evaluated.
+> [!check] Checkpoint
+> Updated `src/evaluator.rs`:
+> - `StringLit` now calls `interpolate_string` when `{` is present
+> - Added `FieldAccess` to `eval_expr`
+> - Added `FieldAccess` target to `Assign`
+> - Added `interpolate_string` method
+> - Added `register_hunter` method
+> - 8 new tests covering interpolation, field access, field assignment, and edge cases
+>
+> The interpolation ritual is complete. Every rune type can now be evaluated.
 
 ---
 

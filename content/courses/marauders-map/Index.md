@@ -2,7 +2,7 @@
 
 > *"I solemnly swear that I am up to no good."*
 
-Build a real-time terminal Hogwarts explorer from scratch in Rust. Learn pathfinding algorithms (BFS, Dijkstra, A*) through NPC AI. No Rust experience required — just Python/TypeScript and curiosity.
+Build a real-time terminal Hogwarts explorer from scratch in Rust. Learn pathfinding algorithms (BFS, Dijkstra, A*) through NPC AI. No Rust experience required — just Python and curiosity.
 
 **Project:** `~/juk/marauders-map/`
 **Starter map:** `maps/ground_floor.json`

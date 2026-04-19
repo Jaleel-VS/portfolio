@@ -10,6 +10,84 @@ In this act, you'll bring Hogwarts to life by implementing three fundamental pat
 
 These aren't toy examples. Pathfinding algorithms power Google Maps, network routing, robot navigation, game AI, and social network analysis. By the end of this act, you'll understand them deeply — not just how they work, but *why* each one exists and when to reach for which.
 
+> [!info] Bridge Code: The `Map` Abstraction
+> Acts 1-2 gave us `Floor` (a grid of tiles with rooms) and `HogwartsMap` (a collection of floors). The algorithms in this act need a thin abstraction layer on top — a `Map` type that provides `neighbors()` lookups and a `Position` type that includes floor information. These didn't exist before because we didn't need graph operations until now.
+>
+> Add these to your project before starting Stage 15:
+>
+> ```rust
+> // src/position.rs
+> #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+> pub struct Position {
+>     pub x: usize,
+>     pub y: usize,
+>     pub floor: u8,
+> }
+>
+> impl Position {
+>     pub fn new(x: usize, y: usize, floor: u8) -> Self {
+>         Self { x, y, floor }
+>     }
+> }
+> ```
+>
+> ```rust
+> // src/map.rs — add to your existing HogwartsMap
+> pub type Map = HogwartsMap;
+>
+> impl Map {
+>     /// Returns walkable neighbors of the given position.
+>     pub fn neighbors(&self, pos: Position) -> Vec<Position> {
+>         let floor = &self.floors[pos.floor as usize];
+>         let directions: [(i32, i32); 4] = [(0, -1), (0, 1), (-1, 0), (1, 0)];
+>         directions.iter().filter_map(|&(dx, dy)| {
+>             let nx = pos.x as i32 + dx;
+>             let ny = pos.y as i32 + dy;
+>             if nx >= 0 && ny >= 0 {
+>                 let (ux, uy) = (nx as usize, ny as usize);
+>                 if floor.is_walkable(ux, uy) {
+>                     return Some(Position::new(ux, uy, pos.floor));
+>                 }
+>             }
+>             None
+>         }).collect()
+>     }
+> }
+> ```
+>
+> The `Floor::new_test` helper used in tests creates a floor filled with a given tile type:
+>
+> ```rust
+> impl Floor {
+>     pub fn new_test(width: usize, height: usize, fill: Tile) -> Self {
+>         Floor {
+>             id: 0,
+>             name: "Test".to_string(),
+>             grid: vec![vec![fill; width]; height],
+>             rooms: Vec::new(),
+>             stairs: Vec::new(),
+>         }
+>     }
+> }
+> ```
+>
+> The `Viewport::world_to_screen()` method used in debug visualizations converts a world `Position` to screen coordinates relative to the camera:
+>
+> ```rust
+> impl Viewport {
+>     pub fn world_to_screen(&self, pos: Position) -> Option<(usize, usize)> {
+>         if pos.x >= self.x && pos.x < self.x + self.width
+>             && pos.y >= self.y && pos.y < self.y + self.height {
+>             Some((pos.x - self.x, pos.y - self.y))
+>         } else {
+>             None
+>         }
+>     }
+> }
+> ```
+>
+> With these in place, the algorithms in this act have a concrete foundation to build on.
+
 **What you have from Acts 1-2:**
 - Full map rendering with ratatui, viewport, multiple floors
 - Player movement with WASD/arrows, collision detection
@@ -31,7 +109,7 @@ Let's begin.
 
 ## Stage 15: The Graph
 
-**Difficulty:** Medium | **New concepts:** Graph abstraction, neighbor functions, implicit graphs
+*Difficulty: Medium*
 
 Before any NPC can patrol a corridor or chase you through the castle, they need to answer a fundamental question: "which tiles can I reach from here?" This stage builds the abstraction layer that every pathfinding algorithm in the game depends on. Without it, BFS, Dijkstra, and A* have nothing to search. The graph is the invisible skeleton beneath every intelligent movement in Hogwarts.
 
@@ -48,7 +126,7 @@ A **graph** is a collection of **nodes** (vertices) connected by **edges**. Grap
 
 Implicit graphs are memory-efficient and natural for grids. Instead of storing millions of edges for a 100x100 map, you write one `neighbors()` function.
 
-> **Python/TS comparison:** In Python, you'd often represent a graph as `dict[Node, list[Node]]` (explicit). In Rust, we'll use a function `fn neighbors(pos: Position) -> Vec<Position>` (implicit). Both work — Rust's approach is more cache-friendly for grid-based graphs because you avoid heap-allocated adjacency lists entirely.
+> **Python comparison:** In Python, you'd often represent a graph as `dict[Node, list[Node]]` (explicit). In Rust, we'll use a function `fn neighbors(pos: Position) -> Vec<Position>` (implicit). Both work — Rust's approach is more cache-friendly for grid-based graphs because you avoid heap-allocated adjacency lists entirely.
 
 ### The Position Type
 
@@ -96,7 +174,7 @@ impl Floor {
 }
 ```
 
-The `matches!` macro is Rust's pattern-matching Swiss Army knife. In Python you'd write a chain of `isinstance()` checks or `if tile in (...)`. In TypeScript, a type guard or switch statement. Rust's `matches!` is concise and exhaustive — the compiler warns you if you add a new `Tile` variant and forget to handle it.
+The `matches!` macro is Rust's pattern-matching Swiss Army knife. In Python you'd write a chain of `isinstance()` checks or `if tile in (...)`. Rust's `matches!` is concise and exhaustive — the compiler warns you if you add a new `Tile` variant and forget to handle it.
 
 Notice that locked doors and undiscovered secret passages are *not* walkable. This is intentional — NPCs shouldn't walk through locked doors (though ghosts will ignore walls entirely, which we'll handle separately).
 
@@ -183,64 +261,63 @@ Implicit graphs appear everywhere:
 - **Chess engines** — board states are nodes, legal moves are edges
 - **Network routing** — routers are nodes, links are edges (though often stored explicitly)
 
-### Checkpoint: Stage 15
-
-The graph abstraction is ready — `neighbors()` turns any position into its reachable neighbors, and the implicit graph costs zero extra memory. Now we have something to *search*. In Stage 16, Mrs. Norris will use Breadth-First Search to scout every corridor within her detection radius, expanding outward like ripples in a pond.
-
-Your project should now have:
-
-```
-src/
-├── map.rs          // Floor, Map, Tile (from Act 1)
-├── position.rs     // Position type (new)
-├── graph.rs        // neighbors(), is_walkable() (new)
-├── player.rs       // Player movement (from Act 2)
-├── render.rs       // Rendering (from Act 1-2)
-└── main.rs         // Game loop (from Act 1-2)
-```
-
-Test your graph abstraction:
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_neighbors_open_corridor() {
-        // Create a 3x3 floor: all Floor tiles
-        let floor = Floor::new_test(3, 3, Tile::Floor);
-        let pos = Position::new(1, 1, 0);
-        let neighbors = floor.neighbors(pos);
-        assert_eq!(neighbors.len(), 4); // center has 4 neighbors
-    }
-
-    #[test]
-    fn test_neighbors_corner() {
-        let floor = Floor::new_test(3, 3, Tile::Floor);
-        let pos = Position::new(0, 0, 0);
-        let neighbors = floor.neighbors(pos);
-        assert_eq!(neighbors.len(), 2); // corner has 2 neighbors
-    }
-
-    #[test]
-    fn test_neighbors_wall_blocks() {
-        let mut floor = Floor::new_test(3, 3, Tile::Floor);
-        floor.grid[0][1] = Tile::Wall; // block the tile above center
-        let pos = Position::new(1, 1, 0);
-        let neighbors = floor.neighbors(pos);
-        assert_eq!(neighbors.len(), 3); // wall blocks one direction
-    }
-}
-```
-
-The graph is ready. Time to search it.
+> [!check] Checkpoint
+> The graph abstraction is ready — `neighbors()` turns any position into its reachable neighbors, and the implicit graph costs zero extra memory. Now we have something to *search*. In Stage 16, Mrs. Norris will use Breadth-First Search to scout every corridor within her detection radius, expanding outward like ripples in a pond.
+>
+> Your project should now have:
+>
+> ```
+> src/
+> ├── map.rs          // Floor, Map, Tile (from Act 1)
+> ├── position.rs     // Position type (new)
+> ├── graph.rs        // neighbors(), is_walkable() (new)
+> ├── player.rs       // Player movement (from Act 2)
+> ├── render.rs       // Rendering (from Act 1-2)
+> └── main.rs         // Game loop (from Act 1-2)
+> ```
+>
+> Test your graph abstraction:
+>
+> ```rust
+> #[cfg(test)]
+> mod tests {
+>     use super::*;
+>
+>     #[test]
+>     fn test_neighbors_open_corridor() {
+>         // Create a 3x3 floor: all Floor tiles
+>         let floor = Floor::new_test(3, 3, Tile::Floor);
+>         let pos = Position::new(1, 1, 0);
+>         let neighbors = floor.neighbors(pos);
+>         assert_eq!(neighbors.len(), 4); // center has 4 neighbors
+>     }
+>
+>     #[test]
+>     fn test_neighbors_corner() {
+>         let floor = Floor::new_test(3, 3, Tile::Floor);
+>         let pos = Position::new(0, 0, 0);
+>         let neighbors = floor.neighbors(pos);
+>         assert_eq!(neighbors.len(), 2); // corner has 2 neighbors
+>     }
+>
+>     #[test]
+>     fn test_neighbors_wall_blocks() {
+>         let mut floor = Floor::new_test(3, 3, Tile::Floor);
+>         floor.grid[0][1] = Tile::Wall; // block the tile above center
+>         let pos = Position::new(1, 1, 0);
+>         let neighbors = floor.neighbors(pos);
+>         assert_eq!(neighbors.len(), 3); // wall blocks one direction
+>     }
+> }
+> ```
+>
+> The graph is ready. Time to search it.
 
 ---
 
 ## Stage 16: Breadth-First Search (BFS)
 
-**Difficulty:** Hard | **New concepts:** BFS, VecDeque, visited sets, path reconstruction
+*Difficulty: Hard*
 
 BFS is the first real algorithm in our arsenal, and it exists because Mrs. Norris doesn't chase — she *explores*. She needs to check every nook and cranny within a radius, expanding outward in concentric rings. BFS is the simplest correct way to do this, and understanding it deeply is the foundation for Dijkstra and A* that follow. Every pathfinding algorithm in this act is a variation on the theme BFS introduces here.
 
@@ -291,7 +368,7 @@ For our grid: V = W*H (width * height), E ≈ 4*V (each tile has at most 4 edges
 
 Here's where Rust's standard library shines. The `VecDeque` type is a double-ended queue backed by a ring buffer — perfect for BFS.
 
-> **Python/TS comparison:** In Python, you'd use `collections.deque` for O(1) popleft. Using a regular `list` with `pop(0)` is O(n) — a classic performance trap. In TypeScript, `Array.shift()` is also O(n). Rust's `VecDeque::pop_front()` is O(1), same as Python's `deque.popleft()`.
+> **Python comparison:** In Python, you'd use `collections.deque` for O(1) popleft. Using a regular `list` with `pop(0)` is O(n) — a classic performance trap. Rust's `VecDeque::pop_front()` is O(1), same as Python's `deque.popleft()`.
 
 ```rust
 use std::collections::{HashMap, HashSet, VecDeque};
@@ -343,7 +420,7 @@ pub fn bfs(map: &Map, start: Position, max_depth: Option<usize>) -> BfsResult {
 
 Let's dissect the critical Rust patterns:
 
-**`while let Some((current, depth)) = queue.pop_front()`** — This is Rust's idiomatic "drain the queue" loop. `pop_front()` returns `Option<T>` — `Some(item)` if the queue has elements, `None` when empty. The `while let` destructures and loops in one line. In Python: `while queue: current, depth = queue.popleft()`. In TypeScript: `while (queue.length > 0) { const [current, depth] = queue.shift()!; }`.
+**`while let Some((current, depth)) = queue.pop_front()`** — This is Rust's idiomatic "drain the queue" loop. `pop_front()` returns `Option<T>` — `Some(item)` if the queue has elements, `None` when empty. The `while let` destructures and loops in one line. In Python: `while queue: current, depth = queue.popleft()`.
 
 **`came_from` as both visited set AND path tracker** — This is a common optimization. Instead of a separate `HashSet<Position>` for visited nodes, we use the `came_from` HashMap. If a position is a key in `came_from`, it's been visited. This saves memory and gives us path reconstruction for free.
 
@@ -429,15 +506,14 @@ impl MrsNorris {
 
 Every few ticks, Mrs. Norris runs `scout()` — a BFS from her position with a depth limit. If the player falls within the explored area, she sets `alert = true` and records the player's last known position. Filch (who we'll implement with A* in Stage 20) will use that position as his chase target.
 
-### Common Mistakes
-
-1. **Forgetting the visited set.** Without it, BFS loops forever on cycles. In a grid, tile A has neighbor B, and B has neighbor A — infinite loop. The `came_from` map prevents revisiting.
-
-2. **Using a `Vec` as a queue.** `Vec::remove(0)` is O(n) because it shifts all elements. Use `VecDeque` for O(1) front removal. This is the #1 BFS performance bug in every language.
-
-3. **Checking visited on enqueue vs dequeue.** We check `!came_from.contains_key(&neighbor)` *before* enqueueing. Some implementations check on dequeue instead — this works but wastes memory by allowing duplicates in the queue. Check on enqueue.
-
-4. **Off-by-one in depth limit.** If `max_depth` is 3, should we explore tiles at distance 3 or stop before them? Our implementation explores distance 3 but doesn't expand from those tiles (the `continue` skips neighbor expansion). Be explicit about what "within N steps" means.
+> [!warning] Common Mistakes
+> 1. **Forgetting the visited set.** Without it, BFS loops forever on cycles. In a grid, tile A has neighbor B, and B has neighbor A — infinite loop. The `came_from` map prevents revisiting.
+>
+> 2. **Using a `Vec` as a queue.** `Vec::remove(0)` is O(n) because it shifts all elements. Use `VecDeque` for O(1) front removal. This is the #1 BFS performance bug in every language.
+>
+> 3. **Checking visited on enqueue vs dequeue.** We check `!came_from.contains_key(&neighbor)` *before* enqueueing. Some implementations check on dequeue instead — this works but wastes memory by allowing duplicates in the queue. Check on enqueue.
+>
+> 4. **Off-by-one in depth limit.** If `max_depth` is 3, should we explore tiles at distance 3 or stop before them? Our implementation explores distance 3 but doesn't expand from those tiles (the `continue` skips neighbor expansion). Be explicit about what "within N steps" means.
 
 ### Real-World BFS Applications
 
@@ -447,66 +523,65 @@ Every few ticks, Mrs. Norris runs `scout()` — a BFS from her position with a d
 - **Network broadcasting:** Flooding protocols spread messages BFS-style through network nodes
 - **Shortest path in unweighted graphs:** GPS routing on road networks where all roads have equal travel time (rare, but BFS is the foundation)
 
-### Checkpoint: Stage 16
-
-Test BFS thoroughly:
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    fn make_corridor_map() -> Map {
-        // 5x1 corridor: [Floor, Floor, Floor, Floor, Floor]
-        Map::from_tiles(5, 1, vec![vec![Tile::Floor; 5]])
-    }
-
-    #[test]
-    fn test_bfs_explores_all_reachable() {
-        let map = make_corridor_map();
-        let result = bfs(&map, Position::new(0, 0, 0), None);
-        assert_eq!(result.came_from.len(), 5);
-    }
-
-    #[test]
-    fn test_bfs_respects_depth_limit() {
-        let map = make_corridor_map();
-        let result = bfs(&map, Position::new(0, 0, 0), Some(2));
-        // Start (depth 0) + 1 neighbor (depth 1) + 1 neighbor (depth 2) = 3
-        assert_eq!(result.came_from.len(), 3);
-    }
-
-    #[test]
-    fn test_bfs_path_reconstruction() {
-        let map = make_corridor_map();
-        let result = bfs(&map, Position::new(0, 0, 0), None);
-        let path = reconstruct_path(
-            &result.came_from,
-            Position::new(0, 0, 0),
-            Position::new(4, 0, 0),
-        );
-        assert_eq!(path.unwrap().len(), 5); // 0 -> 1 -> 2 -> 3 -> 4
-    }
-
-    #[test]
-    fn test_bfs_wall_blocks_path() {
-        // [Floor, Wall, Floor] — position 2 unreachable from 0
-        let map = Map::from_tiles(3, 1, vec![vec![
-            Tile::Floor, Tile::Wall, Tile::Floor,
-        ]]);
-        let result = bfs(&map, Position::new(0, 0, 0), None);
-        assert!(!result.came_from.contains_key(&Position::new(2, 0, 0)));
-    }
-}
-```
-
-Mrs. Norris is prowling. But she explores blindly — every step costs the same. Before we tackle weighted paths with Dijkstra, let's first *see* BFS in action — Stage 17 adds a debug visualization that makes the algorithm's ripple-like expansion visible in real-time. What happens when some paths are more expensive than others?
+> [!check] Checkpoint
+> Test BFS thoroughly:
+>
+> ```rust
+> #[cfg(test)]
+> mod tests {
+>     use super::*;
+>
+>     fn make_corridor_map() -> Map {
+>         // 5x1 corridor: [Floor, Floor, Floor, Floor, Floor]
+>         Map::from_tiles(5, 1, vec![vec![Tile::Floor; 5]])
+>     }
+>
+>     #[test]
+>     fn test_bfs_explores_all_reachable() {
+>         let map = make_corridor_map();
+>         let result = bfs(&map, Position::new(0, 0, 0), None);
+>         assert_eq!(result.came_from.len(), 5);
+>     }
+>
+>     #[test]
+>     fn test_bfs_respects_depth_limit() {
+>         let map = make_corridor_map();
+>         let result = bfs(&map, Position::new(0, 0, 0), Some(2));
+>         // Start (depth 0) + 1 neighbor (depth 1) + 1 neighbor (depth 2) = 3
+>         assert_eq!(result.came_from.len(), 3);
+>     }
+>
+>     #[test]
+>     fn test_bfs_path_reconstruction() {
+>         let map = make_corridor_map();
+>         let result = bfs(&map, Position::new(0, 0, 0), None);
+>         let path = reconstruct_path(
+>             &result.came_from,
+>             Position::new(0, 0, 0),
+>             Position::new(4, 0, 0),
+>         );
+>         assert_eq!(path.unwrap().len(), 5); // 0 -> 1 -> 2 -> 3 -> 4
+>     }
+>
+>     #[test]
+>     fn test_bfs_wall_blocks_path() {
+>         // [Floor, Wall, Floor] — position 2 unreachable from 0
+>         let map = Map::from_tiles(3, 1, vec![vec![
+>             Tile::Floor, Tile::Wall, Tile::Floor,
+>         ]]);
+>         let result = bfs(&map, Position::new(0, 0, 0), None);
+>         assert!(!result.came_from.contains_key(&Position::new(2, 0, 0)));
+>     }
+> }
+> ```
+>
+> Mrs. Norris is prowling. But she explores blindly — every step costs the same. Before we tackle weighted paths with Dijkstra, let's first *see* BFS in action — Stage 17 adds a debug visualization that makes the algorithm's ripple-like expansion visible in real-time. What happens when some paths are more expensive than others?
 
 ---
 
 ## Stage 17: BFS Visualization
 
-**Difficulty:** Medium | **New concepts:** Debug rendering, color gradients, animation timing
+*Difficulty: Medium*
 
 Algorithms are invisible by default — you call a function, get a result, and trust it worked. But *seeing* an algorithm think is transformative for understanding. This stage exists because watching BFS expand outward, tile by tile, in concentric cyan ripples will teach you more about how it works than any textbook explanation. It also builds the debug visualization framework we'll reuse for Dijkstra and A*.
 
@@ -723,25 +798,24 @@ When you press `[d]`, the map comes alive with color. Starting from Mrs. Norris'
 
 Watch what happens when the ripple hits a wall — it flows around it, like water around a rock. Dead-end corridors fill up and stop. Open rooms flood quickly. This is BFS.
 
-### Checkpoint: Stage 17
-
-Wire the `[d]` key into your event handler:
-
-```rust
-KeyCode::Char('d') => {
-    game.debug.toggle(&game.map, game.mrs_norris.pos);
-}
-```
-
-And call `game.debug.tick()` in your game loop's update phase. The visualization should animate smoothly at your configured `ticks_per_step` rate.
-
-You now have a visual understanding of BFS — watch the concentric ripples expand, flow around walls, and fill dead ends. But BFS treats every step as equal cost. What happens when stairs cost 3 and corridors cost 1? Dijkstra's algorithm enters the scene next, and Snape gets the shortest *weighted* path to his classroom.
+> [!check] Checkpoint
+> Wire the `[d]` key into your event handler:
+>
+> ```rust
+> KeyCode::Char('d') => {
+>     game.debug.toggle(&game.map, game.mrs_norris.pos);
+> }
+> ```
+>
+> And call `game.debug.tick()` in your game loop's update phase. The visualization should animate smoothly at your configured `ticks_per_step` rate.
+>
+> You now have a visual understanding of BFS — watch the concentric ripples expand, flow around walls, and fill dead ends. But BFS treats every step as equal cost. What happens when stairs cost 3 and corridors cost 1? Dijkstra's algorithm enters the scene next, and Snape gets the shortest *weighted* path to his classroom.
 
 ---
 
 ## Stage 18: Dijkstra's Algorithm
 
-**Difficulty:** Hard | **New concepts:** Weighted graphs, priority queues, BinaryHeap, Reverse wrapper
+*Difficulty: Hard*
 
 BFS assumes every step costs the same — but Hogwarts doesn't work that way. Climbing a spiral staircase is slower than walking a corridor. Opening a heavy oak door takes longer than striding through an archway. Dijkstra's algorithm is BFS's sophisticated cousin: it finds the cheapest path, not just the shortest one. This is the algorithm that powers GPS navigation, network routing, and Snape's efficient glide between his office and the Potions classroom.
 
@@ -818,7 +892,7 @@ pub fn edge_cost(map: &Map, from: Position, to: Position) -> u32 {
 
 Here's where Rust throws a curveball. `std::collections::BinaryHeap` is a **max-heap** — it pops the *largest* element first. Dijkstra needs a **min-heap** — pop the *smallest* cost first.
 
-> **Python/TS comparison:** Python's `heapq` is a min-heap by default — `heapq.heappush(heap, (cost, node))` just works. JavaScript has no built-in heap at all (you'd use a library or implement one). Rust gives you a max-heap and says "figure it out."
+> **Python comparison:** Python's `heapq` is a min-heap by default — `heapq.heappush(heap, (cost, node))` just works. Rust gives you a max-heap and says "figure it out."
 
 The solution: wrap your cost in `std::cmp::Reverse`. This flips the ordering so the smallest value has the highest priority:
 
@@ -1001,15 +1075,14 @@ impl Snape {
 
 Snape computes his path once when his schedule changes, then follows it step by step. He doesn't recompute every tick — that would be wasteful. He only recomputes if something blocks his path (a locked door, the player in the way) or when his schedule changes.
 
-### Common Mistakes
-
-1. **Using BinaryHeap without Reverse or custom Ord.** Rust's BinaryHeap is a max-heap. If you push `(cost, pos)` directly, you'll pop the *most expensive* node first — the exact opposite of what Dijkstra needs. Your algorithm will still terminate but explore nodes in the wrong order, potentially giving suboptimal paths.
-
-2. **Forgetting the stale entry check.** Without `if cost > cost_so_far[&current] { continue; }`, you'll process nodes multiple times with outdated costs. The algorithm still works but does redundant work — O(E log E) instead of O((V+E) log V).
-
-3. **Negative edge weights.** If any edge has negative cost, Dijkstra can miss shorter paths. It assumes "once I've popped a node, I've found the cheapest path to it." Negative edges violate this assumption.
-
-4. **Not using early exit.** If you have a specific goal, break when you pop it from the heap. Without early exit, Dijkstra explores the entire reachable graph — correct but slow when you only need one path.
+> [!warning] Common Mistakes
+> 1. **Using BinaryHeap without Reverse or custom Ord.** Rust's BinaryHeap is a max-heap. If you push `(cost, pos)` directly, you'll pop the *most expensive* node first — the exact opposite of what Dijkstra needs. Your algorithm will still terminate but explore nodes in the wrong order, potentially giving suboptimal paths.
+>
+> 2. **Forgetting the stale entry check.** Without `if cost > cost_so_far[&current] { continue; }`, you'll process nodes multiple times with outdated costs. The algorithm still works but does redundant work — O(E log E) instead of O((V+E) log V).
+>
+> 3. **Negative edge weights.** If any edge has negative cost, Dijkstra can miss shorter paths. It assumes "once I've popped a node, I've found the cheapest path to it." Negative edges violate this assumption.
+>
+> 4. **Not using early exit.** If you have a specific goal, break when you pop it from the heap. Without early exit, Dijkstra explores the entire reachable graph — correct but slow when you only need one path.
 
 ### Real-World Dijkstra Applications
 
@@ -1019,48 +1092,47 @@ Snape computes his path once when his schedule changes, then follows it step by 
 - **Robotics:** Path planning for robots navigating terrain with varying difficulty (mud, gravel, pavement)
 - **Game AI:** Any NPC that needs to navigate weighted terrain — exactly what we're doing
 
-### Checkpoint: Stage 18
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_dijkstra_prefers_cheap_path() {
-        // Two paths from (0,0) to (4,0):
-        // Top row: Floor Floor Floor Floor Floor (cost 4)
-        // Bottom:  Floor Stairs Stairs Stairs Floor (cost 1+3+3+3+1=11)
-        // Dijkstra should pick the top row
-        let map = make_two_path_map();
-        let result = dijkstra(
-            &map,
-            Position::new(0, 0, 0),
-            Some(Position::new(4, 0, 0)),
-        );
-        assert_eq!(result.cost_so_far[&Position::new(4, 0, 0)], 4);
-    }
-
-    #[test]
-    fn test_dijkstra_finds_optimal_with_stairs() {
-        // Verify that Dijkstra correctly weights stair transitions
-        let map = make_multi_floor_map();
-        let start = Position::new(5, 5, 0);
-        let goal = Position::new(5, 5, 1);
-        let result = dijkstra(&map, start, Some(goal));
-        assert!(result.cost_so_far.contains_key(&goal));
-        assert_eq!(result.cost_so_far[&goal], 3); // One stair transition
-    }
-}
-```
-
-Snape glides through the dungeons on the cheapest path. But Dijkstra explores in all directions equally — it has no idea *where* the goal is. What if we could give it a sense of direction? First, let's see the difference between BFS and Dijkstra side by side in Stage 19, then we'll add that directional intuition with A* in Stage 20.
+> [!check] Checkpoint
+> ```rust
+> #[cfg(test)]
+> mod tests {
+>     use super::*;
+>
+>     #[test]
+>     fn test_dijkstra_prefers_cheap_path() {
+>         // Two paths from (0,0) to (4,0):
+>         // Top row: Floor Floor Floor Floor Floor (cost 4)
+>         // Bottom:  Floor Stairs Stairs Stairs Floor (cost 1+3+3+3+1=11)
+>         // Dijkstra should pick the top row
+>         let map = make_two_path_map();
+>         let result = dijkstra(
+>             &map,
+>             Position::new(0, 0, 0),
+>             Some(Position::new(4, 0, 0)),
+>         );
+>         assert_eq!(result.cost_so_far[&Position::new(4, 0, 0)], 4);
+>     }
+>
+>     #[test]
+>     fn test_dijkstra_finds_optimal_with_stairs() {
+>         // Verify that Dijkstra correctly weights stair transitions
+>         let map = make_multi_floor_map();
+>         let start = Position::new(5, 5, 0);
+>         let goal = Position::new(5, 5, 1);
+>         let result = dijkstra(&map, start, Some(goal));
+>         assert!(result.cost_so_far.contains_key(&goal));
+>         assert_eq!(result.cost_so_far[&goal], 3); // One stair transition
+>     }
+> }
+> ```
+>
+> Snape glides through the dungeons on the cheapest path. But Dijkstra explores in all directions equally — it has no idea *where* the goal is. What if we could give it a sense of direction? First, let's see the difference between BFS and Dijkstra side by side in Stage 19, then we'll add that directional intuition with A* in Stage 20.
 
 ---
 
 ## Stage 19: Dijkstra vs BFS — The Comparison
 
-**Difficulty:** Medium | **New concepts:** Side-by-side algorithm comparison, performance metrics
+*Difficulty: Medium*
 
 Understanding an algorithm in isolation is one thing; understanding *when to choose it* is another. This stage makes the difference between BFS and Dijkstra visceral — you'll see both algorithms solve the same problem simultaneously and compare their behavior. The visual comparison will burn the distinction into your memory far more effectively than any table of Big-O notation.
 
@@ -1264,19 +1336,18 @@ The visualization makes this obvious: BFS expands in perfect concentric circles.
 | Weighted edges, specific target | Dijkstra with early exit | Stops as soon as target is found |
 | Unweighted, just need reachability | BFS with depth limit | Cheapest option for "is X within N steps?" |
 
-### Checkpoint: Stage 19
-
-The comparison mode makes the algorithm trade-offs undeniable. BFS is simpler but blind to costs. Dijkstra respects costs but explores in all directions. Both expand outward without any sense of *where* the goal is. What if the algorithm could look ahead toward the goal? That's exactly what A* does — and it's how Filch will chase you through the castle.
-
-Add the comparison mode to your debug system. The key insight from this stage: **BFS is Dijkstra where all edges cost 1.** Dijkstra is the generalization. But both explore blindly — they don't know where the goal is. They expand in all directions equally.
-
-What if the algorithm could *look ahead* toward the goal?
+> [!check] Checkpoint
+> The comparison mode makes the algorithm trade-offs undeniable. BFS is simpler but blind to costs. Dijkstra respects costs but explores in all directions. Both expand outward without any sense of *where* the goal is. What if the algorithm could look ahead toward the goal? That's exactly what A* does — and it's how Filch will chase you through the castle.
+>
+> Add the comparison mode to your debug system. The key insight from this stage: **BFS is Dijkstra where all edges cost 1.** Dijkstra is the generalization. But both explore blindly — they don't know where the goal is. They expand in all directions equally.
+>
+> What if the algorithm could *look ahead* toward the goal?
 
 ---
 
 ## Stage 20: A* (A-Star)
 
-**Difficulty:** Hard | **New concepts:** Heuristics, f/g/h values, admissibility, Manhattan distance
+*Difficulty: Hard*
 
 A* is the crown jewel of this act — the algorithm that powers nearly every game AI you've ever encountered. It exists because Dijkstra wastes time exploring in directions that lead *away* from the goal. A* adds a single brilliant idea: a heuristic that estimates "how far is the goal from here?" This one addition eliminates entire quadrants of wasted exploration. Filch doesn't search every corridor in Hogwarts — he has *intuition* about where you are, and he beelines toward you.
 
@@ -1324,7 +1395,7 @@ pub fn manhattan_distance(a: Position, b: Position) -> u32 {
 
 Why Manhattan distance? Because on a 4-directional grid, the shortest possible path between two points (ignoring walls) is `|dx| + |dy|`. You must move `dx` tiles horizontally and `dy` tiles vertically — no shortcuts. This is called "Manhattan" because it's how you navigate a city grid (you can't cut through buildings diagonally).
 
-> **Python/TS comparison:** In Python: `abs(a.x - b.x) + abs(a.y - b.y)`. In TypeScript: `Math.abs(a.x - b.x) + Math.abs(a.y - b.y)`. In Rust, we use `i32` arithmetic and `unsigned_abs()` to avoid underflow on unsigned types. The `.unsigned_abs()` method returns a `u32` directly — cleaner than casting through `i32`.
+> **Python comparison:** In Python: `abs(a.x - b.x) + abs(a.y - b.y)`. In Rust, we use `i32` arithmetic and `unsigned_abs()` to avoid underflow on unsigned types. The `.unsigned_abs()` method returns a `u32` directly — cleaner than casting through `i32`.
 
 ### Admissibility: The One Rule
 
@@ -1557,30 +1628,29 @@ impl Filch {
 
 Filch recomputes his path every 5 ticks. This is a balance between responsiveness (tracking the player's movement) and performance (A* isn't free). On a 100x80 grid, A* typically explores 100-300 nodes — fast enough for 5-tick intervals at 200ms per tick.
 
-### Common Mistakes
-
-1. **Wrong heuristic.** Using Euclidean distance on a 4-directional grid underestimates less than Manhattan, making A* explore more nodes. Using `2 * manhattan` overestimates, making A* inadmissible (may find suboptimal paths). Always match the heuristic to the movement model.
-
-2. **Forgetting that BinaryHeap is a max-heap.** Same trap as Dijkstra. If you don't reverse the ordering, A* expands the *worst* nodes first. Your paths will be correct (eventually) but exploration will be maximally inefficient.
-
-3. **Not breaking ties correctly.** When two nodes have the same f_cost, preferring lower g_cost (farther from goal) causes unnecessary exploration. Prefer higher g_cost (closer to goal) for tighter search.
-
-4. **Recomputing too often.** A* on every tick is wasteful if the player hasn't moved. Track the player's last known position and only recompute when it changes significantly.
-
-5. **Cross-floor heuristic.** Manhattan distance doesn't account for floor changes. If the goal is on a different floor, the heuristic should add the minimum stair cost. A simple fix:
-
-```rust
-pub fn heuristic(a: Position, b: Position) -> u32 {
-    let dx = (a.x as i32 - b.x as i32).unsigned_abs();
-    let dy = (a.y as i32 - b.y as i32).unsigned_abs();
-    let floor_cost = if a.floor != b.floor {
-        3 // Minimum cost to change floors (one stair transition)
-    } else {
-        0
-    };
-    dx + dy + floor_cost
-}
-```
+> [!warning] Common Mistakes
+> 1. **Wrong heuristic.** Using Euclidean distance on a 4-directional grid underestimates less than Manhattan, making A* explore more nodes. Using `2 * manhattan` overestimates, making A* inadmissible (may find suboptimal paths). Always match the heuristic to the movement model.
+>
+> 2. **Forgetting that BinaryHeap is a max-heap.** Same trap as Dijkstra. If you don't reverse the ordering, A* expands the *worst* nodes first. Your paths will be correct (eventually) but exploration will be maximally inefficient.
+>
+> 3. **Not breaking ties correctly.** When two nodes have the same f_cost, preferring lower g_cost (farther from goal) causes unnecessary exploration. Prefer higher g_cost (closer to goal) for tighter search.
+>
+> 4. **Recomputing too often.** A* on every tick is wasteful if the player hasn't moved. Track the player's last known position and only recompute when it changes significantly.
+>
+> 5. **Cross-floor heuristic.** Manhattan distance doesn't account for floor changes. If the goal is on a different floor, the heuristic should add the minimum stair cost. A simple fix:
+>
+> ```rust
+> pub fn heuristic(a: Position, b: Position) -> u32 {
+>     let dx = (a.x as i32 - b.x as i32).unsigned_abs();
+>     let dy = (a.y as i32 - b.y as i32).unsigned_abs();
+>     let floor_cost = if a.floor != b.floor {
+>         3 // Minimum cost to change floors (one stair transition)
+>     } else {
+>         0
+>     };
+>     dx + dy + floor_cost
+> }
+> ```
 
 ### Why A* Is Faster Than Dijkstra
 
@@ -1611,66 +1681,65 @@ Dijkstra's exploration is a circle. A*'s exploration is an ellipse pointed at th
 - **Natural language processing:** A* decoding in machine translation (finding the most likely sentence)
 - **Protein folding:** Searching conformational space with energy-based heuristics
 
-### Checkpoint: Stage 20
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_astar_finds_optimal_path() {
-        let map = make_corridor_map();
-        let start = Position::new(0, 0, 0);
-        let goal = Position::new(4, 0, 0);
-        let result = astar(&map, start, goal);
-        let path = reconstruct_path(&result.came_from, start, goal);
-        assert_eq!(path.unwrap().len(), 5);
-    }
-
-    #[test]
-    fn test_astar_explores_fewer_nodes_than_dijkstra() {
-        let map = make_open_room_map(20, 20); // 20x20 open room
-        let start = Position::new(0, 0, 0);
-        let goal = Position::new(19, 19, 0);
-
-        let dij = dijkstra(&map, start, Some(goal));
-        let ast = astar(&map, start, goal);
-
-        // A* should explore significantly fewer nodes
-        assert!(
-            ast.nodes_explored < dij.visit_order.len(),
-            "A* explored {} nodes, Dijkstra explored {}",
-            ast.nodes_explored,
-            dij.visit_order.len(),
-        );
-    }
-
-    #[test]
-    fn test_astar_same_cost_as_dijkstra() {
-        // A* must find the same optimal cost as Dijkstra
-        let map = make_weighted_map();
-        let start = Position::new(0, 0, 0);
-        let goal = Position::new(9, 9, 0);
-
-        let dij = dijkstra(&map, start, Some(goal));
-        let ast = astar(&map, start, goal);
-
-        assert_eq!(
-            dij.cost_so_far[&goal],
-            ast.g_cost[&goal],
-        );
-    }
-}
-```
-
-Filch is on the hunt. But how much faster is A* really? Let's see it with our own eyes — Stage 21 adds a visualization that shows A*'s f/g/h values in real-time, making the heuristic's pruning power visible.
+> [!check] Checkpoint
+> ```rust
+> #[cfg(test)]
+> mod tests {
+>     use super::*;
+>
+>     #[test]
+>     fn test_astar_finds_optimal_path() {
+>         let map = make_corridor_map();
+>         let start = Position::new(0, 0, 0);
+>         let goal = Position::new(4, 0, 0);
+>         let result = astar(&map, start, goal);
+>         let path = reconstruct_path(&result.came_from, start, goal);
+>         assert_eq!(path.unwrap().len(), 5);
+>     }
+>
+>     #[test]
+>     fn test_astar_explores_fewer_nodes_than_dijkstra() {
+>         let map = make_open_room_map(20, 20); // 20x20 open room
+>         let start = Position::new(0, 0, 0);
+>         let goal = Position::new(19, 19, 0);
+>
+>         let dij = dijkstra(&map, start, Some(goal));
+>         let ast = astar(&map, start, goal);
+>
+>         // A* should explore significantly fewer nodes
+>         assert!(
+>             ast.nodes_explored < dij.visit_order.len(),
+>             "A* explored {} nodes, Dijkstra explored {}",
+>             ast.nodes_explored,
+>             dij.visit_order.len(),
+>         );
+>     }
+>
+>     #[test]
+>     fn test_astar_same_cost_as_dijkstra() {
+>         // A* must find the same optimal cost as Dijkstra
+>         let map = make_weighted_map();
+>         let start = Position::new(0, 0, 0);
+>         let goal = Position::new(9, 9, 0);
+>
+>         let dij = dijkstra(&map, start, Some(goal));
+>         let ast = astar(&map, start, goal);
+>
+>         assert_eq!(
+>             dij.cost_so_far[&goal],
+>             ast.g_cost[&goal],
+>         );
+>     }
+> }
+> ```
+>
+> Filch is on the hunt. But how much faster is A* really? Let's see it with our own eyes — Stage 21 adds a visualization that shows A*'s f/g/h values in real-time, making the heuristic's pruning power visible.
 
 ---
 
 ## Stage 21: A* Visualization
 
-**Difficulty:** Medium | **New concepts:** f/g/h value display, explored vs skipped nodes
+*Difficulty: Medium*
 
 The most powerful insight about A* isn't the nodes it explores — it's the nodes it *skips*. This visualization stage makes that pruning power visible. You'll watch A* shoot a narrow beam toward the goal while huge swaths of the map stay dark and unexplored. Seeing the f/g/h values update in real-time will cement your understanding of why the heuristic works and when it helps most.
 
@@ -1900,23 +1969,22 @@ The most powerful insight: look at the nodes A* *doesn't* explore. In the Dijkst
 
 This is the heuristic's pruning power. Every node A* skips is work Dijkstra would have done.
 
-### Checkpoint: Stage 21
-
-Your debug mode now cycles through three algorithm visualizations — BFS in cyan, Dijkstra in cost-gradient, A* in purple with f/g/h info. The visual difference is undeniable. One more stage to go — the grand finale where all three algorithms race head-to-head on the same problem.
-
-Your debug mode should now cycle through three views:
-1. `[d]` once → BFS visualization (cyan ripples)
-2. `[d]` twice → Dijkstra visualization (cost gradient)
-3. `[d]` three times → A* visualization (purple f-cost gradient with info panel)
-4. `[d]` four times → debug off
-
-One more stage to go — the grand finale.
+> [!check] Checkpoint
+> Your debug mode now cycles through three algorithm visualizations — BFS in cyan, Dijkstra in cost-gradient, A* in purple with f/g/h info. The visual difference is undeniable. One more stage to go — the grand finale where all three algorithms race head-to-head on the same problem.
+>
+> Your debug mode should now cycle through three views:
+> 1. `[d]` once → BFS visualization (cyan ripples)
+> 2. `[d]` twice → Dijkstra visualization (cost gradient)
+> 3. `[d]` three times → A* visualization (purple f-cost gradient with info panel)
+> 4. `[d]` four times → debug off
+>
+> One more stage to go — the grand finale.
 
 ---
 
 ## Stage 22: The Algorithm Showdown
 
-**Difficulty:** Medium | **New concepts:** Side-by-side racing, performance benchmarking, algorithm selection
+*Difficulty: Medium*
 
 This is the capstone of Act 3 — the moment where theory becomes conviction. Seeing three algorithms solve the same problem simultaneously, watching A* finish while Dijkstra is still expanding and BFS is flooding the entire map, will give you an intuition for algorithm selection that no amount of reading can match. After this stage, you'll *know* which algorithm to reach for and why.
 
@@ -2210,21 +2278,20 @@ Do all edges have equal cost?
         └── NO → Use Dijkstra with early exit
 ```
 
-### Checkpoint: Stage 22
-
-The race is complete. You've seen BFS flood, Dijkstra expand, and A* laser toward the goal. These three algorithms are now tools in your belt — and in Act 4, they become the nervous system of a living castle. Mrs. Norris scouts with BFS, Snape patrols with Dijkstra, and Filch hunts with A*. The corridors won't be empty much longer.
-
-Wire the `[r]` key to start a race:
-
-```rust
-KeyCode::Char('r') => {
-    let start = game.filch.pos;
-    let goal = game.player.pos;
-    game.race = AlgorithmRace::start_race(&game.map, start, goal);
-}
-```
-
-Call `game.race.tick()` in your update loop. The race animates automatically.
+> [!check] Checkpoint
+> The race is complete. You've seen BFS flood, Dijkstra expand, and A* laser toward the goal. These three algorithms are now tools in your belt — and in Act 4, they become the nervous system of a living castle. Mrs. Norris scouts with BFS, Snape patrols with Dijkstra, and Filch hunts with A*. The corridors won't be empty much longer.
+>
+> Wire the `[r]` key to start a race:
+>
+> ```rust
+> KeyCode::Char('r') => {
+>     let start = game.filch.pos;
+>     let goal = game.player.pos;
+>     game.race = AlgorithmRace::start_race(&game.map, start, goal);
+> }
+> ```
+>
+> Call `game.race.tick()` in your update loop. The race animates automatically.
 
 ---
 

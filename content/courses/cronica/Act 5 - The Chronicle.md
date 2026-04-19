@@ -19,7 +19,7 @@ flowchart LR
 
 ## Stage 29 — Shared World State
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Every player's quest runs in isolation — Player A slays a dragon and Player B never hears about it. The world has no memory beyond individual sessions. We need shared mutable state that multiple async tasks can read and write safely across threads. This stage confronts Rust's concurrency model head-on: `Arc<RwLock<T>>`, the `Send` and `Sync` traits, and the design patterns that make multiplayer possible without data races.
 
@@ -44,13 +44,6 @@ async def add_event(event: str):
 
 async def get_events():
     return list(world_events)  # Safe — only one thread
-```
-
-**TypeScript comparison — Node.js is also single-threaded:**
-```typescript
-// TS/Node — same story, single event loop
-const worldEvents: string[] = [];
-function addEvent(event: string) { worldEvents.push(event); }
 ```
 
 Rust is different. Tokio runs tasks across **multiple OS threads**. Two tasks might try to read and write the world state simultaneously. The compiler won't let you share a `Vec` across threads without synchronization.
@@ -202,7 +195,10 @@ The world remembers now — events ripple across quests and realms shift in resp
 
 ## Stage 30 — Party Quests
 
-> **Difficulty: Hard**
+*Difficulty: Hard*
+
+> [!note]
+> This stage provides the architecture and type signatures. The implementation is yours. Use the patterns from Stages 29 and earlier as reference — the party system follows the same `Arc<RwLock<T>>` pattern you've already mastered.
 
 World events propagate between quests, but every adventure is still a solo affair — one player, one character, one narrative thread. The most memorable RPG moments happen when friends play together: coordinating tactics, roleplaying off each other, sharing the triumph of a hard-won battle. We need a party system that manages turn order, handles player disconnects, and teaches the AI to narrate for multiple characters simultaneously. This is the most complex flow in the entire bot.
 
@@ -451,7 +447,7 @@ Parties quest together, take turns, and survive disconnects. But the world still
 
 ## Stage 31 — The Rival System
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Players share a world and quest in parties, but fallen heroes simply vanish — no ghost haunting the Ashlands, no statue in the town square, no whispered legend. The world has no memory of its dead. We need a system that queries the database for notable characters and injects them into other players' quests as AI-controlled NPCs. This creates the emergent shared narrative that makes Crónica feel like a living world: "I met the ghost of your old character in the Ashlands."
 
@@ -611,7 +607,7 @@ The dead walk again and legends echo across quests. The game mechanics are compl
 
 ## Stage 32 — ANSI & Embeds Polish
 
-> **Difficulty: Easy**
+*Difficulty: Easy*
 
 The game works — multiplayer, rivals, progression, the full package. But it *looks* like a prototype: plain text, default embed colors, no visual distinction between combat narration and tavern dialogue. Presentation matters. A well-formatted combat exchange with red ANSI text *feels* more dangerous than the same words in gray. This stage builds the visual language that makes Crónica atmospheric before we ship it.
 
@@ -754,7 +750,7 @@ Crónica looks the part now — combat bleeds red, narration glows cyan, and eac
 
 ## Stage 33 — Deploy to EC2
 
-> **Difficulty: Hard**
+*Difficulty: Hard*
 
 Crónica runs beautifully — on your laptop. Close the lid and the bot goes dark. We need it running 24/7 on a server, surviving reboots, logging structured data, and loading secrets from the environment instead of hardcoded strings. This stage covers the full deployment pipeline: cross-compilation from macOS to Linux, replacing `println!` with production-grade `tracing`, writing a systemd service file, and shipping the binary to EC2.
 
@@ -985,7 +981,7 @@ The bot runs on a server now, surviving reboots and logging structured data. But
 
 ## Stage 34 — Launch Day
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 The binary runs on EC2, the systemd service restarts on failure, and structured logs flow to journald. But a deployed bot isn't a launched game. We need to verify every feature end-to-end with real players, set up monitoring for the critical paths, and know what to watch for in the first hour of production. This final stage is the difference between "it works on my machine" and "it works in the world."
 

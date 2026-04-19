@@ -2,6 +2,9 @@
 
 > *"The Dark Arts are many, varied, ever-changing, and eternal. Fighting them is like fighting a many-headed monster, which, each time a neck is severed, sprouts a head even fiercer and cleverer than before."* — Severus Snape
 
+> [!note] Type Widening from Act 1
+> In Act 1, we used `u8` for spell stats like `mana_cost` and `damage` — fine for values under 255. As spells get more powerful in Act 2, we widen to `u32` to accommodate larger values. Update your Spell struct fields from `u8` to `u32` before proceeding. The field `damage` is also renamed to `base_damage` for clarity now that AI scoring needs to distinguish base from modified damage.
+
 In Act 1 you built a duel engine: spells, wizards, type advantages, status effects, and a working combat loop. Your wizard can fight — but only against yourself. Every great duelist needs a worthy opponent.
 
 In this act, we build **four AI opponents** of increasing intelligence, then unify them behind Rust's most powerful abstraction: **trait objects**. By the end, you'll face Voldemort himself.
@@ -98,26 +101,26 @@ Rust's standard library doesn't include random number generation. We need the `r
 
 ```toml
 # In Cargo.toml, under [dependencies]:
-rand = "0.8"
+rand = "0.9"
 ```
 
-If you're coming from Python, this is like `pip install` — except Cargo handles it automatically when you build. In TypeScript, it's like adding to `package.json`.
+If you're coming from Python, this is like `pip install` — except Cargo handles it automatically when you build.
 
 ### The First Year AI
 
 A First Year student panics and casts whatever comes to mind — as long as they have enough mana.
 
 ```rust
-use rand::seq::SliceRandom; // gives us .choose() on slices
-use rand::thread_rng;       // gives us a random number generator
+use rand::seq::IndexedRandom; // gives us .choose() on slices
+use rand::rng;              // gives us a random number generator
 
 /// First Year AI: picks a random spell it can afford.
 /// If no spell is affordable, passes.
 pub fn first_year_choose(wizard: &Wizard) -> SpellChoice {
-    // thread_rng() creates a random number generator seeded by the OS.
+    // rand::rng() creates a random number generator seeded by the OS.
     // In Python you'd just call random.choice(). In Rust, you need an
     // explicit RNG because Rust doesn't hide global mutable state.
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
 
     // Collect indices of all spells we can afford into a Vec.
     // enumerate() gives us (index, spell) pairs — like Python's enumerate().
@@ -140,7 +143,7 @@ pub fn first_year_choose(wizard: &Wizard) -> SpellChoice {
 
 Let's walk through the key lines:
 
-- **`let mut rng = thread_rng()`** — The `mut` is required because generating a random number *mutates* the generator's internal state. Python hides this behind `random.choice()`, but Rust makes mutation explicit.
+- **`let mut rng = rand::rng()`** — The `mut` is required because generating a random number *mutates* the generator's internal state. Python hides this behind `random.choice()`, but Rust makes mutation explicit.
 - **`.filter(|(_, spell)| ...)`** — The `(_, spell)` destructures the tuple. The `_` ignores the index inside the filter since we only care about mana cost here.
 - **`.map(|(i, _)| i)`** — Now we throw away the spell and keep just the index. We need indices because `SpellChoice::Cast` takes a `usize`.
 - **`.collect()`** — Transforms the iterator into a `Vec<usize>`. Rust infers the type from our annotation.
@@ -228,31 +231,30 @@ cargo test first_year
 
 **Key testing insight**: We run the random function 100 times. If there's a bug where it occasionally picks an unaffordable spell, 100 iterations makes it very likely we'll catch it. This is called **property-based testing** in spirit — we test a *property* ("always affordable") rather than a specific outcome.
 
-### Common Mistakes
-
-**Forgetting `mut` on the RNG:**
-```rust
-// WRONG — won't compile
-let rng = thread_rng();
-affordable.choose(&rng); // error: cannot borrow as mutable
-
-// RIGHT — RNG needs mutation to generate numbers
-let mut rng = thread_rng();
-affordable.choose(&mut rng);
-```
-
-**Indexing into an empty Vec:**
-```rust
-// WRONG — panics if no affordable spells
-let index = affordable[rng.gen_range(0..affordable.len())];
-
-// RIGHT — .choose() returns Option, forcing you to handle empty
-match affordable.choose(&mut rng) { ... }
-```
-
-This is Rust's philosophy: the type system *forces* you to handle edge cases that would be runtime crashes in Python or TypeScript.
-
-The First Year AI works, but it's trivially beatable — just cast your strongest spell every turn. Stage 10 builds an AI that actually *watches* what you do and counters it.
+> [!warning] Common Mistakes
+> **Forgetting `mut` on the RNG:**
+> ```rust
+> // WRONG — won't compile
+> let rng = rand::rng();
+> affordable.choose(&rng); // error: cannot borrow as mutable
+>
+> // RIGHT — RNG needs mutation to generate numbers
+> let mut rng = rand::rng();
+> affordable.choose(&mut rng);
+> ```
+>
+> **Indexing into an empty Vec:**
+> ```rust
+> // WRONG — panics if no affordable spells
+> let index = affordable[rng.gen_range(0..affordable.len())];
+>
+> // RIGHT — .choose() returns Option, forcing you to handle empty
+> match affordable.choose(&mut rng) { ... }
+> ```
+>
+> This is Rust's philosophy: the type system *forces* you to handle edge cases that would be runtime crashes in Python.
+>
+> The First Year AI works, but it's trivially beatable — just cast your strongest spell every turn. Stage 10 builds an AI that actually *watches* what you do and counters it.
 
 ---
 
@@ -310,7 +312,7 @@ pub fn owl_choose(
     history: &[Turn],
     opponent_name: &str,
 ) -> SpellChoice {
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
 
     // Collect affordable spell indices — same as First Year
     let affordable: Vec<usize> = wizard
@@ -518,34 +520,33 @@ fn owl_falls_back_to_random_with_no_history() {
 cargo test owl
 ```
 
-### Common Mistakes
-
-**Forgetting to filter by opponent name:**
-```rust
-// WRONG — counts YOUR spells too, not just the opponent's
-let recent: Vec<_> = history.iter().rev().take(3).collect();
-
-// RIGHT — only look at the opponent's turns
-let recent: Vec<_> = history
-    .iter()
-    .rev()
-    .filter(|t| t.caster == opponent_name)
-    .take(3)
-    .collect();
-```
-
-**Using `unwrap()` on `choose()` without checking empty:**
-```rust
-// WRONG — panics if affordable is empty
-let &index = affordable.choose(&mut rng).unwrap();
-
-// RIGHT — check first
-if affordable.is_empty() {
-    return SpellChoice::Pass;
-}
-```
-
-The Counter AI reacts to what you *did*, but it doesn't think about what it *should* do. Stage 11 builds a Strategist that evaluates the current game state — HP, mana, status effects — and makes proactive decisions.
+> [!warning] Common Mistakes
+> **Forgetting to filter by opponent name:**
+> ```rust
+> // WRONG — counts YOUR spells too, not just the opponent's
+> let recent: Vec<_> = history.iter().rev().take(3).collect();
+>
+> // RIGHT — only look at the opponent's turns
+> let recent: Vec<_> = history
+>     .iter()
+>     .rev()
+>     .filter(|t| t.caster == opponent_name)
+>     .take(3)
+>     .collect();
+> ```
+>
+> **Using `unwrap()` on `choose()` without checking empty:**
+> ```rust
+> // WRONG — panics if affordable is empty
+> let &index = affordable.choose(&mut rng).unwrap();
+>
+> // RIGHT — check first
+> if affordable.is_empty() {
+>     return SpellChoice::Pass;
+> }
+> ```
+>
+> The Counter AI reacts to what you *did*, but it doesn't think about what it *should* do. Stage 11 builds a Strategist that evaluates the current game state — HP, mana, status effects — and makes proactive decisions.
 
 ---
 
@@ -595,7 +596,7 @@ pub fn newt_choose(
     history: &[Turn],
     opponent_name: &str,
 ) -> SpellChoice {
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
 
     let affordable: Vec<usize> = wizard
         .spells
@@ -991,7 +992,7 @@ pub fn dumbledore_choose(
     history: &[Turn],
     opponent_name: &str,
 ) -> SpellChoice {
-    let mut rng = thread_rng();
+    let mut rng = rand::rng();
 
     let affordable: Vec<usize> = wizard
         .spells
@@ -1229,30 +1230,29 @@ cargo test dumbledore
 cargo test analyze_opponent
 ```
 
-### Common Mistakes
-
-**Borrowing `history` in a closure that also borrows `wizard`:**
-```rust
-// This works fine because both are immutable borrows (&).
-// Rust allows multiple immutable borrows simultaneously.
-// You'd only hit trouble if one of them was &mut.
-let scored: Vec<_> = affordable.iter().map(|&i| {
-    let spell = &wizard.spells[i];  // borrows wizard
-    // ... also uses history ...      // borrows history
-    (i, score)
-}).collect();
-```
-
-**Floating point comparison in tests:**
-```rust
-// WRONG — floating point isn't exact
-assert_eq!(profile.type_frequency[0], 0.33);
-
-// RIGHT — use approximate comparison
-assert!((profile.type_frequency[0] - 0.33).abs() < 0.02);
-```
-
-You now have four AI strategies of increasing sophistication — but they're all standalone functions with different signatures. Stage 13 unifies them behind a single trait, unlocking Rust's most powerful abstraction: trait objects and dynamic dispatch.
+> [!warning] Common Mistakes
+> **Borrowing `history` in a closure that also borrows `wizard`:**
+> ```rust
+> // This works fine because both are immutable borrows (&).
+> // Rust allows multiple immutable borrows simultaneously.
+> // You'd only hit trouble if one of them was &mut.
+> let scored: Vec<_> = affordable.iter().map(|&i| {
+>     let spell = &wizard.spells[i];  // borrows wizard
+>     // ... also uses history ...      // borrows history
+>     (i, score)
+> }).collect();
+> ```
+>
+> **Floating point comparison in tests:**
+> ```rust
+> // WRONG — floating point isn't exact
+> assert_eq!(profile.type_frequency[0], 0.33);
+>
+> // RIGHT — use approximate comparison
+> assert!((profile.type_frequency[0] - 0.33).abs() < 0.02);
+> ```
+>
+> You now have four AI strategies of increasing sophistication — but they're all standalone functions with different signatures. Stage 13 unifies them behind a single trait, unlocking Rust's most powerful abstraction: trait objects and dynamic dispatch.
 
 ---
 
@@ -1286,7 +1286,6 @@ A trait defines a *contract* — a set of methods that a type must implement. If
 | Language | Equivalent | Key Difference |
 |----------|-----------|----------------|
 | Python | ABC (Abstract Base Class) | Rust traits have no inheritance hierarchy |
-| TypeScript | Interface | Rust traits can have default implementations |
 | Java | Interface | Rust traits can't have state (fields) |
 | Go | Interface | Rust traits are explicit (`impl Trait for Type`), not structural |
 
@@ -1303,14 +1302,6 @@ class DuelAI(ABC):
 class FirstYearAI(DuelAI):
     def choose_spell(self, own_state, opponent_state, history):
         # random choice...
-```
-
-In TypeScript:
-
-```typescript
-interface DuelAI {
-    chooseSpell(ownState: Wizard, opponentState: Wizard, history: Turn[]): SpellChoice;
-}
 ```
 
 In Rust:
@@ -1344,7 +1335,7 @@ pub trait DuelAI {
 
 Key things to notice:
 
-- **`&self`** — Every trait method takes `&self` (or `&mut self`, or `self`). This is like Python's `self` or TypeScript's `this`. It's the instance the method is called on.
+- **`&self`** — Every trait method takes `&self` (or `&mut self`, or `self`). This is like Python's `self`. It's the instance the method is called on.
 - **`&[Turn]`** — A *slice* reference. This is Rust's way of saying "a borrowed view into a sequence of Turns." It works with `Vec<Turn>`, arrays, or any contiguous sequence. In Python terms, it's like accepting any sequence without copying it.
 - **Default implementation** — `difficulty_name()` has a body. Types that implement `DuelAI` get this for free unless they override it. Python ABCs can do this too, but it's less common.
 
@@ -1365,7 +1356,7 @@ impl DuelAI for FirstYearAI {
         _history: &[Turn],
     ) -> SpellChoice {
         // Same logic as before, now inside the trait impl
-        let mut rng = thread_rng();
+        let mut rng = rand::rng();
 
         let affordable: Vec<usize> = own_state
             .spells
@@ -1473,11 +1464,6 @@ fn run_ai_turn<A: DuelAI>(
 ) -> SpellChoice {
     ai.choose_spell(ai_wizard, player, history)
 }
-```
-
-In TypeScript terms, this is like:
-```typescript
-function runAiTurn<A extends DuelAI>(ai: A, ...): SpellChoice { ... }
 ```
 
 The compiler knows the exact type at compile time, so it can inline the method call. **Fast, but inflexible** — you can't store different AI types in the same variable or collection.
@@ -1741,43 +1727,42 @@ mod trait_tests {
 cargo test trait
 ```
 
-### Common Mistakes
-
-**Forgetting `&self` in trait methods:**
-```rust
-// WRONG — not object-safe, and doesn't make sense as a method
-trait DuelAI {
-    fn choose_spell(wizard: &Wizard) -> SpellChoice;  // no &self!
-}
-
-// RIGHT
-trait DuelAI {
-    fn choose_spell(&self, wizard: &Wizard) -> SpellChoice;
-}
-```
-
-**Trying to use `dyn Trait` without a pointer:**
-```rust
-// WRONG — dyn DuelAI is unsized
-let ai: dyn DuelAI = FirstYearAI;
-
-// RIGHT — put it behind Box or &
-let ai: Box<dyn DuelAI> = Box::new(FirstYearAI);
-let ai_ref: &dyn DuelAI = &FirstYearAI;
-```
-
-**Returning `Self` in a trait you want to use as a trait object:**
-```rust
-// WRONG — breaks object safety
-trait DuelAI {
-    fn clone_ai(&self) -> Self;  // can't know the concrete type at runtime
-}
-
-// RIGHT — return Box<dyn DuelAI> instead
-trait DuelAI {
-    fn clone_ai(&self) -> Box<dyn DuelAI>;
-}
-```
+> [!warning] Common Mistakes
+> **Forgetting `&self` in trait methods:**
+> ```rust
+> // WRONG — not object-safe, and doesn't make sense as a method
+> trait DuelAI {
+>     fn choose_spell(wizard: &Wizard) -> SpellChoice;  // no &self!
+> }
+>
+> // RIGHT
+> trait DuelAI {
+>     fn choose_spell(&self, wizard: &Wizard) -> SpellChoice;
+> }
+> ```
+>
+> **Trying to use `dyn Trait` without a pointer:**
+> ```rust
+> // WRONG — dyn DuelAI is unsized
+> let ai: dyn DuelAI = FirstYearAI;
+>
+> // RIGHT — put it behind Box or &
+> let ai: Box<dyn DuelAI> = Box::new(FirstYearAI);
+> let ai_ref: &dyn DuelAI = &FirstYearAI;
+> ```
+>
+> **Returning `Self` in a trait you want to use as a trait object:**
+> ```rust
+> // WRONG — breaks object safety
+> trait DuelAI {
+>     fn clone_ai(&self) -> Self;  // can't know the concrete type at runtime
+> }
+>
+> // RIGHT — return Box<dyn DuelAI> instead
+> trait DuelAI {
+>     fn clone_ai(&self) -> Box<dyn DuelAI>;
+> }
+> ```
 
 ### Summary: Generics vs Trait Objects
 

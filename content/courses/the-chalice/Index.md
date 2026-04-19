@@ -117,7 +117,7 @@ Companion reference for the entire course — Rust cheat sheet, procedural gener
 
 | Component | Crate | Version |
 |-----------|-------|---------|
-| Terminal UI | ratatui + crossterm | 0.29 / 0.28 |
+| Terminal UI | ratatui + crossterm | 0.30 / 0.29 |
 | Async | tokio | 1.x |
 | Serialization | serde + serde_json | 1.x |
 | Random | rand + rand_chacha | 0.9 |

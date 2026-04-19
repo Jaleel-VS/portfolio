@@ -16,13 +16,13 @@ let x = x + 1;       // shadowing — new binding, can change type
 let x = "now a str"; // still valid — shadow with different type
 ```
 
-| Concept | Python | TypeScript | Rust |
-|---------|--------|-----------|------|
-| Immutable binding | `x = 5` (convention) | `const x = 5` | `let x = 5;` |
-| Mutable binding | `x = 5` (default) | `let x = 5` | `let mut x = 5;` |
-| Shadowing | ❌ | ❌ | `let x = x + 1;` |
-| Type annotation | `x: int = 5` | `let x: number = 5` | `let x: i32 = 5;` |
-| Constants | `X = 5` (UPPER) | `const X = 5` | `const X: i32 = 5;` |
+| Concept | Python | Rust |
+|---------|--------|------|
+| Immutable binding | `x = 5` (convention) | `let x = 5;` |
+| Mutable binding | `x = 5` (default) | `let mut x = 5;` |
+| Shadowing | ❌ | `let x = x + 1;` |
+| Type annotation | `x: int = 5` | `let x: i32 = 5;` |
+| Constants | `X = 5` (UPPER) | `const X: i32 = 5;` |
 
 ### Functions, Closures & Return Values
 
@@ -32,7 +32,7 @@ fn add(a: i32, b: i32) -> i32 {
     a + b
 }
 
-// Closure (like Python lambda / TS arrow function)
+// Closure (like Python lambda)
 let add = |a, b| a + b;
 let greet = |name: &str| -> String {
     format!("Hello, {name}")
@@ -44,10 +44,10 @@ let multiply = |x| x * factor;  // captures `factor` by reference
 let take_it = move |x| x * factor; // captures by value (moves)
 ```
 
-| Python | TypeScript | Rust |
-|--------|-----------|------|
-| `def add(a, b): return a + b` | `const add = (a, b) => a + b` | `fn add(a: i32, b: i32) -> i32 { a + b }` |
-| `lambda x: x * 2` | `(x) => x * 2` | `\|x\| x * 2` |
+| Python | Rust |
+|--------|------|
+| `def add(a, b): return a + b` | `fn add(a: i32, b: i32) -> i32 { a + b }` |
+| `lambda x: x * 2` | `\|x\| x * 2` |
 
 ### Ownership, Borrowing & Lifetimes
 
@@ -132,7 +132,7 @@ impl Request {
     }
 }
 
-// Enum (tagged union — way more powerful than Python/TS enums)
+// Enum (tagged union — way more powerful than Python enums)
 enum Status {
     Ok,                          // unit variant
     NotFound,
@@ -214,11 +214,11 @@ impl Handler for FileHandler {
 }
 ```
 
-| Python | TypeScript | Rust |
-|--------|-----------|------|
-| `class Protocol` | `interface Handler` | `trait Handler` |
-| `class Foo(Protocol)` | `class Foo implements Handler` | `impl Handler for Foo` |
-| Duck typing | Structural typing | Explicit `impl` |
+| Python | Rust |
+|--------|------|
+| `class Protocol` | `trait Handler` |
+| `class Foo(Protocol)` | `impl Handler for Foo` |
+| Duck typing | Explicit `impl` |
 
 ### Generics
 
@@ -631,7 +631,7 @@ Every concept you build by hand in this course has an AWS service equivalent. Th
 | `cargo check` | Type-check without building | `tsc --noEmit` / `mypy` |
 | `cargo clippy` | Lint (catches common mistakes) | `eslint` / `flake8` |
 | `cargo fmt` | Auto-format code | `prettier` / `black` |
-| `cargo add serde` | Add dependency | `npm install serde` / `pip install` |
+| `cargo add serde` | Add dependency | `pip install serde` |
 | `cargo doc --open` | Generate + open docs | — |
 | `cargo clean` | Remove build artifacts | `rm -rf dist/` |
 
@@ -674,21 +674,21 @@ path = "src/main.rs"
 
 ## 6. Useful Crates
 
-| Crate | Purpose | Python Equivalent | TS Equivalent |
-|-------|---------|------------------|---------------|
-| `serde` | Serialization framework (derive macros) | `dataclasses` + `json` | — |
-| `serde_json` | JSON parsing and generation | `json` | `JSON.parse/stringify` |
-| `tokio` | Async runtime (tasks, I/O, timers) | `asyncio` | Node.js event loop |
-| `rustls` | TLS implementation (pure Rust) | `ssl` | `tls` module |
-| `tokio-rustls` | Async TLS streams for tokio | `asyncio` + `ssl` | `tls.connect()` |
-| `flate2` | Gzip/deflate compression | `gzip` / `zlib` | `zlib` |
-| `rcgen` | Self-signed certificate generation | — | — |
-| `tracing` | Structured logging + spans | `logging` + `structlog` | `pino` / `winston` |
-| `tracing-subscriber` | Log output formatting | `logging.Handler` | — |
-| `clap` | CLI argument parsing (derive macros) | `argparse` / `click` | `commander` / `yargs` |
-| `bytes` | Efficient byte buffer manipulation | `bytearray` | `Buffer` |
-| `http` | HTTP types (Method, StatusCode, etc.) | — | — |
-| `percent-encoding` | URL encoding/decoding | `urllib.parse` | `encodeURIComponent` |
+| Crate | Purpose | Python Equivalent |
+|-------|---------|------------------|
+| `serde` | Serialization framework (derive macros) | `dataclasses` + `json` |
+| `serde_json` | JSON parsing and generation | `json` |
+| `tokio` | Async runtime (tasks, I/O, timers) | `asyncio` |
+| `rustls` | TLS implementation (pure Rust) | `ssl` |
+| `tokio-rustls` | Async TLS streams for tokio | `asyncio` + `ssl` |
+| `flate2` | Gzip/deflate compression | `gzip` / `zlib` |
+| `rcgen` | Self-signed certificate generation | — |
+| `tracing` | Structured logging + spans | `logging` + `structlog` |
+| `tracing-subscriber` | Log output formatting | `logging.Handler` |
+| `clap` | CLI argument parsing (derive macros) | `argparse` / `click` |
+| `bytes` | Efficient byte buffer manipulation | `bytearray` |
+| `http` | HTTP types (Method, StatusCode, etc.) | — |
+| `percent-encoding` | URL encoding/decoding | `urllib.parse` |
 
 ### Quick Examples
 

@@ -30,7 +30,7 @@ The math here is real. You'll fill in dynamic programming matrices cell by cell,
 
 Edit distance is the mathematical backbone of every spell checker, autocorrect engine, and DNA sequence aligner on the planet. This stage builds it from scratch using dynamic programming — the technique of solving a problem by breaking it into overlapping subproblems and storing their solutions in a table. You'll fill in the matrix cell by cell, trace the optimal edit path, and understand *why* the naive recursive approach explodes exponentially while the table approach runs in polynomial time.
 
-*Difficulty: Medium* | *New concepts: dynamic programming, edit distance, 2D vectors*
+*Difficulty: Medium*
 
 ### The Problem
 
@@ -242,7 +242,7 @@ let word = "información";
 
 By collecting into `Vec<char>`, each element is a full Unicode scalar value, and indexing is O(1). The cost is one allocation up front — worth it for an O(m×n) algorithm.
 
-> **Python comparison:** Python strings are sequences of Unicode code points — `s[5]` just works. JavaScript's `s[5]` also works but returns UTF-16 code units, which can split emoji. Rust makes you think about encoding explicitly, which is annoying but prevents subtle bugs with accented characters.
+> **Python comparison:** Python strings are sequences of Unicode code points — `s[5]` just works. Rust makes you think about encoding explicitly, which is annoying but prevents subtle bugs with accented characters.
 
 ### Testing
 
@@ -331,17 +331,16 @@ test levenshtein::tests::symmetry ... ok
 test levenshtein::tests::completely_different ... ok
 ```
 
-### Common Mistakes
-
-**Off-by-one in the matrix dimensions.** The matrix is (m+1) × (n+1), not m × n. Row 0 and column 0 represent the empty string prefix. If you allocate `vec![vec![0; n]; m]`, you'll panic on the base case initialization.
-
-**Forgetting to handle empty strings.** If either string is empty, the distance is the length of the other string. The base case initialization handles this, but if you skip it, `dp[0][j]` stays 0 and you get wrong answers.
-
-**Indexing strings directly.** `a.as_bytes()[i]` works for ASCII but breaks on "información" because 'ó' is 2 bytes in UTF-8. Always use `chars().collect()` for correctness with multilingual text.
-
-**Confusing row/column orientation.** In our table, rows are characters of `a` (the source) and columns are characters of `b` (the target). Swapping them gives the same answer (edit distance is symmetric) but makes the code confusing to read.
-
-The algorithm is correct and the tests pass, but the full matrix allocates O(m×n) memory — wasteful when we only ever look at two adjacent rows. Stage 15 slashes the space cost without changing the result.
+> [!warning] Common Mistakes
+> **Off-by-one in the matrix dimensions.** The matrix is (m+1) × (n+1), not m × n. Row 0 and column 0 represent the empty string prefix. If you allocate `vec![vec![0; n]; m]`, you'll panic on the base case initialization.
+>
+> **Forgetting to handle empty strings.** If either string is empty, the distance is the length of the other string. The base case initialization handles this, but if you skip it, `dp[0][j]` stays 0 and you get wrong answers.
+>
+> **Indexing strings directly.** `a.as_bytes()[i]` works for ASCII but breaks on "información" because 'ó' is 2 bytes in UTF-8. Always use `chars().collect()` for correctness with multilingual text.
+>
+> **Confusing row/column orientation.** In our table, rows are characters of `a` (the source) and columns are characters of `b` (the target). Swapping them gives the same answer (edit distance is symmetric) but makes the code confusing to read.
+>
+> The algorithm is correct and the tests pass, but the full matrix allocates O(m×n) memory — wasteful when we only ever look at two adjacent rows. Stage 15 slashes the space cost without changing the result.
 
 ### What We Built
 
@@ -355,7 +354,7 @@ Next stage: we'll cut the space from O(m×n) down to O(min(m,n)) by keeping only
 
 The full DP matrix works, but it's profligate with memory — storing an entire grid when only two rows are ever live at once. This stage teaches a fundamental optimization pattern: when a recurrence only looks back one step, you can collapse the table to a sliding window. The `std::mem::swap` trick you learn here is idiomatic Rust for zero-allocation buffer rotation, and it cuts memory from O(m×n) to O(min(m,n)).
 
-*Difficulty: Medium* | *New concepts: `std::mem::swap`, two-row DP, ensuring the shorter string is the inner loop*
+*Difficulty: Medium*
 
 ### The Insight
 
@@ -496,15 +495,14 @@ fn asymmetric_lengths() {
 }
 ```
 
-### Common Mistakes
-
-**Returning `curr[n]` instead of `prev[n]`.** After the loop's final `std::mem::swap`, the completed row is in `prev`. This is the #1 bug people hit with the two-row approach.
-
-**Forgetting `curr[0] = i + 1`.** The first cell of each row is the base case — transforming `long[0..=i]` into the empty string. If you forget this, the first column stays all zeros and every distance comes out too small.
-
-**Not handling the empty string edge case.** If `short` is empty (length 0), the loop body never executes and `prev` is still `[0]`. You'd return 0 instead of `long.len()`. The early return handles this.
-
-Same algorithm, same results, dramatically less memory. But we can do even better — right now, we always compute the full distance even when we only care whether it's ≤ 2. When the BK-tree fires thousands of distance queries per suggestion, most of them will exceed the threshold. Stage 16 adds the escape hatch: bail out early when the answer is already too large.
+> [!warning] Common Mistakes
+> **Returning `curr[n]` instead of `prev[n]`.** After the loop's final `std::mem::swap`, the completed row is in `prev`. This is the #1 bug people hit with the two-row approach.
+>
+> **Forgetting `curr[0] = i + 1`.** The first cell of each row is the base case — transforming `long[0..=i]` into the empty string. If you forget this, the first column stays all zeros and every distance comes out too small.
+>
+> **Not handling the empty string edge case.** If `short` is empty (length 0), the loop body never executes and `prev` is still `[0]`. You'd return 0 instead of `long.len()`. The early return handles this.
+>
+> Same algorithm, same results, dramatically less memory. But we can do even better — right now, we always compute the full distance even when we only care whether it's ≤ 2. When the BK-tree fires thousands of distance queries per suggestion, most of them will exceed the threshold. Stage 16 adds the escape hatch: bail out early when the answer is already too large.
 
 ### What Changed
 
@@ -518,7 +516,7 @@ But we can do even better. Right now, we always compute the full distance — ev
 
 In the BK-tree (Stage 19), we'll ask "is the distance ≤ 2?" thousands of times per suggestion lookup, and the answer is usually "no." Computing the exact distance for words that are clearly 10 edits apart is wasted work. This stage adds a threshold parameter that lets the algorithm bail out mid-computation when the minimum possible result already exceeds the bound — turning a 3-4x speedup into the difference between a responsive tool and a sluggish one.
 
-*Difficulty: Medium* | *New concepts: bounded edit distance, row minimum tracking, `Option` return for "exceeded threshold"*
+*Difficulty: Medium*
 
 ### Why This Matters
 
@@ -726,13 +724,12 @@ The speedup depends on how many pairs exceed the threshold. For distant words (m
 
 We now have three progressively optimized versions of edit distance. The bounded version is the one the BK-tree will call on its hot path. But even with fast distance computation, scanning every word in a 300,000-word dictionary is too slow. We need a data structure that prunes the search space — and that's the BK-tree, starting in Stage 17.
 
-### Common Mistakes
-
-**Using `usize` subtraction without checking.** If you try to compute `m - n` when `m < n`, you get a panic (usize underflow in debug mode, wrapping in release). Our code avoids this by always putting the shorter string in `short` — so `m >= n` is guaranteed. But if you skip the short/long swap, `m - n` will underflow for inputs like `levenshtein_bounded("elephant", "cat", 2)`.
-
-**Checking `row_min > max_distance` too eagerly.** If you check after setting `curr[0]` but before filling the rest of the row, you might bail prematurely. `curr[0] = i + 1` is always the largest value in the row (it's the "delete everything" base case). The minimum is usually somewhere in the middle. Always check after the inner loop completes.
-
-**Returning `None` when the final distance equals `max_distance`.** The threshold is inclusive — distance ≤ max_distance should return `Some`. Check `distance <= max_distance`, not `distance < max_distance`.
+> [!warning] Common Mistakes
+> **Using `usize` subtraction without checking.** If you try to compute `m - n` when `m < n`, you get a panic (usize underflow in debug mode, wrapping in release). Our code avoids this by always putting the shorter string in `short` — so `m >= n` is guaranteed. But if you skip the short/long swap, `m - n` will underflow for inputs like `levenshtein_bounded("elephant", "cat", 2)`.
+>
+> **Checking `row_min > max_distance` too eagerly.** If you check after setting `curr[0]` but before filling the rest of the row, you might bail prematurely. `curr[0] = i + 1` is always the largest value in the row (it's the "delete everything" base case). The minimum is usually somewhere in the middle. Always check after the inner loop completes.
+>
+> **Returning `None` when the final distance equals `max_distance`.** The threshold is inclusive — distance ≤ max_distance should return `Some`. Check `distance <= max_distance`, not `distance < max_distance`.
 
 ### What We Built
 
@@ -752,7 +749,7 @@ The bounded version is what the BK-tree will call. Now we need a data structure 
 
 Linear scan is the brute-force approach to fuzzy search: compare the query against every word in the dictionary. It works, but at 300,000 comparisons per query, it's too slow for interactive use. The BK-tree exploits a deep mathematical property — the triangle inequality of edit distance — to skip entire branches of the search space. This stage defines the node structure; the next two stages add insertion and the search algorithm that makes it all worthwhile.
 
-*Difficulty: Easy* | *New concepts: BK-tree structure, triangle inequality, `HashMap<usize, T>` as sparse children*
+*Difficulty: Easy*
 
 ### The Problem with Linear Scan
 
@@ -889,7 +886,7 @@ pub mod bktree;
 
 Edit distances are sparse. A node might have children at distances 1, 3, and 7 — but not 0, 2, 4, 5, 6. A `Vec` would waste space on empty slots (and you'd need `Option<BKNode>` for each). A `HashMap` stores only the distances that actually have children.
 
-> **Python comparison:** In Python you'd use `dict[int, BKNode]` — same idea. In TypeScript, `Map<number, BKNode>`. Rust's `HashMap<usize, BKNode>` is the direct equivalent.
+> **Python comparison:** In Python you'd use `dict[int, BKNode]` — same idea. Rust's `HashMap<usize, BKNode>` is the direct equivalent.
 
 ### Why `usize` for Distance Keys?
 
@@ -941,13 +938,12 @@ mod tests {
 cargo test -p lexicon --lib bktree
 ```
 
-### Common Mistakes
-
-**Using `Box<BKNode>` for children values.** You might think you need `HashMap<usize, Box<BKNode>>` because the node is recursive (a node contains nodes). But `HashMap` already stores values on the heap — each entry is heap-allocated internally. Adding `Box` would be a double indirection. `HashMap<usize, BKNode>` is correct and sufficient.
-
-**Trying to derive `Clone` or `Copy`.** `BKNode` contains a `HashMap` and a `String`, neither of which is `Copy`. You can derive `Clone` if you need it, but cloning a BK-tree is expensive (deep copy of the entire tree). For our use case, we'll build the tree once and query it many times — no cloning needed.
-
-The skeleton is in place — a node type and a tree wrapper. But an empty tree is as useful as an empty dictionary. Stage 18 teaches the tree to grow by inserting words, one edit-distance edge at a time.
+> [!warning] Common Mistakes
+> **Using `Box<BKNode>` for children values.** You might think you need `HashMap<usize, Box<BKNode>>` because the node is recursive (a node contains nodes). But `HashMap` already stores values on the heap — each entry is heap-allocated internally. Adding `Box` would be a double indirection. `HashMap<usize, BKNode>` is correct and sufficient.
+>
+> **Trying to derive `Clone` or `Copy`.** `BKNode` contains a `HashMap` and a `String`, neither of which is `Copy`. You can derive `Clone` if you need it, but cloning a BK-tree is expensive (deep copy of the entire tree). For our use case, we'll build the tree once and query it many times — no cloning needed.
+>
+> The skeleton is in place — a node type and a tree wrapper. But an empty tree is as useful as an empty dictionary. Stage 18 teaches the tree to grow by inserting words, one edit-distance edge at a time.
 
 ### What We Built
 
@@ -959,7 +955,7 @@ The skeleton of a BK-tree: a node type and a tree wrapper. No logic yet — just
 
 A tree without insertion is just a type definition. This stage populates the BK-tree from a dictionary, building the distance-indexed structure that search will later exploit. The recursive insertion algorithm is elegant — compute the distance, follow the edge if it exists, create a new leaf if it doesn't — and it naturally handles collisions by pushing words deeper into the tree.
 
-*Difficulty: Medium* | *New concepts: recursive insertion, building a tree from a dictionary, `&mut self` recursion*
+*Difficulty: Medium*
 
 ### The Algorithm
 
@@ -1221,15 +1217,14 @@ mod tests {
 cargo test -p lexicon --lib bktree
 ```
 
-### Common Mistakes
-
-**Forgetting to handle distance 0 (duplicate words).** If you insert "recibir" twice, the second insertion computes distance 0 to the root. If you try to add a child at distance 0, you'd overwrite the root's "self-child" — which makes no sense. The `if d == 0 { return; }` guard handles this.
-
-**Stack overflow on deeply unbalanced trees.** If you insert words in sorted order (e.g., "a", "aa", "aaa", "aaaa"...), each word might be distance 1 from the previous, creating a chain. For 300k words this could overflow the stack. In practice, natural language dictionaries have enough variety that this doesn't happen. If it did, you'd convert the recursion to an iterative loop with an explicit stack — but we won't need to.
-
-**Confusing insertion order with tree correctness.** The first word inserted becomes the root. Different insertion orders produce different tree shapes. But search correctness doesn't depend on the shape — the triangle inequality holds regardless. A well-balanced tree is faster to search, but even a lopsided tree gives correct results.
-
-The BK-tree is populated and ready. Now comes the payoff: the search algorithm that uses the triangle inequality to visit only a fraction of the tree. Stage 19 is where the 93% pruning happens.
+> [!warning] Common Mistakes
+> **Forgetting to handle distance 0 (duplicate words).** If you insert "recibir" twice, the second insertion computes distance 0 to the root. If you try to add a child at distance 0, you'd overwrite the root's "self-child" — which makes no sense. The `if d == 0 { return; }` guard handles this.
+>
+> **Stack overflow on deeply unbalanced trees.** If you insert words in sorted order (e.g., "a", "aa", "aaa", "aaaa"...), each word might be distance 1 from the previous, creating a chain. For 300k words this could overflow the stack. In practice, natural language dictionaries have enough variety that this doesn't happen. If it did, you'd convert the recursion to an iterative loop with an explicit stack — but we won't need to.
+>
+> **Confusing insertion order with tree correctness.** The first word inserted becomes the root. Different insertion orders produce different tree shapes. But search correctness doesn't depend on the shape — the triangle inequality holds regardless. A well-balanced tree is faster to search, but even a lopsided tree gives correct results.
+>
+> The BK-tree is populated and ready. Now comes the payoff: the search algorithm that uses the triangle inequality to visit only a fraction of the tree. Stage 19 is where the 93% pruning happens.
 
 ### What We Built
 
@@ -1241,7 +1236,7 @@ A BK-tree that can be populated from a dictionary. The tree organizes words by t
 
 This is the stage where the mathematical investment pays off. The triangle inequality — that abstract property you proved in Stage 17 — becomes a concrete pruning rule: only visit children whose edge distance falls within a computable range. The result is a search that touches ~7% of a 300,000-node tree instead of 100%, turning a 300ms linear scan into a 6ms tree traversal. This is the algorithm that makes interactive spell checking possible.
 
-*Difficulty: Hard* | *New concepts: triangle inequality pruning, range iteration with `usize` underflow protection, recursive search with result accumulation*
+*Difficulty: Hard*
 
 ### The Algorithm
 
@@ -1409,7 +1404,7 @@ let low = d - max; // PANIC! 1 - 2 underflows
 let low = d.saturating_sub(max); // 0, not panic
 ```
 
-> **Python comparison:** Python integers can be negative, so `d - max_distance` just works. In TypeScript, `d - maxDistance` gives a negative number, which is fine for comparison. Rust's unsigned integers force you to handle this explicitly — annoying, but it prevents a class of bugs where negative indices silently wrap around.
+> **Python comparison:** Python integers can be negative, so `d - max_distance` just works. Rust's unsigned integers force you to handle this explicitly — annoying, but it prevents a class of bugs where negative indices silently wrap around.
 
 ### Using `levenshtein_bounded` for Extra Speed
 
@@ -1571,25 +1566,24 @@ Wait — that test revealed something important! "teh" → "the" is actually dis
 
 This is a real gotcha. Many people assume "teh" → "the" is distance 1 because it "looks like" a transposition. But standard Levenshtein only has insert, delete, and substitute. Transpositions cost 2 (two substitutions). Keep this in mind when setting `max_distance` — you might need distance 2 to catch common transposition typos.
 
-### Common Mistakes
-
-**`usize` underflow in the range calculation.** This is the #1 bug. If `d = 0` and `max_distance = 2`, then `d - max_distance` underflows. Always use `d.saturating_sub(max_distance)`. If you see a panic like "attempt to subtract with overflow," this is why.
-
-**Iterating over a fixed range instead of HashMap keys.** You might write:
-
-```rust
-for child_dist in low..=high {
-    if let Some(child) = self.children.get(&child_dist) {
-        // ...
-    }
-}
-```
-
-This works but is wasteful when the range is large and the HashMap is sparse. If `d = 5` and `max_distance = 2`, you iterate over [3, 4, 5, 6, 7] and do 5 HashMap lookups. With our approach (iterating over `self.children` and filtering), we only touch children that actually exist. For small trees it doesn't matter, but for nodes with few children and large ranges, iterating the HashMap is faster.
-
-**Forgetting that search results are unordered.** The BK-tree returns results in traversal order, which depends on HashMap iteration order (effectively random). Don't assume results are sorted by distance. We'll add ranking in Stage 20.
-
-The BK-tree can now find all words within a given edit distance of a query, visiting only a fraction of the tree. But the results come back as an unranked bag — "recibir" (distance 1, frequency 500) and some obscure word (distance 2, frequency 3) are treated equally. Stage 20 adds the ranking that turns raw results into useful suggestions.
+> [!warning] Common Mistakes
+> **`usize` underflow in the range calculation.** This is the #1 bug. If `d = 0` and `max_distance = 2`, then `d - max_distance` underflows. Always use `d.saturating_sub(max_distance)`. If you see a panic like "attempt to subtract with overflow," this is why.
+>
+> **Iterating over a fixed range instead of HashMap keys.** You might write:
+>
+> ```rust
+> for child_dist in low..=high {
+>     if let Some(child) = self.children.get(&child_dist) {
+>         // ...
+>     }
+> }
+> ```
+>
+> This works but is wasteful when the range is large and the HashMap is sparse. If `d = 5` and `max_distance = 2`, you iterate over [3, 4, 5, 6, 7] and do 5 HashMap lookups. With our approach (iterating over `self.children` and filtering), we only touch children that actually exist. For small trees it doesn't matter, but for nodes with few children and large ranges, iterating the HashMap is faster.
+>
+> **Forgetting that search results are unordered.** The BK-tree returns results in traversal order, which depends on HashMap iteration order (effectively random). Don't assume results are sorted by distance. We'll add ranking in Stage 20.
+>
+> The BK-tree can now find all words within a given edit distance of a query, visiting only a fraction of the tree. But the results come back as an unranked bag — "recibir" (distance 1, frequency 500) and some obscure word (distance 2, frequency 3) are treated equally. Stage 20 adds the ranking that turns raw results into useful suggestions.
 
 ### What We Built
 
@@ -1603,7 +1597,7 @@ But the results come back unranked. "recibir" (distance 1, frequency 500) and so
 
 A spell checker that returns suggestions in random order is like a dictionary with shuffled pages — technically complete, practically useless. Ranking transforms a bag of candidates into a prioritized list where the most likely correction appears first. This stage introduces multi-key sorting in Rust, the `.then()` combinator for chaining comparison criteria, and the design decision of why distance trumps frequency.
 
-*Difficulty: Medium* | *New concepts: multi-key sorting, `Ord` for custom types, `Reverse`, putting it all together*
+*Difficulty: Medium*
 
 ### The Problem
 
@@ -1645,12 +1639,6 @@ The `.then()` method on `Ordering` is elegant — it says "if the first comparis
 > results.sort(key=lambda r: (r.distance, -r.frequency))
 > ```
 > The negative frequency trick works because Python sorts tuples lexicographically. Rust's `.then()` is the equivalent — and it doesn't require negating unsigned integers (which you can't do with `usize`).
-
-> **TypeScript comparison:**
-> ```typescript
-> results.sort((a, b) => a.distance - b.distance || b.frequency - a.frequency);
-> ```
-> The `||` trick works because `0` is falsy in JS. Rust's `.then()` is the type-safe equivalent.
 
 ### The Implementation
 
@@ -1875,13 +1863,12 @@ Suggestions for 'definately':
 
 Notice "the" at distance 2 ranks below "ten" at distance 1, even though "the" is 22x more common. Distance dominates. This is usually the right call — if someone typed "teh", they almost certainly meant a 3-letter word, not a word that requires two edits.
 
-### Common Mistakes
-
-**Sorting by frequency alone.** If you ignore distance, "the" (the most common English word) would be suggested for almost every misspelling. Distance must be the primary sort key.
-
-**Forgetting that `sort_by` is ascending by default.** For frequency, we want descending (higher is better). The trick is swapping `a` and `b`: `b.frequency.cmp(&a.frequency)` sorts descending. If you write `a.frequency.cmp(&b.frequency)`, rare words come first.
-
-**Not handling the "no results" case.** If the query is so mangled that nothing is within `max_distance`, `suggest()` returns an empty vector. The caller should handle this gracefully — "no suggestions found" is a valid outcome.
+> [!warning] Common Mistakes
+> **Sorting by frequency alone.** If you ignore distance, "the" (the most common English word) would be suggested for almost every misspelling. Distance must be the primary sort key.
+>
+> **Forgetting that `sort_by` is ascending by default.** For frequency, we want descending (higher is better). The trick is swapping `a` and `b`: `b.frequency.cmp(&a.frequency)` sorts descending. If you write `a.frequency.cmp(&b.frequency)`, rare words come first.
+>
+> **Not handling the "no results" case.** If the query is so mangled that nothing is within `max_distance`, `suggest()` returns an empty vector. The caller should handle this gracefully — "no suggestions found" is a valid outcome.
 
 ### The Full `bktree.rs`
 

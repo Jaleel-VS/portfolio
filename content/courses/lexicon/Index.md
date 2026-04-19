@@ -79,6 +79,6 @@ Build a CLI spell checker from scratch in Rust. Hand-built data structures, mult
 
 - **32 stages** across 5 acts
 - **Estimated total:** ~23 hours
-- **Difficulty breakdown:** 6 Very Easy/Easy, 19 Medium, 4 Hard, 3 Very Easy
-- **Prerequisites:** Python or TypeScript experience, no Rust required
+- **Difficulty breakdown:** 1 Very Easy, 9 Easy, 18 Medium, 4 Hard
+- **Prerequisites:** Python experience, no Rust required
 - **Output:** A working multi-language CLI spell checker with hand-built data structures

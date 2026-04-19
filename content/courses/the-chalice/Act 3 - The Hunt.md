@@ -19,7 +19,8 @@ By the end of this act, your dungeon will be alive with enemies that patrol corr
 
 ## Stage 17 — The Enemy
 
-**Difficulty:** Easy | **Concepts:** Enums as state machines, struct composition, the `match` expression
+*Difficulty: Easy*
+
 
 > *"Know your enemy. Each beast has a rhythm, a pattern. Learn it, or die to it."*
 
@@ -178,19 +179,7 @@ pub enum AiState {
 }
 ```
 
-Notice how `Patrol` carries data — the waypoint list and current index. This is an *enum with associated data*, something Python and TypeScript can't do natively. In Python you'd need a separate class or a dictionary. In Rust, the data lives right inside the enum variant.
-
-> **TypeScript comparison:**
-> ```typescript
-> // TypeScript — discriminated union (closest equivalent)
-> type AiState =
->   | { kind: 'idle' }
->   | { kind: 'patrol'; waypoints: [number, number][]; current: number }
->   | { kind: 'alert' }
->   | { kind: 'attack' }
->   | { kind: 'recover' };
-> ```
-> Rust's version is more concise and the compiler enforces exhaustive matching.
+Notice how `Patrol` carries data — the waypoint list and current index. This is an *enum with associated data*, something Python can't do natively. In Python you'd need a separate class or a dictionary. In Rust, the data lives right inside the enum variant.
 
 The state transitions:
 
@@ -342,23 +331,30 @@ The compiler guarantees:
 
 This is why Rust enums are the single best feature for game development.
 
-### Stage 17 Checkpoint
-
-The enemy system is defined:
-
-- 9 enemy types with unique stats, glyphs, weaknesses, and attack counts
-- AI state machine: Idle → Patrol → Alert → Attack → Recover
-- Backstab detection based on enemy facing direction
-- Shorthand constructors for common enemy types
-- State-specific data (patrol waypoints) lives inside the enum variant
-
-The enemies exist. They have bodies and brains — but the brains are empty. Next, we teach them to think, to hunt, to close the distance between themselves and the `@` that dares walk their halls.
+> [!check] Checkpoint
+> The enemy system is defined:
+>
+> - 9 enemy types with unique stats, glyphs, weaknesses, and attack counts
+> - AI state machine: Idle → Patrol → Alert → Attack → Recover
+> - Backstab detection based on enemy facing direction
+> - Shorthand constructors for common enemy types
+> - State-specific data (patrol waypoints) lives inside the enum variant
+>
+> The enemies exist. They have bodies and brains — but the brains are empty. Next, we teach them to think, to hunt, to close the distance between themselves and the `@` that dares walk their halls.
 
 ---
 
 ## Stage 18 — Enemy AI
 
-**Difficulty:** Medium | **Concepts:** BFS pathfinding, line-of-sight, state transitions, different behaviors per type
+*Difficulty: Medium*
+
+> [!tip] What You'll Learn
+> - Vec
+> - from
+> - goal
+> - dict
+> - start
+
 
 > *"The Husk shambles. The Beast charges. The Watcher waits. Each has a pattern — learn it, or be consumed."*
 
@@ -920,26 +916,26 @@ for (i, new_pos) in moves {
 
 This "collect then apply" pattern is fundamental to Rust game development. You'll use it constantly.
 
-### Stage 18 Checkpoint
-
-Enemies now have brains:
-
-- **Husks** shamble toward the player using BFS pathfinding
-- **Beasts** charge in straight lines, 2 tiles per turn
-- **Watchers** patrol waypoints and alert the room when they spot the player
-- **Crossbow Hollows** stay at range and flee when the player gets close
-- **Bell Maidens** stay stationary (summoning comes next)
-- AI state machine transitions: Idle → Alert → Attack → Recover
-- Line-of-sight detection for Watcher spotting
-- Room-wide alert when a Watcher spots the player
-
-The enemies move with purpose. But one enemy type is conspicuously passive — the Bell Maiden stands still, doing nothing. That changes next, when she begins to ring her bell and fill the room with the dead.
+> [!check] Checkpoint
+> Enemies now have brains:
+>
+> - **Husks** shamble toward the player using BFS pathfinding
+> - **Beasts** charge in straight lines, 2 tiles per turn
+> - **Watchers** patrol waypoints and alert the room when they spot the player
+> - **Crossbow Hollows** stay at range and flee when the player gets close
+> - **Bell Maidens** stay stationary (summoning comes next)
+> - AI state machine transitions: Idle → Alert → Attack → Recover
+> - Line-of-sight detection for Watcher spotting
+> - Room-wide alert when a Watcher spots the player
+>
+> The enemies move with purpose. But one enemy type is conspicuously passive — the Bell Maiden stands still, doing nothing. That changes next, when she begins to ring her bell and fill the room with the dead.
 
 ---
 
 ## Stage 19 — The Bell Maiden
 
-**Difficulty:** Medium | **Concepts:** Spawning entities, priority targeting, interruptible actions
+*Difficulty: Medium*
+
 
 > *"The bell tolls. From the shadows, more Husks emerge. Silence the bell, or drown in the dead."*
 
@@ -1118,24 +1114,24 @@ if let Some(maiden_pos) = state.active_bell_maiden() {
 }
 ```
 
-### Stage 19 Checkpoint
-
-The Bell Maiden creates emergent tactical pressure:
-
-- Summons 1 Husk per turn at a random adjacent tile
-- Summoned Husks are immediately aggressive (Alert state)
-- Interruptible by heavy attacks (stagger prevents summoning)
-- Stationary — the player must close distance to kill her
-- Priority target indicator in the HUD
-- Summoning stops when all adjacent tiles are occupied
-
-The room fills with the dead. The bell tolls. Act fast. With enemies that move, fight, and summon, we now have a combat system complex enough to need formal structure — a turn resolver that processes everything in the right order and prevents the chaos of ad-hoc resolution.
+> [!check] Checkpoint
+> The Bell Maiden creates emergent tactical pressure:
+>
+> - Summons 1 Husk per turn at a random adjacent tile
+> - Summoned Husks are immediately aggressive (Alert state)
+> - Interruptible by heavy attacks (stagger prevents summoning)
+> - Stationary — the player must close distance to kill her
+> - Priority target indicator in the HUD
+> - Summoning stops when all adjacent tiles are occupied
+>
+> The room fills with the dead. The bell tolls. Act fast. With enemies that move, fight, and summon, we now have a combat system complex enough to need formal structure — a turn resolver that processes everything in the right order and prevents the chaos of ad-hoc resolution.
 
 ---
 
 ## Stage 20 — Combat Flow
 
-**Difficulty:** Hard | **Concepts:** Turn resolution order, status effects, death processing, system composition
+*Difficulty: Hard*
+
 
 > *"The hunt is not a duel. It is a storm of steel and blood, where every action ripples outward."*
 
@@ -1513,24 +1509,24 @@ fn render_combat_log(frame: &mut Frame, messages: &[String], area: Rect) {
 }
 ```
 
-### Stage 20 Checkpoint
-
-The combat system is now formally structured:
-
-- **Turn resolution order:** Player → Enemies → Status Effects → Deaths → Cleanup
-- **Heavy attack exception:** Enemies act first on heavy attack turns
-- **Status effects:** Poison (damage over time), Fire Paper (bonus damage), Cursed (double damage taken)
-- **Death processing:** Echoes awarded, dead enemies removed, player death screen
-- **Combat log:** Color-coded messages for damage, rally, loot, and status effects
-- **Clean game loop:** All complexity in `resolve_turn`, loop is just draw → input → resolve
-
-The system composes. Each piece (stamina, rally, stagger, status effects) works independently but creates emergent depth together. Now that combat is formally resolved, we can add environmental hazards that interact with the same system — traps that deal damage, inflict status effects, and punish the careless.
+> [!check] Checkpoint
+> The combat system is now formally structured:
+>
+> - **Turn resolution order:** Player → Enemies → Status Effects → Deaths → Cleanup
+> - **Heavy attack exception:** Enemies act first on heavy attack turns
+> - **Status effects:** Poison (damage over time), Fire Paper (bonus damage), Cursed (double damage taken)
+> - **Death processing:** Echoes awarded, dead enemies removed, player death screen
+> - **Combat log:** Color-coded messages for damage, rally, loot, and status effects
+> - **Clean game loop:** All complexity in `resolve_turn`, loop is just draw → input → resolve
+>
+> The system composes. Each piece (stamina, rally, stagger, status effects) works independently but creates emergent depth together. Now that combat is formally resolved, we can add environmental hazards that interact with the same system — traps that deal damage, inflict status effects, and punish the careless.
 
 ---
 
 ## Stage 21 — Traps
 
-**Difficulty:** Medium | **Concepts:** Tile interaction, triggered events, insight-based visibility, the Mimic pattern
+*Difficulty: Medium*
+
 
 > *"The floor gives way. The air turns green. A chest grins with teeth. Trust nothing in the labyrinth."*
 
@@ -1799,26 +1795,26 @@ PlayerAction::Move(dir) => {
 }
 ```
 
-### Stage 21 Checkpoint
-
-The dungeon is now dangerous even without enemies:
-
-- **Spike pits:** 15 instant damage
-- **Poison clouds:** 5 damage/turn for 3 turns (status effect)
-- **Bell traps:** alert all enemies on the floor
-- **Collapsing floors:** 25 damage + fall to next floor
-- **Mimics:** spawn a Mimic enemy that attacks twice on reveal
-- **Insight visibility:** high insight reveals traps before triggering
-- **Trap detection reward:** +2 insight for spotting a trap
-- Traps are invisible at low insight, visible at high insight
-
-Traps reward insight, and insight rewards exploration — but what *is* insight, exactly? How does it grow, what does it cost, and what happens when you have too much of it? That's the final piece of Act 3's puzzle.
+> [!check] Checkpoint
+> The dungeon is now dangerous even without enemies:
+>
+> - **Spike pits:** 15 instant damage
+> - **Poison clouds:** 5 damage/turn for 3 turns (status effect)
+> - **Bell traps:** alert all enemies on the floor
+> - **Collapsing floors:** 25 damage + fall to next floor
+> - **Mimics:** spawn a Mimic enemy that attacks twice on reveal
+> - **Insight visibility:** high insight reveals traps before triggering
+> - **Trap detection reward:** +2 insight for spotting a trap
+> - Traps are invisible at low insight, visible at high insight
+>
+> Traps reward insight, and insight rewards exploration — but what *is* insight, exactly? How does it grow, what does it cost, and what happens when you have too much of it? That's the final piece of Act 3's puzzle.
 
 ---
 
 ## Stage 22 — The Insight Mechanic
 
-**Difficulty:** Medium | **Concepts:** Threshold-based game mutations, dynamic difficulty, resource spending, enum-driven world state
+*Difficulty: Medium*
+
 
 > *"Eyes on the inside... grant us eyes, grant us eyes. Plant eyes on our brains, to cleanse our beastly idiocy."*
 
@@ -2267,17 +2263,16 @@ The player controls their own difficulty curve. A cautious player spends insight
 
 The Sedative item (reduces insight by 10) is an emergency brake. If the dungeon gets too dangerous, the player can voluntarily reduce their insight. But they lose the loot bonus.
 
-### Stage 22 Checkpoint
-
-The insight system is complete:
-
-- **Insight sources:** room discovery (+1), trap detection (+2), boss kills (+5), death (-10), floor descent (-1)
-- **Five tiers:** Normal → Unsettling → Frenzied → Eldritch → Ascended
-- **Dungeon mutations:** ambient text, Madman spawns, corridor shifts, double bosses
-- **Altar spending:** 6 effects from 5 to 25 insight cost
-- **Trap visibility:** insight determines which traps you can see
-- **Sedative:** voluntary insight reduction (emergency difficulty decrease)
-- **HUD indicator:** color-coded insight tier with description
+> [!check] Checkpoint
+> The insight system is complete:
+>
+> - **Insight sources:** room discovery (+1), trap detection (+2), boss kills (+5), death (-10), floor descent (-1)
+> - **Five tiers:** Normal → Unsettling → Frenzied → Eldritch → Ascended
+> - **Dungeon mutations:** ambient text, Madman spawns, corridor shifts, double bosses
+> - **Altar spending:** 6 effects from 5 to 25 insight cost
+> - **Trap visibility:** insight determines which traps you can see
+> - **Sedative:** voluntary insight reduction (emergency difficulty decrease)
+> - **HUD indicator:** color-coded insight tier with description
 
 ---
 

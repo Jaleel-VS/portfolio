@@ -15,7 +15,7 @@ flowchart LR
     style S8 fill:#a4e,stroke:#333
 ```
 
-**Prerequisites:** Rust installed (`rustup`), a terminal, a text editor. No Rust experience needed — Python or TypeScript experience is enough.
+**Prerequisites:** Rust installed (`rustup`), a terminal, a text editor. No Rust experience needed — Python experience is enough.
 
 **Project location:** `~/juk/cronica/` — already initialised with `cargo new`.
 
@@ -39,14 +39,12 @@ When you run `cargo new cronica`, Cargo creates this:
 
 ```
 cronica/
-├── Cargo.toml    ← project metadata + dependencies (like package.json / pyproject.toml)
+├── Cargo.toml    ← project metadata + dependencies (like pyproject.toml)
 └── src/
     └── main.rs   ← your code starts here
 ```
 
 **Python comparison:** `Cargo.toml` is like `pyproject.toml`. `cargo run` is like `python main.py` except it *compiles* first — if there's a typo, you'll know before the program runs.
-
-**TypeScript comparison:** `Cargo.toml` ≈ `package.json`. `cargo run` ≈ `npx ts-node main.ts`, but the compiler is stricter than TypeScript's.
 
 ### Your first code
 
@@ -63,7 +61,7 @@ Line by line:
 | Code | What it does |
 |------|-------------|
 | `fn main()` | Declares the main function — every Rust program starts here. `fn` = "function". |
-| `{` ... `}` | Curly braces wrap the function body — same as Python's indent, same as JS/TS braces. |
+| `{` ... `}` | Curly braces wrap the function body — unlike Python's indentation, Rust uses explicit braces. |
 | `println!("...")` | Prints text + a newline. The `!` means it's a **macro**, not a regular function. For now, just think of it as "print with superpowers". |
 | `;` | Statements end with semicolons. Forget one and the compiler will tell you. |
 
@@ -133,11 +131,11 @@ struct Character {
 
 **What's new here:**
 
-| Rust | Python equivalent | TypeScript equivalent |
-|------|-------------------|----------------------|
-| `struct Character { ... }` | `@dataclass class Character:` | `interface Character { ... }` |
-| `name: String` | `name: str` | `name: string` |
-| `might: i32` | `might: int` | `might: number` |
+| Rust | Python equivalent |
+|------|-------------------|
+| `struct Character { ... }` | `@dataclass class Character:` |
+| `name: String` | `name: str` |
+| `might: i32` | `might: int` |
 
 `String` is an *owned* string — the struct owns that piece of text. `i32` is a 32-bit signed integer (plenty for RPG stats). We'll explain ownership more in Stage 6.
 
@@ -189,7 +187,7 @@ Key concepts:
 
 - `fn new(...) -> Character` — an *associated function* (like `__init__` in Python or a constructor in TS). It returns a `Character`. Rust has no `new` keyword — `new` is just a convention.
 - `&self` — a *reference* to the struct. Methods that read but don't modify take `&self`. Think of it as `self` in Python, but the `&` means "I'm borrowing, not consuming."
-- `let` — declares a variable. Variables are **immutable by default** (unlike Python/JS where everything is mutable).
+- `let` — declares a variable. Variables are **immutable by default** (unlike Python where everything is mutable).
 - `///` — a doc comment. Regular comments use `//`.
 
 ### Putting it together
@@ -253,7 +251,7 @@ fn main() {
 ```
 
 > [!warning] Common Mistake
-> **`"Kael"` vs `"Kael".to_string()`** — String literals in Rust are `&str` (a borrowed slice), but our struct wants an owned `String`. You must convert with `.to_string()` or `String::from("Kael")`. In Python/TS, strings are just strings — Rust distinguishes between borrowed and owned data.
+> **`"Kael"` vs `"Kael".to_string()`** — String literals in Rust are `&str` (a borrowed slice), but our struct wants an owned `String`. You must convert with `.to_string()` or `String::from("Kael")`. In Python, strings are just strings — Rust distinguishes between borrowed and owned data.
 
 ### Run it
 
@@ -289,13 +287,13 @@ A hero without a homeland is a wanderer without purpose. Right now our character
 > - **Enums** — a type that can be one of several variants
 > - `match` — Rust's powerful pattern matching (like switch on steroids)
 > - Implementing `Display` so enums print nicely
-> - How enums differ from Python/TS string unions
+> - How enums differ from Python string unions
 
 ### The Realm enum
 
 Right now we have a character with stats, but no world for them to inhabit. We need a type that represents the distinct realms — and guarantees at compile time that no one can accidentally create a quest in "Sombrahiem" (note the typo). We need an enum.
 
-Crónica's world has five realms, each with a distinct tone. In Python you might use string literals (`"Sombraheim"`); in TypeScript, a union type (`type Realm = "Sombraheim" | ...`). Rust uses enums — and the compiler guarantees you handle every variant.
+Crónica's world has five realms, each with a distinct tone. In Python you might use string literals (`"Sombraheim"`). Rust uses enums — and the compiler guarantees you handle every variant.
 
 Add this **above** the `Character` struct in `src/main.rs`:
 
@@ -348,7 +346,7 @@ impl Realm {
 **Key concepts:**
 
 - `enum Realm { ... }` — defines a type with exactly five possible values. Unlike Python strings, you can't accidentally type `"Sombrahiem"` — the compiler catches it.
-- `match self { ... }` — like `switch` in JS/TS or `match` in Python 3.10+, but Rust's `match` is **exhaustive**: if you forget a variant, the code won't compile.
+- `match self { ... }` — like `match` in Python 3.10+, but Rust's `match` is **exhaustive**: if you forget a variant, the code won't compile.
 - `impl fmt::Display` — tells Rust how to convert `Realm` to a string when you use `{}` in `println!`. Python's equivalent is `__str__`.
 - `&str` — a borrowed string slice. Since these descriptions are hardcoded, we return references to string literals (which live forever).
 
@@ -380,7 +378,7 @@ Realm: Ironlands
 ```
 
 > [!warning] Common Mistake
-> **Non-exhaustive match.** If you add a sixth realm variant later but forget to update a `match`, the compiler will refuse to build. This is a *feature* — it prevents bugs that Python/TS would only catch at runtime.
+> **Non-exhaustive match.** If you add a sixth realm variant later but forget to update a `match`, the compiler will refuse to build. This is a *feature* — it prevents bugs that Python would only catch at runtime.
 
 We have heroes and realms now, but no way to test their mettle — no randomness, no uncertainty, no risk. Next stage, we'll add the dice that decide fate.
 
@@ -408,10 +406,10 @@ Open `~/juk/cronica/Cargo.toml` and uncomment the rand line:
 ```toml
 [dependencies]
 # Stage 4: Rolling the Dice
-rand = "0.8"
+rand = "0.9"
 ```
 
-Next `cargo run` will download and compile `rand` automatically — like `npm install` but triggered by the build.
+Next `cargo run` will download and compile `rand` automatically — like `pip install` but triggered by the build.
 
 ### The dice functions
 
@@ -421,7 +419,7 @@ Add these functions below your `Realm` impl block, above `main()`:
 use rand::Rng;
 
 fn roll_d20() -> i32 {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
     rng.gen_range(1..=20)
 }
 
@@ -498,7 +496,7 @@ Rolling a d20 is meaningless without context — is this a Might check or a Char
 > - Enums that **carry data** (Rust's killer feature)
 > - The three-tier DC system from the game spec
 > - Returning structured results from functions
-> - How Rust enums compare to tagged unions in TypeScript
+> - How Rust enums compare to Python's `Enum` type
 
 ### The DC system (spec v0.3)
 
@@ -606,7 +604,7 @@ impl Challenge {
 
 **New concepts:**
 
-- `Option<CheckResult>` — Rust's way of saying "maybe a result, maybe nothing." `Some(value)` = got a result, `None` = nothing. This replaces `null`/`None` in Python/TS but is **type-safe** — you can't accidentally use a `None` as if it were a `CheckResult`.
+- `Option<CheckResult>` — Rust's way of saying "maybe a result, maybe nothing." `Some(value)` = got a result, `None` = nothing. This replaces `None` in Python but is **type-safe** — you can't accidentally use a `None` as if it were a `CheckResult`.
 - `&self` and `&Stat` — we're borrowing, not consuming. The challenge and stat still exist after the function call.
 - `{:+}` in the format string — prints the sign (`+3` or `-2`).
 
@@ -865,7 +863,7 @@ struct Character {
 }
 ```
 
-That's it. Two words — `Serialize, Deserialize` — and Rust generates all the JSON conversion code at compile time. In Python you'd write a `to_dict()` method or use `dataclasses.asdict()`. In TypeScript you'd need a library like `zod` or manual parsing.
+That's it. Two words — `Serialize, Deserialize` — and Rust generates all the JSON conversion code at compile time. In Python you'd write a `to_dict()` method or use `dataclasses.asdict()`.
 
 ### Save and load functions
 

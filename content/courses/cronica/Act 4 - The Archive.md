@@ -19,7 +19,7 @@ flowchart LR
 
 ## Stage 23 — SQLite Setup
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Every hero created in Act 3 lives only in memory — restart the bot and they're gone, as if they never existed. Two players acting simultaneously could corrupt a JSON file. We need a real database: atomic writes, indexed queries, and transactions, all without the overhead of running a separate server. This stage introduces SQLite through `rusqlite` and confronts the `Send`/`Sync` puzzle that every async Rust database integration must solve.
 
@@ -201,7 +201,7 @@ The database schema is forged and the tables stand ready, but they're empty — 
 
 ## Stage 24 — CRUD Operations
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Tables exist but they're empty vaults — we have no way to save a character, load one back, or record a quest turn from Rust code. We need a typed database layer that encapsulates every SQL operation behind safe Rust methods, replacing the fragile JSON file persistence from Act 1. This stage builds the `Repo` struct that becomes the backbone of every command in the bot.
 
@@ -432,7 +432,7 @@ Characters persist, quests record, and turns are logged — but errors are still
 
 ## Stage 25 — Error Handling
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Right now, errors are a minefield of `.unwrap()` calls and raw `Box<dyn Error>` types — a database timeout dumps a stack trace into Discord, and a missing character panics the bot. We need a unified error system that knows the difference between "show the player a helpful message" and "log the technical details for debugging." This stage introduces the `thiserror`/`anyhow` pattern that production Rust applications rely on.
 
@@ -473,21 +473,6 @@ except CharacterNotFound:
     await ctx.send("You don't have a character yet!")
 except Exception as e:
     await ctx.send(f"Something went wrong: {e}")
-```
-
-**TypeScript comparison:**
-```typescript
-// TS — custom error classes
-class CharacterNotFound extends Error {
-  constructor(id: string) { super(`Character not found: ${id}`); }
-}
-
-// Caught in try/catch
-try {
-  const char = await loadCharacter(userId);
-} catch (e) {
-  if (e instanceof CharacterNotFound) { ... }
-}
 ```
 
 Rust doesn't have exceptions — errors are values returned via `Result<T, E>`. The `?` operator propagates them up the call stack, and `thiserror` makes defining the error types painless.
@@ -608,7 +593,7 @@ Errors are tamed — players see friendly messages while we see full diagnostics
 
 ## Stage 26 — Graceful Everything
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Ctrl+C kills the bot and the current turn is lost. A player who walks away leaves their session "active" forever. A Discord gateway hiccup panics the process. We need the bot to handle interruptions like a seasoned adventurer handles ambushes — save what matters, clean up, and live to fight another day. This stage teaches signal handling, timeouts, and the limits of Rust's `Drop` trait in async code.
 
@@ -773,7 +758,7 @@ The bot survives shutdowns, timeouts, and disconnects with grace. But characters
 
 ## Stage 27 — Level Up & Talents
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Characters persist and survive restarts, but they never grow — a level 1 hero after 20 quests feels the same as a fresh recruit. Without progression, there's no reason to keep playing. We need an XP table, a level-up flow, and a talent system that gives players meaningful choices about how their character evolves. This stage implements the full progression mechanics that transform Crónica from a one-shot adventure into a campaign.
 
@@ -1052,7 +1037,7 @@ Heroes level up, choose talents, and grow stronger with every quest. But Crónic
 
 ## Stage 28 — Language System
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Crónica is a game, but it can also be a teacher. Right now the AI narrates entirely in English — a missed opportunity when the narrator could weave Spanish, Japanese, or any target language into the story naturally. We need a language system with difficulty tiers that controls how much foreign vocabulary the AI introduces, tracks what the player has learned, and adjusts over time. This transforms Crónica from pure entertainment into an immersive learning tool.
 

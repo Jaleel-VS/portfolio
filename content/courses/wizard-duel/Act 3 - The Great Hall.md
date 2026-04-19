@@ -23,7 +23,7 @@ By the end of Act 3, your duels will look like this:
 
 ## What is ratatui?
 
-If you've used **blessed** or **ink** in Node.js, or **curses** in Python — ratatui is that, but with Rust's type safety and zero-cost abstractions. It's an *immediate-mode* rendering library: every frame, you describe the entire UI from scratch. No retained widget tree, no diffing — just "here's what the screen looks like right now."
+If you've used **curses** in Python — ratatui is that, but with Rust's type safety and zero-cost abstractions. It's an *immediate-mode* rendering library: every frame, you describe the entire UI from scratch. No retained widget tree, no diffing — just "here's what the screen looks like right now."
 
 ```mermaid
 graph LR
@@ -63,7 +63,8 @@ color-eyre = "0.6"
 
 ## Stage 15 — ratatui Setup ⚡
 
-**Difficulty: Medium** | **New concepts: raw mode, alternate screen, event loop, Frame**
+*Difficulty: Medium*
+
 
 Your duel engine works, but `println!` output scrolls off the screen and there's no visual feedback during combat. A TUI (terminal user interface) transforms your game from a wall of text into an interactive experience with live-updating HP bars, spell menus, and battle logs. This stage handles the plumbing — taking over the terminal, setting up the render loop, and ensuring clean restoration even on crashes.
 
@@ -155,27 +156,26 @@ fn main() -> color_eyre::Result<()> {
 | `event::read()` | Blocks until a crossterm event (key, mouse, resize) |
 | `.as_key_press_event()` | Filters to only key-press events (ignores releases) |
 
-### Common Mistake: Forgetting Terminal Restore
+> [!warning] Common Mistake: Forgetting Terminal Restore
+> In older ratatui code, you'd manually call `enable_raw_mode()` and `EnterAlternateScreen`, then restore in a `Drop` impl or panic hook. If you forgot, your terminal would be left in raw mode after a crash — no echo, no line editing, chaos.
+>
+> `ratatui::run()` handles this automatically. It installs a panic hook that restores the terminal *before* the panic message prints. Always prefer `ratatui::run()` over manual init/restore unless you need custom viewport options.
 
-In older ratatui code, you'd manually call `enable_raw_mode()` and `EnterAlternateScreen`, then restore in a `Drop` impl or panic hook. If you forgot, your terminal would be left in raw mode after a crash — no echo, no line editing, chaos.
-
-`ratatui::run()` handles this automatically. It installs a panic hook that restores the terminal *before* the panic message prints. Always prefer `ratatui::run()` over manual init/restore unless you need custom viewport options.
-
-### Checkpoint
-
-The terminal is yours — now you need to fill it with something useful. Stage 16 splits the screen into zones for wizard stats, the battle log, and spell selection using ratatui's layout system.
-
-```bash
-cargo run
-```
-
-You should see a bordered box with "The Great Hall awaits..." filling your terminal. Press `q` to quit cleanly. Your terminal should return to normal — if it doesn't, something went wrong with the restore.
+> [!check] Checkpoint
+> The terminal is yours — now you need to fill it with something useful. Stage 16 splits the screen into zones for wizard stats, the battle log, and spell selection using ratatui's layout system.
+>
+> ```bash
+> cargo run
+> ```
+>
+> You should see a bordered box with "The Great Hall awaits..." filling your terminal. Press `q` to quit cleanly. Your terminal should return to normal — if it doesn't, something went wrong with the restore.
 
 ---
 
 ## Stage 16 — The Duel Screen
 
-**Difficulty: Medium** | **New concepts: Layout, Constraint, Direction, nested splits**
+*Difficulty: Medium*
+
 
 A blank terminal with a border isn't a game. You need distinct zones — a title bar, wizard status panels, a battle log, and a spell menu — all adapting to the terminal's size. ratatui's layout system works like CSS Flexbox: you declare constraints and the engine figures out the pixel math. This stage teaches you to think in rectangles, which is the mental model for every TUI you'll ever build.
 
@@ -385,21 +385,26 @@ pub fn run_tui() -> Result<()> {
 }
 ```
 
-### Checkpoint
-
-The layout is in place, but the wizard panels are just plain text. Stage 17 replaces them with color-coded HP and mana gauges that tell the story of the duel at a glance.
-
-```bash
-cargo run
-```
-
-You should see four distinct zones: a yellow-bordered title bar, two wizard panels side by side, a battle log area, and a spell bar at the bottom. Resize your terminal — the log area should grow and shrink while the other sections stay fixed.
+> [!check] Checkpoint
+> The layout is in place, but the wizard panels are just plain text. Stage 17 replaces them with color-coded HP and mana gauges that tell the story of the duel at a glance.
+>
+> ```bash
+> cargo run
+> ```
+>
+> You should see four distinct zones: a yellow-bordered title bar, two wizard panels side by side, a battle log area, and a spell bar at the bottom. Resize your terminal — the log area should grow and shrink while the other sections stay fixed.
 
 ---
 
 ## Stage 17 — HP and Mana Bars
 
-**Difficulty: Easy** | **New concepts: Gauge widget, dynamic styling, color thresholds**
+*Difficulty: Easy*
+
+> [!tip] What You'll Learn
+> - tension
+> - Project setup with `cargo`
+> - Terminal UI with ratatui
+
 
 Numbers alone don't create tension. A green bar slowly turning red as your wizard takes damage — *that* creates tension. Visual gauges let players read the state of the duel instantly without parsing text, and color thresholds (green → yellow → red) communicate urgency without words. This is also your introduction to ratatui's `Gauge` widget and the `block.inner()` pattern for nesting content inside borders.
 
@@ -507,21 +512,21 @@ frame.render_widget(block, area); // draw the border
 
 Without this, your gauges would render *on top of* the border characters.
 
-### Checkpoint
-
-The wizard panels look alive now — but the spell bar at the bottom is still static text. Stage 18 turns it into an interactive, navigable spell list with keyboard controls.
-
-```bash
-cargo run
-```
-
-Both wizard panels now show colored HP and blue mana bars. Try changing the starting HP values in your `App::new()` to see the color thresholds in action — set HP to 25 and watch it go red.
+> [!check] Checkpoint
+> The wizard panels look alive now — but the spell bar at the bottom is still static text. Stage 18 turns it into an interactive, navigable spell list with keyboard controls.
+>
+> ```bash
+> cargo run
+> ```
+>
+> Both wizard panels now show colored HP and blue mana bars. Try changing the starting HP values in your `App::new()` to see the color thresholds in action — set HP to 25 and watch it go red.
 
 ---
 
 ## Stage 18 — Spell Selection
 
-**Difficulty: Medium** | **New concepts: List, ListState, StatefulWidget, keyboard navigation**
+*Difficulty: Medium*
+
 
 A duel game where you type spell numbers is functional but clunky. An interactive spell list with arrow-key navigation, color-coded types, and grayed-out unaffordable spells makes the game *feel* polished. This stage introduces ratatui's most important pattern: **StatefulWidgets** — widgets that remember their state (like which item is selected) between frames.
 
@@ -667,21 +672,21 @@ if let Some(key) = event::read()?.as_key_press_event() {
 
 The methods `select_next()` and `select_previous()` handle wrapping and scroll automatically. You don't need to bounds-check manually.
 
-### Checkpoint
-
-You can browse and select spells — but pressing Enter doesn't do anything yet. Stage 19 wires spell selection to the duel engine and adds turn animation so combat unfolds dramatically instead of instantly.
-
-```bash
-cargo run
-```
-
-The spell bar now shows your equipped spells with color-coded types. Arrow keys move the highlight. Spells that cost more mana than you have appear grayed out. Number keys jump directly to a spell.
+> [!check] Checkpoint
+> You can browse and select spells — but pressing Enter doesn't do anything yet. Stage 19 wires spell selection to the duel engine and adds turn animation so combat unfolds dramatically instead of instantly.
+>
+> ```bash
+> cargo run
+> ```
+>
+> The spell bar now shows your equipped spells with color-coded types. Arrow keys move the highlight. Spells that cost more mana than you have appear grayed out. Number keys jump directly to a spell.
 
 ---
 
 ## Stage 19 — Turn Animation
 
-**Difficulty: Medium** | **New concepts: animation phases, timed rendering, non-blocking sleep**
+*Difficulty: Medium*
+
 
 Instant resolution kills drama. When you cast Avada Kedavra, you want to *see* the green flash before the damage number appears. Animation phases turn a single game event into a sequence of visual beats — "You cast X!" → pause → "Enemy casts Y!" → pause → resolution. This stage teaches you the critical TUI skill of non-blocking timing: advancing animations without freezing the UI.
 
@@ -823,20 +828,19 @@ fn advance_animation(app: &mut App) {
 }
 ```
 
-### Common Mistake: Sleeping in Render
-
-Never do this:
-
-```rust
-// BAD — freezes the entire UI for 500ms
-fn render(frame: &mut Frame) {
-    frame.render_widget(text1, area);
-    std::thread::sleep(Duration::from_millis(500)); // UI is frozen!
-    frame.render_widget(text2, area);
-}
-```
-
-The render function should be *instant*. All timing logic belongs in the event loop, using `event::poll()` with a timeout instead of `event::read()` (which blocks indefinitely).
+> [!warning] Common Mistake: Sleeping in Render
+> Never do this:
+>
+> ```rust
+> // BAD — freezes the entire UI for 500ms
+> fn render(frame: &mut Frame) {
+>     frame.render_widget(text1, area);
+>     std::thread::sleep(Duration::from_millis(500)); // UI is frozen!
+>     frame.render_widget(text2, area);
+> }
+> ```
+>
+> The render function should be *instant*. All timing logic belongs in the event loop, using `event::poll()` with a timeout instead of `event::read()` (which blocks indefinitely).
 
 ### `event::poll()` vs `event::read()`
 
@@ -845,21 +849,21 @@ The render function should be *instant*. All timing logic belongs in the event l
 | `event::read()` | Blocks until an event arrives | Waiting for user input |
 | `event::poll(duration)` | Returns `true` if event available within timeout | Animating, need to check input without blocking |
 
-### Checkpoint
-
-Turns now unfold with dramatic pacing — but status effects are invisible. Stage 20 adds emoji icons next to wizard names so you can see at a glance who's burning, stunned, or shielded.
-
-```bash
-cargo run
-```
-
-Select a spell and press Enter. You should see a three-beat sequence: "You cast Stupefy!" → pause → "Draco cast Protego!" → pause → damage resolution. The UI stays responsive during animation — you can still press 'q' to quit.
+> [!check] Checkpoint
+> Turns now unfold with dramatic pacing — but status effects are invisible. Stage 20 adds emoji icons next to wizard names so you can see at a glance who's burning, stunned, or shielded.
+>
+> ```bash
+> cargo run
+> ```
+>
+> Select a spell and press Enter. You should see a three-beat sequence: "You cast Stupefy!" → pause → "Draco cast Protego!" → pause → damage resolution. The UI stays responsive during animation — you can still press 'q' to quit.
 
 ---
 
 ## Stage 20 — Status Effect Icons
 
-**Difficulty: Easy** | **New concepts: Unicode rendering, Span composition, conditional display**
+*Difficulty: Easy*
+
 
 Status effects are a core combat mechanic, but if players can't *see* them, they can't play around them. A fire emoji next to a wizard's name instantly communicates "this wizard is burning" without reading the log. This stage teaches you to compose styled `Span`s into rich `Line`s — the building block for every piece of formatted text in ratatui.
 
@@ -946,21 +950,21 @@ let urgency_style = if effect.remaining_turns <= 1 {
 };
 ```
 
-### Checkpoint
-
-Status effects are now visible at a glance. But the battle log is still a single static line — Stage 21 transforms it into a scrollable, color-coded history of every spell cast and every hit landed.
-
-```bash
-cargo run
-```
-
-Apply some status effects to a wizard in your test setup (e.g., `wizard.active_effects.push(...)`) and verify the icons appear next to their name in the panel title. The symbols should be colored and show turn counts.
+> [!check] Checkpoint
+> Status effects are now visible at a glance. But the battle log is still a single static line — Stage 21 transforms it into a scrollable, color-coded history of every spell cast and every hit landed.
+>
+> ```bash
+> cargo run
+> ```
+>
+> Apply some status effects to a wizard in your test setup (e.g., `wizard.active_effects.push(...)`) and verify the icons appear next to their name in the panel title. The symbols should be colored and show turn counts.
 
 ---
 
 ## Stage 21 — Turn History Log
 
-**Difficulty: Medium** | **New concepts: scrollable List, color-coded entries, auto-scroll**
+*Difficulty: Medium*
+
 
 The battle log is the narrative heart of the duel — without it, players lose track of what happened two turns ago. A scrollable, color-coded log lets players review the flow of combat, spot patterns in the AI's behavior, and relive dramatic moments. This stage also teaches you the difference between `List` and `Paragraph` for displaying sequential data, and how auto-scroll keeps the latest action visible.
 
@@ -1101,21 +1105,21 @@ You might wonder why we use `List` instead of `Paragraph` for the log. Both can 
 
 For a log where each entry is a discrete event with its own color, `List` is the better fit.
 
-### Checkpoint
-
-The duel now tells a complete visual story — but it has no ending. Stage 22 adds a victory/defeat overlay with stats, XP, and the option to play again.
-
-```bash
-cargo run
-```
-
-Play several turns. The battle log should fill with color-coded entries — green for your hits, red for opponent hits, yellow for clashes. The log auto-scrolls to the latest entry. Use PageUp/PageDown to scroll back through history.
+> [!check] Checkpoint
+> The duel now tells a complete visual story — but it has no ending. Stage 22 adds a victory/defeat overlay with stats, XP, and the option to play again.
+>
+> ```bash
+> cargo run
+> ```
+>
+> Play several turns. The battle log should fill with color-coded entries — green for your hits, red for opponent hits, yellow for clashes. The log auto-scrolls to the latest entry. Use PageUp/PageDown to scroll back through history.
 
 ---
 
 ## Stage 22 — Victory/Defeat Screen
 
-**Difficulty: Easy** | **New concepts: overlay rendering, centered layout, end-game stats**
+*Difficulty: Easy*
+
 
 A game that just stops when someone's HP hits zero feels unfinished. The victory/defeat screen gives closure — it celebrates your win or acknowledges your loss, shows how you performed, and offers a clear next action. This stage teaches the overlay pattern: rendering a popup *on top of* existing UI without navigating away, which is useful for any modal dialog in a TUI.
 
@@ -1332,15 +1336,14 @@ fn render(frame: &mut Frame, app: &mut App) {
 }
 ```
 
-### Checkpoint
-
-Act 3 is complete — your duel engine has a full visual interface. In Act 4, you'll add the systems that make players come back: XP, levels, spell unlocks, persistence, and a tournament bracket leading to the final boss.
-
-```bash
-cargo run
-```
-
-Play a full duel until one wizard's HP hits zero. A centered overlay should appear with either "VICTORY!" (green border) or "DEFEAT!" (red border), showing your duel stats. Press `R` to play again or `Q` to quit.
+> [!check] Checkpoint
+> Act 3 is complete — your duel engine has a full visual interface. In Act 4, you'll add the systems that make players come back: XP, levels, spell unlocks, persistence, and a tournament bracket leading to the final boss.
+>
+> ```bash
+> cargo run
+> ```
+>
+> Play a full duel until one wizard's HP hits zero. A centered overlay should appear with either "VICTORY!" (green border) or "DEFEAT!" (red border), showing your duel stats. Press `R` to play again or `Q` to quit.
 
 ---
 
@@ -1395,13 +1398,12 @@ src/
 
 The key architectural insight: **game logic and UI are separate**. The `DuelEngine` knows nothing about ratatui. The `App` struct bridges the two worlds — it holds game state *and* UI state, and the render functions read from it without mutating game logic.
 
-### Common Mistakes Checklist
-
-- [ ] **Forgetting terminal restore** — Use `ratatui::run()`, not manual init. It handles panics
-- [ ] **Blocking during animation** — Use `event::poll(timeout)`, never `thread::sleep` in render
-- [ ] **Widget sizing overflow** — If constraints add up to more than available space, ratatui's solver picks an approximate solution. Test with small terminals
-- [ ] **Rendering outside bounds** — Never render to a `Rect` larger than `frame.area()`. Use `block.inner()` for nested content
-- [ ] **Stale ListState** — If you remove items from a list, the selected index might be out of bounds. Reset it after mutations
+> [!warning] Common Mistake: Checklist
+> - [ ] **Forgetting terminal restore** — Use `ratatui::run()`, not manual init. It handles panics
+> - [ ] **Blocking during animation** — Use `event::poll(timeout)`, never `thread::sleep` in render
+> - [ ] **Widget sizing overflow** — If constraints add up to more than available space, ratatui's solver picks an approximate solution. Test with small terminals
+> - [ ] **Rendering outside bounds** — Never render to a `Rect` larger than `frame.area()`. Use `block.inner()` for nested content
+> - [ ] **Stale ListState** — If you remove items from a list, the selected index might be out of bounds. Reset it after mutations
 
 ### What's Next
 
