@@ -10,6 +10,9 @@
 
 **What makes this different from your other Rust courses:** This is the first course where you work with **raw bytes and network protocols**. No JSON, no text formats — you'll read and write binary data at the bit level, send UDP packets to real servers on the internet, and parse the responses byte by byte. By the end, binary protocols will feel as natural as reading JSON.
 
+> [!warning] Not for production use
+> This is a learning project. For real-world DNS resolution, use established resolvers like [Unbound](https://nlnetlabs.nl/projects/unbound/about/), [CoreDNS](https://coredns.io/), or [hickory-dns](https://github.com/hickory-dns/hickory-dns). Our resolver lacks DNSSEC validation, proper source port randomization, and many edge cases that production resolvers handle. Rolling your own DNS resolver for production use can introduce security vulnerabilities (cache poisoning, amplification attacks) that established software has spent years hardening against.
+
 ---
 
 ## Design Decisions
@@ -47,18 +50,18 @@ Exploratory and wonder-driven. You're mapping unknown territory — each query i
 
 ### [[Act 1 - The First Query]] — Bytes, Packets, and UDP (Stages 1-8)
 
-You learn to think in bytes. You build a DNS query packet by hand — placing each field at the correct offset, encoding a domain name into the wire format, and sending it over UDP. Then you parse the response, byte by byte, extracting the answer.
+You learn to think in bytes. You build a DNS query packet by hand — placing each field at the correct offset, encoding a domain name into the wire format, and sending it over UDP. Then you parse the response, byte by byte, extracting the answer. Along the way you learn the Rust module system, write your first tests, and start using `Result` for error handling.
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 1 | The Cartographer's Desk | `cargo new`, project setup, sending your first UDP packet | Very Easy | 15 min |
-| 2 | Thinking in Bytes | Bits, bytes, endianness — `u8`, `u16`, `u32`, big-endian vs little-endian, `to_be_bytes()` | Easy | 35 min |
-| 3 | The DNS Header | 12 bytes that control everything — ID, flags, counts. Building a header struct from the RFC | Easy | 40 min |
-| 4 | Encoding a Name | The DNS wire format for domain names — length-prefixed labels, the trailing zero | Easy | 30 min |
-| 5 | The Question Section | Combining header + name + query type into a complete DNS query packet | Medium | 40 min |
-| 6 | Sending the Query | `UdpSocket`, sending to `8.8.8.8:53`, receiving the response | Medium | 35 min |
-| 7 | Parsing the Response Header | Reading 12 bytes back into a struct — `from_be_bytes()`, bitwise flag extraction | Medium | 45 min |
-| 8 | Reading the Answer | Parsing resource records — name, type, class, TTL, data length, IP address | Medium | 50 min |
+| 1 | The Cartographer's Desk | `cargo new`, project setup, sending your first UDP packet | Very Easy | 25 min |
+| 2 | Thinking in Bytes | Bits, bytes, endianness — `u8`, `u16`, `u32`, big-endian vs little-endian, `to_be_bytes()` | Easy | 50 min |
+| 3 | The DNS Header | 12 bytes that control everything — ID, flags, counts. Module system, first tests, `Result<T,E>` | Easy | 60 min |
+| 4 | Encoding a Name | DNS wire format for domain names — length-prefixed labels, `&str` vs `String` | Easy | 45 min |
+| 5 | The Question Section | Combining header + name + query type into a complete DNS query packet. Enums | Medium | 50 min |
+| 6 | Sending the Query | `UdpSocket`, sending to `8.8.8.8:53`, receiving the response | Medium | 45 min |
+| 7 | Parsing the Response Header | `PacketParser` cursor pattern, lifetimes (`'a`), `?` operator chaining | Medium | 60 min |
+| 8 | Reading the Answer | Resource records, IPv4 from 4 bytes, ownership and `.to_vec()` | Medium | 60 min |
 
 ### [[Act 2 - The Hierarchy]] — Recursive Resolution (Stages 9-15)
 
@@ -66,13 +69,13 @@ You stop asking Google (`8.8.8.8`) and start asking the internet directly. Start
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 9 | The Root of Everything | The 13 root servers, hardcoded root hints, querying a root server | Easy | 30 min |
-| 10 | Following Referrals | NS records and glue records — the root says "ask .com", .com says "ask google.com's server" | Medium | 50 min |
-| 11 | The Recursive Walk | Building the full recursive resolver — loop until you get an answer or an error | Hard | 60 min |
-| 12 | Name Compression | DNS pointer compression — the `0xC0` trick that saves bandwidth by referencing earlier names | Medium | 45 min |
-| 13 | CNAME Chains | Following aliases — `www.example.com` → `example.com` → IP address | Medium | 40 min |
-| 14 | Record Types | A, AAAA, CNAME, MX, NS, TXT, SOA — parsing each type's RDATA format | Medium | 50 min |
-| 15 | Error Handling | NXDOMAIN, SERVFAIL, timeouts, retries, truncation (TC flag) | Medium | 40 min |
+| 9 | The Root of Everything | The 13 root servers, hardcoded root hints, querying a root server | Easy | 45 min |
+| 10 | Following Referrals | NS records and glue records, multi-module projects, `crate::` paths | Medium | 60 min |
+| 11 | The Recursive Walk | Building the full recursive resolver — loop until answer or error | Hard | 75 min |
+| 12 | Name Compression | DNS pointer compression — the `0xC0` trick that saves bandwidth | Medium | 55 min |
+| 13 | CNAME Chains | Following aliases, ownership with `String` vs `&str` in loops | Medium | 50 min |
+| 14 | Record Types | A, AAAA, CNAME, MX, NS, TXT, SOA — parsing each type's RDATA | Medium | 60 min |
+| 15 | Error Handling | Custom error enums, `ResolveError`, `Display` trait, retries | Medium | 50 min |
 
 ### [[Act 3 - The Cache]] — Performance and Correctness (Stages 16-21)
 
@@ -80,29 +83,29 @@ A resolver that queries the root for every lookup is slow and rude (root servers
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 16 | The Map Room | In-memory cache with TTL expiry — `HashMap` with timestamps | Medium | 45 min |
-| 17 | Negative Caching | Caching "this domain doesn't exist" (NXDOMAIN) — SOA minimum TTL | Medium | 35 min |
-| 18 | Cache Poisoning | Why trusting any response is dangerous — bailiwick checking, transaction IDs | Medium | 40 min |
-| 19 | Measuring Performance | Timing queries, cache hit rates, comparing cached vs uncached resolution | Easy | 25 min |
-| 20 | Concurrent Queries | `tokio` for async UDP, handling multiple queries in flight | Hard | 60 min |
-| 21 | The Local Server | Binding to `127.0.0.1:5353`, accepting queries from `dig` and `nslookup` | Medium | 45 min |
+| 16 | The Map Room | In-memory cache with TTL expiry — `HashMap`, `Instant`, `&mut self` | Medium | 55 min |
+| 17 | Negative Caching | Caching NXDOMAIN — enum variants with data, SOA minimum TTL | Medium | 40 min |
+| 18 | Cache Poisoning | Transaction ID randomization, bailiwick checking, why DNSSEC exists | Medium | 45 min |
+| 19 | Measuring Performance | `Instant::now()` timing, cache hit rates, cold vs warm comparison | Easy | 30 min |
+| 20 | Concurrent Queries | `tokio` async runtime, `Arc<Mutex<>>`, async UDP | Hard | 75 min |
+| 21 | The Local Server | Binding to `127.0.0.1:5353`, accepting queries from `dig`, building responses | Medium | 55 min |
 
 ### [[Act 4 - The Complete Map]] — Production Features (Stages 22-27)
 
-The resolver works but it's a single-threaded toy. Act 4 makes it production-grade: async I/O, TCP fallback for large responses, EDNS for modern DNS features, and a CLI that's actually pleasant to use.
+The resolver works but it's a single-threaded toy. Act 4 makes it production-grade: TCP fallback for large responses, EDNS for modern DNS features, a CLI that's actually pleasant to use, and a comprehensive integration test.
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 22 | TCP Fallback | When UDP isn't enough — the TC flag, TCP DNS framing (2-byte length prefix) | Medium | 40 min |
-| 23 | EDNS(0) | Extended DNS — larger packets, DO flag for DNSSEC awareness, OPT pseudo-record | Medium | 45 min |
-| 24 | The CLI | `clap` subcommands — `cartografo resolve`, `cartografo server`, `cartografo cache` | Easy | 30 min |
-| 25 | Pretty Output | Colored output, query tracing (show each step of the recursive walk), timing | Easy | 30 min |
-| 26 | Configuration | Config file for upstream servers, cache size, bind address, logging | Medium | 35 min |
-| 27 | The Complete Cartógrafo | Integration test — resolve 100 domains, verify against `dig`, measure performance | Medium | 40 min |
+| 22 | TCP Fallback | TC flag, TCP DNS framing (2-byte length prefix), `TcpStream` | Medium | 50 min |
+| 23 | EDNS(0) | OPT pseudo-record, 4096-byte UDP, DO flag | Medium | 50 min |
+| 24 | The CLI | `clap` derive macros, subcommands, `--type`, `--trace` flags | Easy | 40 min |
+| 25 | Pretty Output | `colored` crate, trace mode, `dig`-like formatting | Easy | 35 min |
+| 26 | Configuration | TOML config with `serde`, `#[serde(default)]`, `Config::load` | Medium | 45 min |
+| 27 | The Complete Cartógrafo | Integration tests, shell test script, comparison against `dig` | Medium | 50 min |
 
 ### [[Reference Guide]]
 
-DNS packet format (RFC 1035), record type reference, header flags, name encoding, compression pointers, common response codes, byte manipulation patterns in Rust, UDP/TCP socket patterns, `tokio` async patterns.
+DNS packet format (RFC 1035), record type reference, header flags, name encoding, compression pointers, common response codes, byte manipulation patterns in Rust, UDP/TCP socket patterns, `tokio` async patterns, module system reference, testing patterns, error handling patterns.
 
 ---
 
@@ -110,11 +113,11 @@ DNS packet format (RFC 1035), record type reference, header flags, name encoding
 
 | Act | Stages | Est. Time |
 |---|---|---|
-| The First Query | 8 | ~4.5 hrs |
-| The Hierarchy | 7 | ~5 hrs |
-| The Cache | 6 | ~4 hrs |
-| The Complete Map | 6 | ~3.5 hrs |
-| **Total** | **27** | **~17 hrs** |
+| The First Query | 8 | ~6.5 hrs |
+| The Hierarchy | 7 | ~6.5 hrs |
+| The Cache | 6 | ~5 hrs |
+| The Complete Map | 6 | ~4.5 hrs |
+| **Total** | **27** | **~22.5 hrs** |
 
 ## Tech Stack
 
@@ -124,7 +127,8 @@ DNS packet format (RFC 1035), record type reference, header flags, name encoding
 | tokio | 1 | Stage 20 |
 | clap | 4 | Stage 24 |
 | colored | 2 | Stage 25 |
-| chrono | 0.4 | Stage 16 |
+| serde | 1 | Stage 26 |
+| toml | 0.8 | Stage 26 |
 
 Deliberately minimal. The entire DNS protocol is implemented by hand — no `trust-dns` or `hickory-dns`. The standard library's `UdpSocket` and `TcpStream` are all you need for networking.
 
@@ -140,3 +144,6 @@ Deliberately minimal. The entire DNS protocol is implemented by hand — no `tru
 - Why `dig +trace` shows the full resolution path
 - How to think in bytes — `u16::from_be_bytes([buf[0], buf[1]])` will feel natural
 - What big-endian means and why network protocols use it
+- How Rust's ownership system prevents bugs in network code
+- How to write tests that verify binary protocol implementations
+- How to structure a multi-module Rust project

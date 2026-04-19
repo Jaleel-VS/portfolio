@@ -22,6 +22,8 @@ flowchart LR
 
 > *Difficulty: Easy — The conceptual model, no code yet.*
 
+*~35 min*
+
 Before writing any code, you need the mental model. A neural network is simpler than it sounds: it's a function that takes numbers in and produces numbers out, with tunable parameters (weights) that control the mapping. That's it.
 
 > [!tip] What You'll Learn
@@ -58,6 +60,12 @@ output = activation(w₁×input₁ + w₂×input₂ + ... + wₙ×inputₙ + bia
 
 That's it. Multiply each input by its weight, sum them, add a bias, squish. A neural network is just many of these in sequence.
 
+**Python comparison:**
+```python
+# A single neuron in Python
+output = activation(sum(w * x for w, x in zip(weights, inputs)) + bias)
+```
+
 ### How many parameters?
 
 - Input → Hidden: 5 inputs × 6 neurons = 30 weights + 6 biases = **36**
@@ -75,17 +83,20 @@ The genetic algorithm will tune these 50 numbers. That's the entire "learning" �
 
 > *Difficulty: Medium — Vectors and matrices in Rust.*
 
-A neural network layer is a matrix multiplication: inputs × weights + biases = outputs. This stage builds the matrix math we need — not a full linear algebra library, just enough for forward passes.
+*~60 min*
+
+A neural network layer is a matrix multiplication: inputs × weights + biases = outputs. This stage builds the matrix math we need — not a full linear algebra library, just enough for forward passes. We'll also introduce Rust's built-in testing framework.
 
 > [!tip] What You'll Learn
-> - Representing matrices as `Vec<Vec<f32>>`
+> - Representing matrices as flat `Vec<f32>` with row-major indexing
 > - Matrix-vector multiplication
+> - `#[test]` and `cargo test` — Rust's built-in testing
+> - `assert_eq!` for verifying correctness
 > - Why neural networks are "just" matrix math
-> - Building math from scratch vs using a library
 
 ### 9.1 — The Matrix type
 
-Create `src/nn.rs`:
+Create `src/nn.rs` (and add `mod nn;` to `main.rs`):
 
 ```rust
 /// A simple matrix for neural network operations.
@@ -127,14 +138,14 @@ impl Matrix {
         result
     }
 
-    /// Total number of parameters.
+    /// Total number of elements.
     pub fn len(&self) -> usize {
         self.data.len()
     }
 }
 ```
 
-We store the matrix as a flat `Vec<f32>` with row-major indexing: element (r, c) is at index `r * cols + c`. This is more cache-friendly than `Vec<Vec<f32>>` and simpler to serialize.
+We store the matrix as a flat `Vec<f32>` with row-major indexing: element (r, c) is at index `r * cols + c`. This is more cache-friendly than `Vec<Vec<f32>>` and simpler to serialize later.
 
 **Python comparison:**
 ```python
@@ -144,7 +155,46 @@ result = weights @ inputs  # matrix-vector multiply
 
 NumPy does this in one line. We're doing it manually to understand what `@` actually computes: nested loops of multiply-and-sum.
 
-### 9.2 — Test it
+### Concept: Testing with `#[test]` and `cargo test`
+
+Rust has a built-in test framework — no external library needed. Tests live in the same file as the code they test, inside a `#[cfg(test)]` module:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_something() {
+        assert_eq!(2 + 2, 4);
+    }
+}
+```
+
+| Rust | Python (pytest) | Notes |
+|------|-----------------|-------|
+| `#[test]` | `def test_something():` | Marks a function as a test |
+| `assert_eq!(a, b)` | `assert a == b` | Panics with a diff if not equal |
+| `assert!(condition)` | `assert condition` | Panics if false |
+| `cargo test` | `pytest` | Runs all tests |
+| `cargo test test_name` | `pytest -k test_name` | Runs matching tests |
+| `#[cfg(test)]` | (no equivalent) | Only compiled during testing — not in release builds |
+
+`#[cfg(test)]` means the test module is only compiled when you run `cargo test`. It doesn't exist in your release binary. This is why you can put tests right next to the code — zero overhead in production.
+
+### 9.2 — Test the matrix
+
+**Try it yourself.** Write a test that creates a 2×3 matrix, fills it with known values, multiplies it by a 3-element vector, and checks the result. A 2×3 matrix times a 3-vector gives a 2-vector:
+
+```
+[1 2 3]   [1]   [1×1 + 2×1 + 3×1]   [ 6]
+[4 5 6] × [1] = [4×1 + 5×1 + 6×1] = [15]
+```
+
+<details>
+<summary>Solution</summary>
+
+Add to the bottom of `src/nn.rs`:
 
 ```rust
 #[cfg(test)]
@@ -153,7 +203,6 @@ mod tests {
 
     #[test]
     fn test_matrix_mul_vec() {
-        // 2×3 matrix × 3-vector = 2-vector
         let mut m = Matrix::zeros(2, 3);
         m.set(0, 0, 1.0); m.set(0, 1, 2.0); m.set(0, 2, 3.0);
         m.set(1, 0, 4.0); m.set(1, 1, 5.0); m.set(1, 2, 6.0);
@@ -161,13 +210,50 @@ mod tests {
         let v = vec![1.0, 1.0, 1.0];
         let result = m.mul_vec(&v);
 
-        assert_eq!(result, vec![6.0, 15.0]); // [1+2+3, 4+5+6]
+        assert_eq!(result, vec![6.0, 15.0]);
+    }
+
+    #[test]
+    fn test_matrix_mul_vec_identity() {
+        // Identity-like: diagonal 1s, off-diagonal 0s
+        let mut m = Matrix::zeros(2, 2);
+        m.set(0, 0, 1.0);
+        m.set(1, 1, 1.0);
+
+        let v = vec![3.0, 7.0];
+        let result = m.mul_vec(&v);
+
+        assert_eq!(result, vec![3.0, 7.0]); // unchanged
     }
 }
 ```
 
+</details>
+
+Run the tests:
+
+```bash
+cargo test
+```
+
+```
+running 2 tests
+test nn::tests::test_matrix_mul_vec ... ok
+test nn::tests::test_matrix_mul_vec_identity ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored
+```
+
+From now on, every stage that builds a pure function should include at least one test. Tests are your safety net — if a test passes, your implementation is correct. Run `cargo test` after every change.
+
+> [!warning] Common Mistake: `assert_eq!` with floats
+> Floating-point math isn't exact. `0.1 + 0.2 != 0.3` in any language. For our integer-like test values (1.0, 2.0, etc.) `assert_eq!` works fine. But if you're comparing computed floats, use an epsilon:
+> ```rust
+> assert!((result - expected).abs() < 0.0001, "got {result}, expected {expected}");
+> ```
+
 > [!check] Checkpoint
-> Implement `Matrix` with `mul_vec`. Verify the test passes. Stage 9 complete.
+> Implement `Matrix` with `mul_vec`. Run `cargo test` and verify both tests pass. Stage 9 complete.
 
 ---
 
@@ -175,14 +261,28 @@ mod tests {
 
 > *Difficulty: Medium — Input → hidden → output through the network.*
 
+*~60 min*
+
 The forward pass pushes data through the network: multiply inputs by the first weight matrix, add biases, apply activation, then repeat for the next layer. This stage builds the `NeuralNetwork` struct and its `forward` method.
 
 > [!tip] What You'll Learn
 > - The `NeuralNetwork` struct — layers of weights and biases
 > - The forward pass algorithm
 > - Why it's called "feedforward" (data flows one direction)
+> - Testing neural network output dimensions
 
 ### 10.1 — The NeuralNetwork struct
+
+**Try it yourself.** Define a `NeuralNetwork` struct with four fields:
+- `weights_ih: Matrix` — input-to-hidden weights (hidden_size × input_size)
+- `biases_h: Vec<f32>` — hidden biases (hidden_size)
+- `weights_ho: Matrix` — hidden-to-output weights (output_size × hidden_size)
+- `biases_o: Vec<f32>` — output biases (output_size)
+
+Write a `new()` constructor that creates zero-initialized matrices and a `param_count()` method that returns the total number of tunable parameters.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 /// A feedforward neural network with one hidden layer.
@@ -205,13 +305,37 @@ impl NeuralNetwork {
         }
     }
 
+    /// Total number of tunable parameters.
+    pub fn param_count(&self) -> usize {
+        self.weights_ih.len() + self.biases_h.len()
+            + self.weights_ho.len() + self.biases_o.len()
+    }
+}
+```
+
+</details>
+
+### 10.2 — The forward pass
+
+Now write the `forward` method. The algorithm:
+
+1. Multiply inputs by `weights_ih` → get hidden values
+2. Add `biases_h` to each hidden value
+3. Apply `tanh` activation to each hidden value (squash to -1..1)
+4. Multiply hidden values by `weights_ho` → get output values
+5. Add `biases_o` to each output value
+
+For now, skip output activations — we'll add those in Stage 11.
+
+```rust
+impl NeuralNetwork {
     /// Forward pass: inputs → hidden → outputs.
     pub fn forward(&self, inputs: &[f32]) -> Vec<f32> {
         // Input → Hidden
         let mut hidden = self.weights_ih.mul_vec(inputs);
         for i in 0..hidden.len() {
             hidden[i] += self.biases_h[i];
-            hidden[i] = tanh(hidden[i]); // activation
+            hidden[i] = hidden[i].tanh(); // activation
         }
 
         // Hidden → Output
@@ -220,26 +344,52 @@ impl NeuralNetwork {
             output[i] += self.biases_o[i];
         }
 
-        // Output activations (applied in Stage 11)
+        // Output activations added in Stage 11
         output
     }
-
-    /// Total number of tunable parameters.
-    pub fn param_count(&self) -> usize {
-        self.weights_ih.len() + self.biases_h.len()
-            + self.weights_ho.len() + self.biases_o.len()
-    }
-}
-
-fn tanh(x: f32) -> f32 {
-    x.tanh()
 }
 ```
 
 The forward pass is two matrix multiplications with activations in between. That's the entire neural network. No backpropagation, no gradients, no loss functions — the genetic algorithm handles training.
 
+### 10.3 — Test it
+
+Add to the test module:
+
+```rust
+#[test]
+fn test_neural_network_param_count() {
+    let nn = NeuralNetwork::new(5, 6, 2);
+    assert_eq!(nn.param_count(), 50); // 30 + 6 + 12 + 2
+}
+
+#[test]
+fn test_forward_output_size() {
+    let nn = NeuralNetwork::new(5, 6, 2);
+    let inputs = vec![0.5; 5];
+    let output = nn.forward(&inputs);
+    assert_eq!(output.len(), 2); // steering + throttle
+}
+
+#[test]
+fn test_forward_zero_weights_zero_output() {
+    // Zero weights + zero biases → all outputs should be zero
+    // (tanh(0) = 0, and 0 × anything = 0)
+    let nn = NeuralNetwork::new(5, 6, 2);
+    let inputs = vec![1.0, 0.5, 0.3, 0.8, 0.2];
+    let output = nn.forward(&inputs);
+    assert_eq!(output, vec![0.0, 0.0]);
+}
+```
+
+```bash
+cargo test
+```
+
+All tests should pass. The zero-weights test confirms that a fresh network produces zero output — the car won't move. Random weights (Stage 12) will fix that.
+
 > [!check] Checkpoint
-> Create a `NeuralNetwork` with `new(5, 6, 2)`. Verify `param_count()` returns 50. Run `forward` with dummy inputs and verify it returns 2 outputs. Stage 10 complete.
+> Create a `NeuralNetwork` with `new(5, 6, 2)`. Verify `param_count()` returns 50. Run `forward` with dummy inputs and verify it returns 2 outputs. All tests pass. Stage 10 complete.
 
 ---
 
@@ -247,17 +397,31 @@ The forward pass is two matrix multiplications with activations in between. That
 
 > *Difficulty: Easy — tanh and sigmoid — the squish that makes networks work.*
 
+*~35 min*
+
 Without activation functions, a neural network is just a linear transformation — stacking layers would be pointless (two linear transforms = one linear transform). Activations add non-linearity, letting the network learn curves and boundaries, not just straight lines.
 
 > [!tip] What You'll Learn
-> - `tanh` — squashes to (-1, 1), good for hidden layers
-> - `sigmoid` — squashes to (0, 1), good for outputs that represent probabilities
+> - `tanh` — squashes to (-1, 1), good for hidden layers and steering
+> - `sigmoid` — squashes to (0, 1), good for throttle
 > - Why non-linearity matters
 > - Choosing activations for steering vs throttle
 
+### Why different activations for each output?
+
+- **Steering** needs to go left (-1) or right (+1) or straight (0). `tanh` maps any number to (-1, 1). Perfect.
+- **Throttle** should be 0 (coast) to 1 (full gas). Negative throttle (braking) isn't useful for AI that's trying to go fast. `sigmoid` maps any number to (0, 1). Perfect.
+
+**Python comparison:**
+```python
+import math
+def sigmoid(x): return 1 / (1 + math.exp(-x))
+def tanh(x): return math.tanh(x)
+```
+
 ### 11.1 — Output activations
 
-Steering should be -1 to 1 (left to right). Throttle should be 0 to 1 (brake to full). Apply `tanh` to steering and `sigmoid` to throttle:
+Update the `forward` method to apply the right activation to each output:
 
 ```rust
 fn sigmoid(x: f32) -> f32 {
@@ -290,8 +454,41 @@ impl NeuralNetwork {
 
 Now the network's outputs are always in the right range for `CarInput` — no clamping needed.
 
+### 11.2 — Test the activations
+
+```rust
+#[test]
+fn test_sigmoid_bounds() {
+    // sigmoid should always be between 0 and 1
+    assert!(sigmoid(0.0) > 0.49 && sigmoid(0.0) < 0.51); // sigmoid(0) ≈ 0.5
+    assert!(sigmoid(100.0) > 0.99);  // large positive → near 1
+    assert!(sigmoid(-100.0) < 0.01); // large negative → near 0
+}
+
+#[test]
+fn test_forward_output_ranges() {
+    // With non-zero weights, outputs should be in valid ranges
+    let mut nn = NeuralNetwork::new(5, 6, 2);
+    // Set some weights so the output isn't zero
+    for val in nn.weights_ih.data.iter_mut() { *val = 0.5; }
+    for val in nn.weights_ho.data.iter_mut() { *val = 0.5; }
+
+    let inputs = vec![1.0, 0.0, 0.5, 0.8, 0.2];
+    let output = nn.forward(&inputs);
+
+    // Steering: tanh → (-1, 1)
+    assert!(output[0] > -1.0 && output[0] < 1.0, "steering out of range: {}", output[0]);
+    // Throttle: sigmoid → (0, 1)
+    assert!(output[1] > 0.0 && output[1] < 1.0, "throttle out of range: {}", output[1]);
+}
+```
+
+```bash
+cargo test
+```
+
 > [!check] Checkpoint
-> Verify `forward` returns steering in (-1, 1) and throttle in (0, 1) for any input. Stage 11 complete.
+> Verify `forward` returns steering in (-1, 1) and throttle in (0, 1) for any input. All tests pass. Stage 11 complete.
 
 ---
 
@@ -299,15 +496,23 @@ Now the network's outputs are always in the right range for `CarInput` — no cl
 
 > *Difficulty: Medium — Initialize networks with random weights and connect to the car.*
 
+*~50 min*
+
 A network with zero weights outputs zero for everything — the car doesn't move. We need random initial weights so each car behaves differently. This is the starting population for evolution: 50 random brains, each producing different (terrible) driving behavior.
 
 > [!tip] What You'll Learn
 > - Random weight initialization
 > - Connecting the neural network to `CarInput`
+> - `Option<NeuralNetwork>` — a car might or might not have a brain
 > - Why random initialization matters (diversity for evolution)
 > - macroquad's built-in random functions
 
 ### 12.1 — Random initialization
+
+**Try it yourself.** Write a `NeuralNetwork::random(input_size, hidden_size, output_size)` method that creates a network with weights randomly sampled from [-1, 1] and biases from [-0.5, 0.5]. Use `macroquad::rand::gen_range`.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 use macroquad::rand::gen_range;
@@ -335,16 +540,35 @@ impl NeuralNetwork {
 }
 ```
 
-### 12.2 — Connect brain to car
+</details>
 
-Add a brain field to `Car`:
+### Concept: `Option<T>` — The Car's Brain
+
+Not every car has a brain. The player's car uses keyboard input. AI cars use neural networks. We model this with `Option<NeuralNetwork>`:
 
 ```rust
 pub struct Car {
     // ... existing fields ...
     pub brain: Option<NeuralNetwork>,
 }
+```
 
+`Option<T>` is Rust's way of saying "this value might exist or might not." It's like Python's `Optional[NeuralNetwork]`, but enforced at compile time — you *must* handle the `None` case.
+
+```rust
+// In Python, you'd check: if self.brain is not None
+// In Rust, you use `match` or `if let`:
+match &self.brain {
+    Some(nn) => { /* use nn */ }
+    None => { /* no brain — return default */ }
+}
+```
+
+### 12.2 — Connect brain to car
+
+Update `Car` to include the brain field (add `brain: None` to the constructor), then add:
+
+```rust
 impl Car {
     /// Get control input from the neural network based on sensor readings.
     pub fn brain_input(&self, walls: &[(Vec2, Vec2)]) -> CarInput {
@@ -363,6 +587,20 @@ impl Car {
 }
 ```
 
+Notice `match &self.brain` — we borrow the brain with `&` because `forward` only needs `&self` (read-only). If we wrote `match self.brain` without the `&`, Rust would try to *move* the brain out of the car, which would leave the car without a brain permanently. The `&` says "I just want to look at it."
+
+> [!warning] Common Mistake: Moving out of a struct field
+> If you write `match self.brain` instead of `match &self.brain`, you'll see:
+> ```
+> error[E0507]: cannot move out of `self.brain` which is behind a shared reference
+>   --> src/car.rs:45:15
+>    |
+> 45 |         match self.brain {
+>    |               ^^^^^^^^^^ move occurs because `self.brain` has type
+>    |               `Option<NeuralNetwork>`, which does not implement the `Copy` trait
+> ```
+> The fix: add `&` to borrow instead of move. `NeuralNetwork` contains `Vec`s, which can't be copied — they must be explicitly cloned or borrowed.
+
 Five sensor values go in, two control values come out. The neural network is the bridge between perception and action.
 
 > [!check] Checkpoint
@@ -374,15 +612,41 @@ Five sensor values go in, two control values come out. The neural network is the
 
 > *Difficulty: Medium — Spawn a population and watch the chaos.*
 
+*~50 min*
+
 This is the payoff of Act 2. Spawn 50 cars, each with a random neural network brain, and run them simultaneously. Most will crash immediately. A few might survive a few seconds by luck. The chaos is the starting point for evolution.
 
 > [!tip] What You'll Learn
-> - Managing a population of cars
+> - Managing a population of cars with `Vec<Car>`
+> - Iterating with `&mut` — updating many cars in a loop
 > - Running multiple simulations in parallel (same frame)
 > - Why most random networks produce terrible behavior
 > - The visual spectacle of 50 cars crashing simultaneously
 
+### Concept: Iterating with `&mut`
+
+When you loop over a `Vec<Car>` to update each car, you need mutable access:
+
+```rust
+// This borrows each car mutably, one at a time:
+for car in &mut cars {
+    car.update(&input, dt);  // needs &mut self
+}
+
+// This borrows each car immutably (read-only):
+for car in &cars {
+    car.draw();  // only needs &self
+}
+```
+
+**What you can't do:** borrow the whole `Vec` mutably *and* read from it at the same time. This matters when you want to find the best car while also updating them. The solution: do the update loop first, then the read loop. Rust's borrow checker enforces this separation.
+
 ### 13.1 — The population
+
+**Try it yourself.** Write a `spawn_population` function that creates `POPULATION_SIZE` (50) cars, each with a unique color and a random brain. All cars start at the same position and angle. Use a rainbow gradient for colors so you can track individuals.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 const POPULATION_SIZE: usize = 50;
@@ -403,7 +667,7 @@ fn spawn_population(start_pos: Vec2, start_angle: f32) -> Vec<Car> {
 }
 ```
 
-Each car gets a unique color (rainbow gradient) so you can track individuals.
+</details>
 
 ### 13.2 — Update the main loop
 
@@ -423,7 +687,7 @@ async fn main() {
 
         clear_background(Color::from_rgba(20, 20, 30, 255));
 
-        // Update all cars
+        // Update all cars (mutable borrow)
         let alive_count = cars.iter().filter(|c| c.alive).count();
         for car in &mut cars {
             if car.alive {
@@ -435,14 +699,14 @@ async fn main() {
             }
         }
 
-        // Draw
+        // Draw all cars (immutable borrow — separate loop)
         track.draw();
         track.draw_checkpoints(&checkpoints, 0);
         for car in &cars {
             car.draw();
         }
 
-        // Best car stats
+        // Show sensors for the best car
         let best = cars.iter().max_by(|a, b|
             a.fitness().partial_cmp(&b.fitness()).unwrap()
         );
@@ -462,6 +726,8 @@ async fn main() {
 }
 ```
 
+Notice the two separate loops: `for car in &mut cars` (update) and `for car in &cars` (draw). You can't combine them because `draw_sensors` borrows `walls` while the update loop also borrows `walls`. Rust's borrow checker keeps these clean.
+
 ### 13.3 — Run it
 
 ```bash
@@ -472,10 +738,10 @@ cargo run
 
 The "Best fitness" counter shows the highest checkpoint count. In generation 0 (random brains), it's usually 0-2. Evolution will fix that.
 
-> [!warning] Common Mistake
-> **Not capping `dt`.** If the frame takes too long (e.g., during compilation), `dt` can be huge, causing cars to teleport through walls. `.min(0.05)` caps it at 50ms (20 FPS minimum physics rate).
+> [!warning] Common Mistake: Not capping `dt`
+> If the frame takes too long (e.g., during compilation in the background), `dt` can be huge, causing cars to teleport through walls. `.min(0.05)` caps it at 50ms (20 FPS minimum physics rate). Without this cap, you'll see cars randomly teleporting through walls on slow frames — a maddening bug to track down.
 
-50 random brains, 50 terrible drivers. Next act, we'll breed the least terrible ones and watch their children improve.
+50 random brains, 50 terrible drivers. Next stage, we'll visualize what the best brain is "thinking."
 
 > [!check] Checkpoint
 > Run with 50 cars. Verify they all start at the same position and drive in different (mostly terrible) directions. Verify the alive counter decreases as cars crash. Stage 13 complete.
@@ -486,6 +752,8 @@ The "Best fitness" counter shows the highest checkpoint count. In generation 0 (
 
 > *Difficulty: Medium — Draw the neural network with activations lighting up.*
 
+*~50 min*
+
 Watching cars drive is fun. Watching the neural network *think* is fascinating. This stage draws the network diagram alongside the best car, with neurons colored by their activation value. You can see which sensors trigger which hidden neurons, and how that maps to steering and throttle.
 
 > [!tip] What You'll Learn
@@ -495,6 +763,18 @@ Watching cars drive is fun. Watching the neural network *think* is fascinating. 
 > - Why visualization helps debug AI behavior
 
 ### 14.1 — Draw the network
+
+**Try it yourself.** Write a `draw` method on `NeuralNetwork` that:
+- Takes `x, y` (top-left position) and `inputs: &[f32]` (current sensor values)
+- Computes the hidden activations (reuse the forward pass logic)
+- Draws three columns of circles: inputs, hidden, outputs
+- Colors each circle by its activation: yellow for positive, blue for negative, dim for near-zero
+- Draws lines between neurons, colored by weight: green for positive, red for negative
+
+This is a visualization exercise — there's no single "right" answer. The key is mapping numbers to colors.
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 impl NeuralNetwork {
@@ -535,7 +815,11 @@ impl NeuralNetwork {
 
                     let from_y = y + from as f32 * 25.0;
                     let to_y = y + to as f32 * 25.0;
-                    draw_line(layer_x[layer] + 10.0, from_y, layer_x[layer + 1] - 10.0, to_y, 1.0, color);
+                    draw_line(
+                        layer_x[layer] + 10.0, from_y,
+                        layer_x[layer + 1] - 10.0, to_y,
+                        1.0, color,
+                    );
                 }
             }
         }
@@ -564,12 +848,17 @@ impl NeuralNetwork {
 }
 ```
 
+</details>
+
 ### 14.2 — Draw for the best car
 
 In the main loop, after drawing all cars:
 
 ```rust
-if let Some(best) = cars.iter().filter(|c| c.alive).max_by(|a, b| a.fitness().partial_cmp(&b.fitness()).unwrap()) {
+if let Some(best) = cars.iter()
+    .filter(|c| c.alive)
+    .max_by(|a, b| a.fitness().partial_cmp(&b.fitness()).unwrap())
+{
     let sensors = best.read_sensors(&walls);
     if let Some(brain) = &best.brain {
         brain.draw(screen_width() - 200.0, 30.0, &sensors);
@@ -585,6 +874,12 @@ cargo run
 
 In the top-right corner, the neural network diagram appears. Neurons light up yellow (positive) or blue (negative) as the best car's sensors change. Connections glow green (positive weight) or red (negative weight). You can see the network "thinking" in real-time.
 
+Right now the thinking is random and terrible. In Act 3, evolution will shape these weights into a driving strategy, and you'll be able to watch the network develop meaningful patterns — like "when the front sensor is low (wall ahead), steer away."
+
+### Extend it
+
+Try adding a text readout below the network that shows the raw output values: `Steer: 0.34  Throttle: 0.78`. This helps you understand what the network is "deciding" at each moment. Later, when the AI is trained, you'll see the steering value swing left and right as the car navigates corners.
+
 > [!check] Checkpoint
 > Verify the network diagram appears with colored neurons and connections. Verify activations change as the car moves. Stage 14 complete.
 
@@ -594,11 +889,22 @@ In the top-right corner, the neural network diagram appears. Neurons light up ye
 
 You built a neural network from scratch — 50 parameters, two matrix multiplications, two activation functions. Each car has a brain that maps sensor readings to driving controls. The brains are random and terrible. Act 3 fixes that with evolution.
 
-| Component | Lines | What it does |
-|-----------|-------|-------------|
-| `Matrix` | ~40 | Row-major matrix with `mul_vec` |
-| `NeuralNetwork` | ~60 | 5→6→2 feedforward network |
-| `forward` | ~15 | Two matrix multiplies + activations |
-| `draw` (network) | ~50 | Real-time activation visualization |
+| Component | What it does |
+|-----------|-------------|
+| `Matrix` | Row-major matrix with `mul_vec` |
+| `NeuralNetwork` | 5→6→2 feedforward network with `forward` |
+| Activations | `tanh` for hidden + steering, `sigmoid` for throttle |
+| Random init | Weights in [-1, 1], biases in [-0.5, 0.5] |
+| Visualization | Real-time neuron activation colors and weight connections |
+
+| Rust Concept | Where You Used It |
+|-------------|-------------------|
+| `#[test]` and `cargo test` | Matrix multiplication, param count, output ranges |
+| `#[cfg(test)] mod tests` | Test module compiled only during testing |
+| `Option<T>` | `Car.brain: Option<NeuralNetwork>` — brain might not exist |
+| `match &self.field` | Borrowing an Option field without moving it |
+| `&mut` iteration | `for car in &mut cars` to update, `for car in &cars` to draw |
+| `Clone` derive | `NeuralNetwork` needs `Clone` for the genetic algorithm in Act 3 |
+| Closures | `.map(|i| ...)`, `.filter(|c| ...)`, `.max_by(|a, b| ...)` |
 
 **Next up — Act 3: The Evolution.** Selection, crossover, mutation. Watch fitness climb from 0 to "completes the track."

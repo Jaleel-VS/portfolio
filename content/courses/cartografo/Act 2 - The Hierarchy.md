@@ -22,6 +22,8 @@ flowchart LR
 
 > *Difficulty: Easy — The 13 root servers that anchor the entire internet.*
 
+*~45 min*
+
 Right now we send every query to `8.8.8.8`. But where does Google get its answers? From the DNS hierarchy — and the hierarchy starts at the **root servers**. There are exactly 13 root server addresses, hardcoded into every recursive resolver on earth. They're the starting point for resolving any domain name.
 
 > [!tip] What You'll Learn
@@ -61,14 +63,18 @@ pub const ROOT_SERVERS: [&str; 13] = [
 
 These 13 addresses are the bootstrap. Every recursive resolver on earth has them hardcoded. They never change (or change extremely rarely — the last change was `b.root-servers.net` in 2023).
 
+Remember to declare this module in `main.rs`:
+
+```rust
+mod protocol;
+mod roots;  // ← add this
+```
+
 ### 9.2 — Query a root server
 
 Let's ask a root server about `google.com` and see what it says:
 
 ```rust
-mod roots;
-
-// In main:
 fn main() {
     let name = "google.com";
     let id = rand_id();
@@ -85,13 +91,13 @@ fn main() {
     let mut buf = [0u8; 512];
     let (size, _) = socket.recv_from(&mut buf).expect("No response");
 
-    let header = protocol::Header::from_bytes(&buf);
+    let header = protocol::Header::from_bytes(&buf).expect("Bad header");
     let mut parser = protocol::PacketParser::new(&buf[..size]);
     parser.pos = 12;
 
     // Skip questions
     for _ in 0..header.question_count {
-        parser.read_question();
+        parser.read_question().expect("Bad question");
     }
 
     println!("Answers: {}", header.answer_count);
@@ -100,21 +106,21 @@ fn main() {
 
     // Parse answer records (probably 0)
     for _ in 0..header.answer_count {
-        let r = parser.read_record();
+        let r = parser.read_record().expect("Bad record");
         println!("  ANSWER: {} -> {}", r.name, r.data_string());
     }
 
     // Parse authority records (the referral)
     println!("\nAuthority section (referrals):");
     for _ in 0..header.authority_count {
-        let r = parser.read_record();
-        println!("  {} IN NS {}", r.name, r.data_string());
+        let r = parser.read_record().expect("Bad record");
+        println!("  {} IN NS (type {})", r.name, r.record_type);
     }
 
     // Parse additional records (glue — IP addresses of the NS servers)
     println!("\nAdditional section (glue records):");
     for _ in 0..header.additional_count {
-        let r = parser.read_record();
+        let r = parser.read_record().expect("Bad record");
         let type_name = match r.record_type { 1 => "A", 28 => "AAAA", _ => "?" };
         println!("  {} IN {} {}", r.name, type_name, r.data_string());
     }
@@ -135,9 +141,8 @@ Authority: 13
 Additional: 14
 
 Authority section (referrals):
-  com IN NS a.gtld-servers.net
-  com IN NS b.gtld-servers.net
-  com IN NS c.gtld-servers.net
+  com IN NS (type 2)
+  com IN NS (type 2)
   ...
 
 Additional section (glue records):
@@ -159,10 +164,12 @@ This is a **referral** — "I don't have the answer, but try these servers." The
 > 2. .com TLD server → "ask Google's name servers"
 > 3. Google's name server → "here's the IP: 142.250.80.46"
 
-We can see the referral. Next stage, we'll follow it.
+### Extend it
+
+Try querying a root server for `en.wikipedia.org`. How many referral hops would you expect? (Hint: root → `.org` TLD → Wikipedia's nameserver.) What about `docs.aws.amazon.com`?
 
 > [!check] Checkpoint
-> Query a root server for `google.com`. Verify you get 0 answers, ~13 authority NS records for `.com`, and glue A records in the additional section. Stage 9 complete.
+> Query a root server for `google.com`. Verify you get 0 answers, authority NS records for `.com`, and glue A records in the additional section. Stage 9 complete.
 
 ---
 
@@ -170,23 +177,31 @@ We can see the referral. Next stage, we'll follow it.
 
 > *Difficulty: Medium — Extracting NS records and glue, then querying the next server.*
 
+*~60 min*
+
 The root server told us to ask the `.com` TLD servers. The `.com` server will tell us to ask Google's authoritative servers. Google's server will give us the final answer. This stage builds the logic to extract a referral (NS + glue records) and query the next server in the chain.
 
 > [!tip] What You'll Learn
 > - Extracting NS records from the authority section
 > - Matching NS names to glue A records in the additional section
 > - Sending a follow-up query to the referred server
+> - Creating a new module with `mod` and structuring multi-file projects
 > - The two-hop resolution: root → TLD → authoritative
 
 ### 10.1 — Extract referral info
 
-Add a helper to parse a full response into structured sections. Create `src/resolver.rs`:
+We need a helper to parse a full response into structured sections. Create `src/resolver.rs`:
 
 ```rust
 use crate::protocol::{self, Header, PacketParser, ResourceRecord, RecordType};
 use crate::roots;
 use std::net::UdpSocket;
+```
 
+> [!note] `crate::` vs `super::`
+> `crate::protocol` means "the `protocol` module at the root of this crate." You could also write `super::protocol` (parent module's `protocol`), but `crate::` is clearer when you have multiple levels of nesting. Both work the same here.
+
+```rust
 /// A parsed DNS response with all sections.
 pub struct DnsResponse {
     pub header: Header,
@@ -196,46 +211,51 @@ pub struct DnsResponse {
 }
 
 /// Send a query and parse the full response.
-pub fn query_server(server: &str, name: &str, record_type: RecordType) -> std::io::Result<DnsResponse> {
+pub fn query_server(
+    server: &str, name: &str, record_type: RecordType,
+) -> Result<DnsResponse, String> {
     let id = rand_id();
     let query = protocol::build_query(id, name, record_type);
 
-    let socket = UdpSocket::bind("0.0.0.0:0")?;
-    socket.set_read_timeout(Some(std::time::Duration::from_secs(5)))?;
-    socket.send_to(&query, format!("{}:53", server))?;
+    let socket = UdpSocket::bind("0.0.0.0:0").map_err(|e| e.to_string())?;
+    socket.set_read_timeout(Some(std::time::Duration::from_secs(5)))
+        .map_err(|e| e.to_string())?;
+    socket.send_to(&query, format!("{}:53", server)).map_err(|e| e.to_string())?;
 
     let mut buf = [0u8; 512];
-    let (size, _) = socket.recv_from(&mut buf)?;
+    let (size, _) = socket.recv_from(&mut buf).map_err(|e| e.to_string())?;
 
-    let header = Header::from_bytes(&buf);
+    let header = Header::from_bytes(&buf)?;
     let mut parser = PacketParser::new(&buf[..size]);
     parser.pos = 12;
 
-    // Skip questions
     for _ in 0..header.question_count {
-        parser.read_question();
+        parser.read_question()?;
     }
 
     let mut answers = Vec::new();
     for _ in 0..header.answer_count {
-        answers.push(parser.read_record());
+        answers.push(parser.read_record()?);
     }
 
     let mut authorities = Vec::new();
     for _ in 0..header.authority_count {
-        authorities.push(parser.read_record());
+        authorities.push(parser.read_record()?);
     }
 
     let mut additionals = Vec::new();
     for _ in 0..header.additional_count {
-        additionals.push(parser.read_record());
+        additionals.push(parser.read_record()?);
     }
 
     Ok(DnsResponse { header, answers, authorities, additionals })
 }
+```
 
+Notice how `?` propagates errors from every operation — socket binding, sending, receiving, parsing. If anything fails, the function returns early with the error. No nested error handling, no try/catch.
+
+```rust
 /// Extract the IP address of a referred nameserver from the additional section.
-/// Matches NS names from authority section to A records in additional section.
 fn get_referral_ip(response: &DnsResponse) -> Option<String> {
     // Get NS names from authority section
     let ns_names: Vec<String> = response.authorities.iter()
@@ -246,8 +266,7 @@ fn get_referral_ip(response: &DnsResponse) -> Option<String> {
     // Find a matching A record in the additional section
     for additional in &response.additionals {
         if additional.record_type == RecordType::A.to_u16() {
-            let name = &additional.name;
-            if ns_names.iter().any(|ns| ns == name) {
+            if ns_names.iter().any(|ns| ns == &additional.name) {
                 return Some(additional.data_string());
             }
         }
@@ -265,13 +284,21 @@ fn rand_id() -> u16 {
 }
 ```
 
+Don't forget to declare the module in `main.rs`:
+
+```rust
+mod protocol;
+mod roots;
+mod resolver;  // ← add this
+```
+
 ### 10.2 — Two-hop resolution
 
 Let's manually follow the chain: root → TLD → authoritative.
 
 ```rust
 /// Resolve a name by manually following two referrals.
-pub fn resolve_manual(name: &str) -> std::io::Result<()> {
+pub fn resolve_manual(name: &str) -> Result<(), String> {
     // Step 1: Ask a root server
     let root = roots::ROOT_SERVERS[0];
     println!("1. Asking root server {}...", root);
@@ -285,7 +312,8 @@ pub fn resolve_manual(name: &str) -> std::io::Result<()> {
         return Ok(());
     }
 
-    let tld_server = get_referral_ip(&resp1).expect("No referral from root");
+    let tld_server = get_referral_ip(&resp1)
+        .ok_or_else(|| "No referral from root".to_string())?;
     println!("   Referred to TLD server: {}", tld_server);
 
     // Step 2: Ask the TLD server
@@ -300,7 +328,8 @@ pub fn resolve_manual(name: &str) -> std::io::Result<()> {
         return Ok(());
     }
 
-    let auth_server = get_referral_ip(&resp2).expect("No referral from TLD");
+    let auth_server = get_referral_ip(&resp2)
+        .ok_or_else(|| "No referral from TLD".to_string())?;
     println!("   Referred to authoritative server: {}", auth_server);
 
     // Step 3: Ask the authoritative server
@@ -316,6 +345,9 @@ pub fn resolve_manual(name: &str) -> std::io::Result<()> {
     Ok(())
 }
 ```
+
+> [!note] `.ok_or_else()` — converting Option to Result
+> `get_referral_ip` returns `Option<String>`. We need a `Result` so we can use `?`. `.ok_or_else(|| "error message".to_string())` converts `None` into `Err("error message")` and `Some(value)` into `Ok(value)`.
 
 ### 10.3 — Test it
 
@@ -335,10 +367,12 @@ cargo run -- google.com
 
 Three hops. Root → `.com` TLD → Google's nameserver → answer. You just traced the exact path that every DNS query takes, manually following each referral.
 
-> [!warning] Common Mistake
-> **Assuming the referral always has glue records.** Sometimes the additional section is empty — the TLD server gives you NS names but no IP addresses. In that case, you'd need to resolve the NS name itself (a separate DNS query). We'll handle this in the recursive walker.
+> [!warning] Assuming the referral always has glue records
+> Sometimes the additional section is empty — the TLD server gives you NS names but no IP addresses. In that case, you'd need to resolve the NS name itself (a separate DNS query). We'll handle this in the recursive walker next stage.
 
-The manual two-hop approach works for `google.com`, but some domains need more hops, and some return CNAME aliases that require additional resolution. Next stage, we'll build a general recursive walker that handles any number of referrals.
+### Extend it
+
+Try resolving `rust-lang.org` manually. Does it follow the same root → TLD → authoritative pattern? How about `bbc.co.uk` — how many hops does it need? (Hint: `.co.uk` is a two-level TLD.)
 
 > [!check] Checkpoint
 > Resolve `google.com` by manually following referrals: root → TLD → authoritative. Verify you get the IP address after exactly 3 queries. Stage 10 complete.
@@ -348,6 +382,8 @@ The manual two-hop approach works for `google.com`, but some domains need more h
 ## Stage 11 — The Recursive Walk
 
 > *Difficulty: Hard — A general recursive resolver that handles any domain.*
+
+*~75 min*
 
 The manual two-hop approach assumes exactly two referrals. But some domains have deeper hierarchies (subdomains, delegations), and some referrals don't include glue records. This stage builds a general recursive resolver that loops until it gets an answer, following as many referrals as needed.
 
@@ -373,15 +409,49 @@ resolve(name, type):
             return error (no answer, no referral)
 ```
 
-### 11.1 — The recursive resolver
+### Try it yourself — the recursive resolver
 
-Replace `resolve_manual` in `src/resolver.rs`:
+This is the core of the entire project. Before looking at the solution, try implementing it yourself. Here's the skeleton:
 
 ```rust
 const MAX_REFERRALS: usize = 20;
 
 /// Recursively resolve a domain name starting from the root servers.
-pub fn resolve(name: &str, record_type: RecordType) -> std::io::Result<Vec<ResourceRecord>> {
+pub fn resolve(
+    name: &str, record_type: RecordType,
+) -> Result<Vec<ResourceRecord>, String> {
+    let mut server = roots::ROOT_SERVERS[0].to_string();
+
+    for _depth in 0..MAX_REFERRALS {
+        let response = query_server(&server, name, record_type)?;
+
+        // TODO: if response has answers, return them
+        // TODO: if response has a referral, follow it
+        // TODO: if referral has no glue, resolve the NS name recursively
+        // TODO: if none of the above, return an error
+
+        todo!()
+    }
+
+    Err(format!("Too many referrals (>{}) for '{}'", MAX_REFERRALS, name))
+}
+```
+
+Key decisions:
+- What counts as "has answers"? Check `response.answers.is_empty()`.
+- How do you get the next server? Use `get_referral_ip(&response)`.
+- What if there's no glue? Extract the NS name and call `resolve()` recursively for its A record.
+
+<details>
+<summary>Solution</summary>
+
+```rust
+const MAX_REFERRALS: usize = 20;
+
+/// Recursively resolve a domain name starting from the root servers.
+pub fn resolve(
+    name: &str, record_type: RecordType,
+) -> Result<Vec<ResourceRecord>, String> {
     let mut server = roots::ROOT_SERVERS[0].to_string();
     let mut trace: Vec<String> = Vec::new();
 
@@ -392,14 +462,13 @@ pub fn resolve(name: &str, record_type: RecordType) -> std::io::Result<Vec<Resou
 
         // Got answers — we're done
         if !response.answers.is_empty() {
-            // Print the trace
             for line in &trace {
                 eprintln!("{}", line);
             }
             return Ok(response.answers);
         }
 
-        // Got a referral — follow it
+        // Got a referral with glue — follow it
         if let Some(next_server) = get_referral_ip(&response) {
             trace.push(format!("      → referred to {}", next_server));
             server = next_server;
@@ -414,7 +483,6 @@ pub fn resolve(name: &str, record_type: RecordType) -> std::io::Result<Vec<Resou
 
         if let Some(ns_name) = ns_names.first() {
             trace.push(format!("      → referred to {} (no glue, resolving...)", ns_name));
-            // Recursively resolve the NS server's IP
             let ns_records = resolve(ns_name, RecordType::A)?;
             if let Some(ns_a) = ns_records.first() {
                 server = ns_a.data_string();
@@ -426,18 +494,14 @@ pub fn resolve(name: &str, record_type: RecordType) -> std::io::Result<Vec<Resou
         for line in &trace {
             eprintln!("{}", line);
         }
-        return Err(std::io::Error::new(
-            std::io::ErrorKind::Other,
-            format!("Resolution failed for '{}': no answer and no referral", name),
-        ));
+        return Err(format!("Resolution failed for '{}': no answer and no referral", name));
     }
 
-    Err(std::io::Error::new(
-        std::io::ErrorKind::Other,
-        format!("Too many referrals (>{}) for '{}'", MAX_REFERRALS, name),
-    ))
+    Err(format!("Too many referrals (>{}) for '{}'", MAX_REFERRALS, name))
 }
 ```
+
+</details>
 
 The resolver is a loop, not recursion (despite the name "recursive resolver"). It queries a server, checks for answers, follows referrals, and repeats. The only actual recursion is when resolving NS names that lack glue records — a relatively rare case.
 
@@ -446,8 +510,6 @@ The resolver is a loop, not recursion (despite the name "recursive resolver"). I
 ### 11.2 — Update main
 
 ```rust
-mod resolver;
-
 fn main() {
     let name = std::env::args().nth(1).unwrap_or_else(|| "google.com".to_string());
 
@@ -457,8 +519,11 @@ fn main() {
         Ok(answers) => {
             println!();
             for record in &answers {
-                let type_name = match record.record_type { 1 => "A", 28 => "AAAA", 5 => "CNAME", _ => "?" };
-                println!("{}\t{}\tIN\t{}\t{}", record.name, record.ttl, type_name, record.data_string());
+                let type_name = match record.record_type {
+                    1 => "A", 28 => "AAAA", 5 => "CNAME", _ => "?",
+                };
+                println!("{}\t{}\tIN\t{}\t{}",
+                    record.name, record.ttl, type_name, record.data_string());
             }
         }
         Err(e) => eprintln!("Resolution failed: {}", e),
@@ -494,10 +559,12 @@ cargo run -- mail.google.com
 
 Some of these will return CNAME records (aliases) that need further resolution — we'll handle that in Stage 13.
 
-> [!warning] Common Mistake
-> **Infinite recursion when resolving NS names.** If resolving `ns1.example.com` requires asking `example.com`'s nameserver, which is `ns1.example.com`... that's a loop. The `MAX_REFERRALS` limit catches this, but production resolvers have more sophisticated loop detection.
+> [!warning] Infinite recursion when resolving NS names
+> If resolving `ns1.example.com` requires asking `example.com`'s nameserver, which is `ns1.example.com`... that's a loop. The `MAX_REFERRALS` limit catches this, but production resolvers have more sophisticated loop detection. If you see "Too many referrals," this is likely the cause.
 
-We have a working recursive resolver. But there's a problem — some responses use **name compression**, and our parser doesn't handle it yet. Next stage, we'll decode compression pointers.
+### Extend it
+
+Add a `--verbose` flag (check `std::env::args()` for `"--verbose"`) that prints the trace even on success. Without it, only print the final answer. This makes the output cleaner for normal use while keeping the trace available for debugging.
 
 > [!check] Checkpoint
 > Resolve `google.com` from root. Verify the trace shows 3 hops (root → TLD → authoritative). Try 3-4 different domains. Stage 11 complete.
@@ -507,6 +574,8 @@ We have a working recursive resolver. But there's a problem — some responses u
 ## Stage 12 — Name Compression
 
 > *Difficulty: Medium — The 0xC0 trick that saves bandwidth.*
+
+*~55 min*
 
 DNS packets repeat domain names constantly — the question, answer, authority, and additional sections often reference the same names. Sending `google.com` four times wastes bytes. DNS compression solves this: instead of repeating a name, a **pointer** says "the name at byte offset X." This stage updates our parser to handle compression pointers.
 
@@ -527,14 +596,26 @@ Pointer:       0xC0 0x0C         (pointer to offset 12)
 
 `0xC00C` = `1100_0000_0000_1100` → top 2 bits are `11` (pointer), offset = `0x000C` = 12. This means "read the name starting at byte 12 of the packet."
 
-### 12.1 — Update decode_name
+### Try it yourself — update decode_name
 
-Replace `decode_name` in `src/protocol.rs`:
+The current `decode_name` rejects any length byte > 63. You need to add compression pointer handling. Here's the logic:
+
+1. Read the length byte
+2. If `len & 0xC0 == 0xC0` → it's a pointer. Extract the 14-bit offset, jump to that position, continue reading labels
+3. If `len == 0` → end of name
+4. Otherwise → normal label (read `len` bytes)
+
+The tricky part: when you follow a pointer, the *caller's cursor* should advance by exactly 2 bytes (the pointer itself), not by the length of the name at the target. Use a `jumped` flag to track this.
+
+Try implementing it, then compare:
+
+<details>
+<summary>Solution</summary>
 
 ```rust
 /// Decode a domain name from DNS wire format, handling compression pointers.
 /// Returns the name and the number of bytes consumed from the current position.
-pub fn decode_name(buf: &[u8], start: usize) -> (String, usize) {
+pub fn decode_name(buf: &[u8], start: usize) -> Result<(String, usize), String> {
     let mut labels: Vec<String> = Vec::new();
     let mut pos = start;
     let mut jumped = false;
@@ -542,18 +623,19 @@ pub fn decode_name(buf: &[u8], start: usize) -> (String, usize) {
 
     loop {
         if pos >= buf.len() {
-            break;
+            return Err(format!("Name extends past end of buffer at offset {}", pos));
         }
 
         let len = buf[pos] as usize;
 
         // Check for compression pointer (top 2 bits set)
         if len & 0xC0 == 0xC0 {
+            if pos + 1 >= buf.len() {
+                return Err(format!("Compression pointer truncated at offset {}", pos));
+            }
             if !jumped {
-                // Record how many bytes we consumed before the first jump
                 bytes_consumed = pos - start + 2;
             }
-            // Follow the pointer
             let offset = ((len & 0x3F) << 8) | buf[pos + 1] as usize;
             pos = offset;
             jumped = true;
@@ -561,17 +643,22 @@ pub fn decode_name(buf: &[u8], start: usize) -> (String, usize) {
         }
 
         if len == 0 {
-            // End of name
             if !jumped {
                 bytes_consumed = pos - start + 1;
             }
             break;
         }
 
-        // Normal label
+        if len > 63 {
+            return Err(format!("Invalid label length {} at offset {}", len, pos));
+        }
+
         pos += 1;
+        if pos + len > buf.len() {
+            return Err(format!("Label extends past buffer at offset {}", pos));
+        }
         let label = std::str::from_utf8(&buf[pos..pos + len])
-            .expect("Invalid UTF-8 in label");
+            .map_err(|e| format!("Invalid UTF-8 at offset {}: {}", pos, e))?;
         labels.push(label.to_string());
         pos += len;
     }
@@ -580,21 +667,52 @@ pub fn decode_name(buf: &[u8], start: usize) -> (String, usize) {
         bytes_consumed = pos - start + 1;
     }
 
-    (labels.join("."), bytes_consumed)
+    Ok((labels.join("."), bytes_consumed))
 }
 ```
 
-The key insight: when we hit a pointer, we jump to a different position in the buffer to continue reading labels. But we only count the bytes consumed at the *original* position — the pointer itself is 2 bytes, regardless of how long the name it points to is.
+</details>
 
 | Code | Explanation |
 |------|-------------|
 | `len & 0xC0 == 0xC0` | Check if the top 2 bits are both set. `0xC0` = `1100_0000`. |
 | `(len & 0x3F) << 8 \| buf[pos + 1]` | Extract the 14-bit offset. Mask off the top 2 bits, shift left 8, OR with the next byte. |
-| `jumped` flag | Track whether we've followed a pointer. After a jump, the "bytes consumed" is fixed (we don't advance the original cursor). |
+| `jumped` flag | Track whether we've followed a pointer. After a jump, the "bytes consumed" is fixed. |
+
+### Tests
+
+```rust
+#[test]
+fn test_decode_compressed_name() {
+    // Simulate a packet where offset 0 has "google.com" uncompressed,
+    // and offset 12 has a pointer back to offset 0
+    let mut buf = encode_name("google.com"); // [6,g,o,o,g,l,e,3,c,o,m,0] = 12 bytes
+    buf.push(0xC0); // pointer marker
+    buf.push(0x00); // offset 0
+
+    let (name, consumed) = decode_name(&buf, 12).unwrap();
+    assert_eq!(name, "google.com");
+    assert_eq!(consumed, 2); // pointer is 2 bytes
+}
+
+#[test]
+fn test_decode_partial_compression() {
+    // "mail" label followed by a pointer to "google.com" at offset 0
+    let mut buf = encode_name("google.com"); // 12 bytes at offset 0
+    let ptr_start = buf.len();
+    buf.push(4); // "mail" length
+    buf.extend_from_slice(b"mail");
+    buf.push(0xC0); // pointer
+    buf.push(0x00); // to offset 0
+
+    let (name, _) = decode_name(&buf, ptr_start).unwrap();
+    assert_eq!(name, "mail.google.com");
+}
+```
 
 ### 12.2 — Test it
 
-Compression is used in almost every DNS response. After this fix, domains that previously failed (because the answer section used compressed names) should now work:
+Compression is used in almost every DNS response. After this fix, domains that previously failed should now work:
 
 ```bash
 cargo run -- amazon.com
@@ -602,24 +720,26 @@ cargo run -- docs.github.com
 cargo run -- www.rust-lang.org
 ```
 
-These responses heavily use compression — the answer names point back to the question section rather than repeating the full domain name.
+> [!warning] Advancing the cursor past the pointer target
+> When you follow a pointer, you jump to a different position in the buffer. But the *caller's* cursor should advance by exactly 2 bytes (the pointer itself), not by the length of the name at the target. If you get this wrong, the parser will be at the wrong position for the next field, and everything after will be garbage.
 
-> [!warning] Common Mistake
-> **Advancing the cursor past the pointer target.** When you follow a pointer, you jump to a different position in the buffer. But the *caller's* cursor should advance by exactly 2 bytes (the pointer itself), not by the length of the name at the target. The `jumped` flag handles this.
+> [!warning] Infinite pointer loops
+> A malicious packet could contain a pointer that points to itself. Our implementation doesn't check this — a malicious packet could cause an infinite loop. Production resolvers limit the number of pointer follows (typically 128). For learning purposes this is fine, but keep it in mind.
 
-> [!warning] Common Mistake
-> **Infinite pointer loops.** A malicious packet could contain a pointer that points to itself. Production resolvers limit the number of pointer follows (typically 128). Our implementation doesn't check this — a malicious packet could cause an infinite loop.
+### Extend it
 
-Compression is handled. But some domains return CNAME records instead of A records — aliases that need further resolution. Next stage.
+Add a pointer-follow counter to `decode_name` that returns an error after 128 jumps. This prevents infinite loops from malicious packets.
 
 > [!check] Checkpoint
-> Resolve domains that use compression (most do). Verify `amazon.com`, `docs.github.com`, and `www.rust-lang.org` resolve correctly. Stage 12 complete.
+> Resolve domains that use compression (most do). Verify `amazon.com`, `docs.github.com`, and `www.rust-lang.org` resolve correctly. Run `cargo test`. Stage 12 complete.
 
 ---
 
 ## Stage 13 — CNAME Chains
 
 > *Difficulty: Medium — Following aliases to the final answer.*
+
+*~50 min*
 
 When you query `www.github.com`, you might not get an A record directly. Instead, you get a CNAME record: `www.github.com` is an alias for `github.github.io`, which is an alias for something else, which eventually resolves to an IP address. This stage teaches the resolver to follow CNAME chains.
 
@@ -637,32 +757,32 @@ A CNAME says "this name is actually an alias for that name." It's used for:
 - **Load balancing:** `api.example.com` → `api.us-east-1.elb.amazonaws.com`
 - **Service migration:** Change where a name points without updating every client
 
+**Python comparison:** Think of a CNAME like a Python import alias: `import numpy as np`. The name `np` is an alias for `numpy`. Similarly, `www.github.com` is an alias for `github.github.io`.
+
 ### 13.1 — Update the resolver
 
-Add CNAME handling to the `resolve` function in `src/resolver.rs`:
+The strategy: split resolution into two layers. The outer function follows CNAME chains. The inner function does the recursive walk for a single name.
 
 ```rust
-pub fn resolve(name: &str, record_type: RecordType) -> std::io::Result<Vec<ResourceRecord>> {
+pub fn resolve(
+    name: &str, record_type: RecordType,
+) -> Result<Vec<ResourceRecord>, String> {
     let mut current_name = name.to_string();
     let mut cname_depth = 0;
     const MAX_CNAMES: usize = 10;
 
     loop {
         if cname_depth >= MAX_CNAMES {
-            return Err(std::io::Error::new(
-                std::io::ErrorKind::Other,
-                format!("Too many CNAME redirects for '{}'", name),
-            ));
+            return Err(format!("Too many CNAME redirects for '{}'", name));
         }
 
         let answers = resolve_name(&current_name, record_type)?;
 
         // Check if we got the record type we wanted
-        let direct: Vec<&ResourceRecord> = answers.iter()
-            .filter(|r| r.record_type == record_type.to_u16())
-            .collect();
+        let has_direct = answers.iter()
+            .any(|r| r.record_type == record_type.to_u16());
 
-        if !direct.is_empty() {
+        if has_direct {
             return Ok(answers);
         }
 
@@ -684,7 +804,9 @@ pub fn resolve(name: &str, record_type: RecordType) -> std::io::Result<Vec<Resou
 }
 
 /// Inner resolver — resolves a single name without CNAME following.
-fn resolve_name(name: &str, record_type: RecordType) -> std::io::Result<Vec<ResourceRecord>> {
+fn resolve_name(
+    name: &str, record_type: RecordType,
+) -> Result<Vec<ResourceRecord>, String> {
     let mut server = roots::ROOT_SERVERS[0].to_string();
 
     for _depth in 0..MAX_REFERRALS {
@@ -720,7 +842,25 @@ fn resolve_name(name: &str, record_type: RecordType) -> std::io::Result<Vec<Reso
 }
 ```
 
-The outer `resolve` handles CNAME chains. The inner `resolve_name` handles the recursive walk for a single name. If `resolve_name` returns a CNAME instead of the requested type, `resolve` follows the alias and tries again.
+### Concept: Ownership and String — why `.to_string()`?
+
+Notice `let mut current_name = name.to_string();`. The parameter `name` is `&str` (borrowed), but we need to reassign `current_name` in the loop when following CNAMEs. You can't reassign a borrowed reference to point to new data that's created inside the loop — the new data would be dropped at the end of the iteration.
+
+If you tried `let mut current_name: &str = name;` and then `current_name = &cname_record.data_string();`, you'd get:
+
+```
+error[E0716]: temporary value dropped while borrowed
+  --> src/resolver.rs:25:30
+   |
+25 |         current_name = &cname_record.data_string();
+   |                         ^^^^^^^^^^^^^^^^^^^^^^^^^^^ - temporary value is freed at the end of this statement
+   |                         |
+   |                         creates a temporary which is freed while still in use
+```
+
+The fix: own the string with `.to_string()`. Now `current_name` is a `String` that we can freely reassign. The old value is dropped automatically when we assign a new one.
+
+**The mental model:** Borrowing (`&str`) is like reading a book at the library — you can't take it home, and the library might close. Owning (`String`) is like buying your own copy — you can keep it as long as you want.
 
 ### 13.2 — Test it
 
@@ -737,14 +877,20 @@ github.map.fastly.net	30	IN	A	185.199.108.153
 
 Three names, two CNAME hops, one final A record.
 
+### Extend it
+
+Try resolving `www.amazon.com`. How many CNAME hops does it take? Amazon uses extensive CDN aliasing. Also try `www.bbc.co.uk` — does it use CNAMEs?
+
 > [!check] Checkpoint
-> Resolve `www.github.com` and verify it follows CNAME chains to a final A record. Stage 13 complete.
+> Resolve `www.github.com` and verify it follows CNAME chains to a final A record. Run `cargo test`. Stage 13 complete.
 
 ---
 
 ## Stage 14 — Record Types
 
 > *Difficulty: Medium — Parsing AAAA, MX, TXT, SOA, and NS record data.*
+
+*~60 min*
 
 So far we've focused on A records (IPv4 addresses). But DNS serves many types of data. This stage extends the parser to handle the most common record types, each with its own RDATA format.
 
@@ -755,88 +901,178 @@ So far we've focused on A records (IPv4 addresses). But DNS serves many types of
 > - SOA records — zone authority information
 > - How each record type encodes its data differently
 
-### 14.1 — Extend data_string
+### The challenge: RDATA contains compressed names
 
-Update `ResourceRecord::data_string` in `src/protocol.rs` to handle more types:
+CNAME, NS, MX, and SOA records contain domain names in their RDATA — and those names can use compression pointers that reference the *original packet buffer*, not just the RDATA bytes. This means `data_string()` needs access to the full packet.
+
+We need to track where in the packet the RDATA starts. Add a `data_offset` field to `ResourceRecord`:
 
 ```rust
-pub fn data_string(&self, packet: &[u8]) -> String {
-    match self.record_type {
-        1 => {
-            // A — 4 bytes → IPv4
-            format!("{}.{}.{}.{}", self.data[0], self.data[1], self.data[2], self.data[3])
-        }
-        28 => {
-            // AAAA — 16 bytes → IPv6
-            let segments: Vec<String> = (0..8)
-                .map(|i| {
-                    let val = u16::from_be_bytes([self.data[i * 2], self.data[i * 2 + 1]]);
-                    format!("{:x}", val)
-                })
-                .collect();
-            segments.join(":")
-        }
-        2 | 5 => {
-            // NS or CNAME — a compressed domain name
-            let (name, _) = decode_name(packet, self.data_offset);
-            name
-        }
-        15 => {
-            // MX — 2-byte priority + domain name
-            let priority = u16::from_be_bytes([self.data[0], self.data[1]]);
-            let (name, _) = decode_name(packet, self.data_offset + 2);
-            format!("{} {}", priority, name)
-        }
-        16 => {
-            // TXT — one or more length-prefixed strings
-            let mut texts = Vec::new();
-            let mut pos = 0;
-            while pos < self.data.len() {
-                let len = self.data[pos] as usize;
-                pos += 1;
-                if pos + len <= self.data.len() {
-                    texts.push(String::from_utf8_lossy(&self.data[pos..pos + len]).to_string());
-                }
-                pos += len;
+#[derive(Debug, Clone)]
+pub struct ResourceRecord {
+    pub name: String,
+    pub record_type: u16,
+    pub class: u16,
+    pub ttl: u32,
+    pub data: Vec<u8>,
+    pub data_offset: usize, // offset of RDATA in the original packet
+}
+```
+
+Update `read_record` to capture the offset:
+
+```rust
+pub fn read_record(&mut self) -> Result<ResourceRecord, String> {
+    let name = self.read_name()?;
+    let record_type = self.read_u16()?;
+    let class = self.read_u16()?;
+    let ttl = self.read_u32()?;
+    let rdlength = self.read_u16()? as usize;
+    let data_offset = self.pos; // capture before reading
+    let data = self.read_bytes(rdlength)?.to_vec();
+
+    Ok(ResourceRecord { name, record_type, class, ttl, data, data_offset })
+}
+```
+
+### Try it yourself — extend data_string
+
+Update `data_string` to accept the packet buffer and handle NS, CNAME, MX, TXT, and SOA records. Here are the formats:
+
+| Type | RDATA format |
+|------|-------------|
+| NS (2) | Compressed domain name |
+| CNAME (5) | Compressed domain name |
+| MX (15) | 2-byte priority + compressed domain name |
+| TXT (16) | One or more length-prefixed strings |
+| SOA (6) | Primary NS name + admin email + 5 × u32 |
+
+The key insight: for compressed names, call `decode_name(packet, self.data_offset)` — not `decode_name(&self.data, 0)` — because compression pointers reference the full packet.
+
+<details>
+<summary>Solution</summary>
+
+```rust
+impl ResourceRecord {
+    /// Format the RDATA based on record type.
+    /// `packet` is the full DNS response buffer (needed for compression pointers).
+    pub fn data_string(&self, packet: &[u8]) -> String {
+        match self.record_type {
+            1 if self.data.len() == 4 => {
+                format!("{}.{}.{}.{}",
+                    self.data[0], self.data[1], self.data[2], self.data[3])
             }
-            format!("\"{}\"", texts.join(""))
-        }
-        6 => {
-            // SOA — primary NS, admin email, serial, refresh, retry, expire, minimum
-            let (primary, consumed) = decode_name(packet, self.data_offset);
-            let (admin, consumed2) = decode_name(packet, self.data_offset + consumed);
-            let rest_offset = consumed + consumed2;
-            if self.data.len() >= rest_offset + 20 {
-                let serial = u32::from_be_bytes([
-                    self.data[rest_offset], self.data[rest_offset + 1],
-                    self.data[rest_offset + 2], self.data[rest_offset + 3],
-                ]);
-                format!("{} {} {}", primary, admin, serial)
-            } else {
+            28 if self.data.len() == 16 => {
+                let segments: Vec<String> = (0..8)
+                    .map(|i| {
+                        let val = u16::from_be_bytes([
+                            self.data[i * 2], self.data[i * 2 + 1]
+                        ]);
+                        format!("{:x}", val)
+                    })
+                    .collect();
+                segments.join(":")
+            }
+            2 | 5 => {
+                // NS or CNAME — compressed domain name
+                decode_name(packet, self.data_offset)
+                    .map(|(name, _)| name)
+                    .unwrap_or_else(|e| format!("(decode error: {})", e))
+            }
+            15 if self.data.len() >= 2 => {
+                // MX — 2-byte priority + compressed domain name
+                let priority = u16::from_be_bytes([self.data[0], self.data[1]]);
+                let name = decode_name(packet, self.data_offset + 2)
+                    .map(|(n, _)| n)
+                    .unwrap_or_else(|e| format!("(decode error: {})", e));
+                format!("{} {}", priority, name)
+            }
+            16 => {
+                // TXT — one or more length-prefixed strings
+                let mut texts = Vec::new();
+                let mut pos = 0;
+                while pos < self.data.len() {
+                    let len = self.data[pos] as usize;
+                    pos += 1;
+                    if pos + len <= self.data.len() {
+                        texts.push(
+                            String::from_utf8_lossy(&self.data[pos..pos + len]).to_string()
+                        );
+                    }
+                    pos += len;
+                }
+                format!("\"{}\"", texts.join(""))
+            }
+            6 => {
+                // SOA — primary NS + admin email + serial + ...
+                let (primary, consumed) = decode_name(packet, self.data_offset)
+                    .unwrap_or(("?".to_string(), 0));
+                let (admin, _) = decode_name(packet, self.data_offset + consumed)
+                    .unwrap_or(("?".to_string(), 0));
                 format!("{} {}", primary, admin)
             }
+            _ => format!("({} bytes)", self.data.len()),
         }
-        _ => format!("({} bytes)", self.data.len()),
     }
 }
 ```
 
-> [!note] The data_offset field
-> CNAME, NS, MX, and SOA records contain compressed domain names that reference the *original packet buffer*, not just the RDATA bytes. We need to track where in the packet the RDATA starts so we can resolve compression pointers. Add a `data_offset: usize` field to `ResourceRecord` and set it in `read_record`.
+</details>
 
-### 14.2 — Test different record types
+### 14.2 — Add a --type flag
 
-```bash
-cargo run -- google.com --type AAAA    # IPv6 address
-cargo run -- google.com --type MX      # Mail servers
-cargo run -- google.com --type TXT     # SPF, DKIM, etc.
-cargo run -- google.com --type NS      # Name servers
+Update `main.rs` to accept a record type argument:
+
+```rust
+fn main() {
+    let args: Vec<String> = std::env::args().collect();
+    let name = args.get(1).map(|s| s.as_str()).unwrap_or("google.com");
+    let type_str = args.get(2).map(|s| s.as_str()).unwrap_or("A");
+
+    let record_type = match type_str.to_uppercase().as_str() {
+        "A" => protocol::RecordType::A,
+        "AAAA" => protocol::RecordType::AAAA,
+        "MX" => protocol::RecordType::MX,
+        "TXT" => protocol::RecordType::TXT,
+        "NS" => protocol::RecordType::NS,
+        "CNAME" => protocol::RecordType::CNAME,
+        _ => {
+            eprintln!("Unknown record type: {}", type_str);
+            return;
+        }
+    };
+
+    // ... resolve and print
+}
 ```
 
-Add a `--type` flag to the CLI to select the record type.
+### 14.3 — Test different record types
+
+```bash
+cargo run -- google.com AAAA    # IPv6 address
+cargo run -- google.com MX      # Mail servers
+cargo run -- google.com TXT     # SPF, DKIM, etc.
+cargo run -- google.com NS      # Name servers
+```
+
+### Tests
+
+```rust
+#[test]
+fn test_record_type_round_trip() {
+    for rt in [RecordType::A, RecordType::AAAA, RecordType::MX, RecordType::NS] {
+        let value = rt.to_u16();
+        assert_eq!(RecordType::from_u16(value), Some(rt));
+    }
+}
+```
+
+### Extend it
+
+Query `google.com` for SOA records. The SOA record contains the primary nameserver, the admin email (encoded as a domain name — `admin.google.com` means `admin@google.com`), and a serial number. Can you extract and display all three?
 
 > [!check] Checkpoint
-> Query for MX, TXT, and AAAA records. Verify each type's data is parsed and displayed correctly. Stage 14 complete.
+> Query for MX, TXT, and AAAA records. Verify each type's data is parsed and displayed correctly. Run `cargo test`. Stage 14 complete.
 
 ---
 
@@ -844,26 +1080,20 @@ Add a `--type` flag to the CLI to select the record type.
 
 > *Difficulty: Medium — NXDOMAIN, SERVFAIL, timeouts, and retries.*
 
+*~50 min*
+
 Not every query succeeds. Domains don't exist (NXDOMAIN), servers fail (SERVFAIL), packets get lost (timeout), and responses get truncated (TC flag). This stage makes the resolver robust by handling every common failure mode.
 
 > [!tip] What You'll Learn
 > - DNS response codes (RCODE) and what they mean
 > - Timeout and retry logic
 > - The TC (truncated) flag — when UDP isn't enough
-> - Graceful error reporting
+> - Custom error types with Rust enums
+> - Implementing `Display` for error types
 
-### 15.1 — Response codes
+### 15.1 — A proper error type
 
-| RCODE | Name | Meaning |
-|-------|------|---------|
-| 0 | NOERROR | Success (even if 0 answers — e.g., referral) |
-| 1 | FORMERR | Query was malformed |
-| 2 | SERVFAIL | Server failed to process |
-| 3 | NXDOMAIN | Domain does not exist |
-| 4 | NOTIMP | Query type not supported |
-| 5 | REFUSED | Server refuses to answer (policy) |
-
-### 15.2 — Add error handling to the resolver
+Up to now we've used `String` for errors. That works but it's imprecise — you can't match on "was this NXDOMAIN or a timeout?" without parsing the string. Rust enums are perfect for this:
 
 ```rust
 /// DNS resolution error.
@@ -893,10 +1123,40 @@ impl std::fmt::Display for ResolveError {
 }
 ```
 
-Update `query_server` to check the response code and handle timeouts:
+**Python comparison:** This is like defining exception subclasses:
+```python
+class NxDomain(DnsError): ...
+class ServerFail(DnsError): ...
+class Timeout(DnsError): ...
+```
+But Rust enums are a single type with variants — you match on them with `match`, and the compiler ensures you handle every variant.
+
+### 15.2 — Response codes
+
+| RCODE | Name | Meaning |
+|-------|------|---------|
+| 0 | NOERROR | Success (even if 0 answers — e.g., referral) |
+| 1 | FORMERR | Query was malformed |
+| 2 | SERVFAIL | Server failed to process |
+| 3 | NXDOMAIN | Domain does not exist |
+| 4 | NOTIMP | Query type not supported |
+| 5 | REFUSED | Server refuses to answer (policy) |
+
+### Try it yourself — add error handling to query_server
+
+Update `query_server` to:
+1. Return `Result<DnsResponse, ResolveError>` instead of `Result<DnsResponse, String>`
+2. Check the response code and return the appropriate error variant
+3. Retry up to 2 times on timeout
+4. Check for the TC (truncated) flag
+
+<details>
+<summary>Solution</summary>
 
 ```rust
-pub fn query_server(server: &str, name: &str, record_type: RecordType) -> Result<DnsResponse, ResolveError> {
+pub fn query_server(
+    server: &str, name: &str, record_type: RecordType,
+) -> Result<DnsResponse, ResolveError> {
     let id = rand_id();
     let query = protocol::build_query(id, name, record_type);
 
@@ -904,23 +1164,22 @@ pub fn query_server(server: &str, name: &str, record_type: RecordType) -> Result
     socket.set_read_timeout(Some(std::time::Duration::from_secs(3)))
         .map_err(ResolveError::Network)?;
 
-    // Retry up to 2 times on timeout
     for attempt in 0..3 {
-        socket.send_to(&query, format!("{}:53", server)).map_err(ResolveError::Network)?;
+        socket.send_to(&query, format!("{}:53", server))
+            .map_err(ResolveError::Network)?;
 
         let mut buf = [0u8; 512];
         match socket.recv_from(&mut buf) {
             Ok((size, _)) => {
-                let header = Header::from_bytes(&buf);
+                let header = Header::from_bytes(&buf)
+                    .map_err(|e| ResolveError::ServerFail(e))?;
 
-                // Check for truncation
                 if header.truncated {
                     return Err(ResolveError::Truncated);
                 }
 
-                // Check response code
                 match header.rcode {
-                    0 => {} // NOERROR — continue parsing
+                    0 => {} // NOERROR
                     3 => return Err(ResolveError::NxDomain(name.to_string())),
                     2 => return Err(ResolveError::ServerFail(name.to_string())),
                     _ => return Err(ResolveError::ServerFail(
@@ -928,22 +1187,34 @@ pub fn query_server(server: &str, name: &str, record_type: RecordType) -> Result
                     )),
                 }
 
-                // Parse the full response
                 let mut parser = PacketParser::new(&buf[..size]);
                 parser.pos = 12;
 
-                for _ in 0..header.question_count { parser.read_question(); }
+                for _ in 0..header.question_count {
+                    parser.read_question()
+                        .map_err(|e| ResolveError::ServerFail(e))?;
+                }
 
                 let mut answers = Vec::new();
-                for _ in 0..header.answer_count { answers.push(parser.read_record()); }
+                for _ in 0..header.answer_count {
+                    answers.push(parser.read_record()
+                        .map_err(|e| ResolveError::ServerFail(e))?);
+                }
                 let mut authorities = Vec::new();
-                for _ in 0..header.authority_count { authorities.push(parser.read_record()); }
+                for _ in 0..header.authority_count {
+                    authorities.push(parser.read_record()
+                        .map_err(|e| ResolveError::ServerFail(e))?);
+                }
                 let mut additionals = Vec::new();
-                for _ in 0..header.additional_count { additionals.push(parser.read_record()); }
+                for _ in 0..header.additional_count {
+                    additionals.push(parser.read_record()
+                        .map_err(|e| ResolveError::ServerFail(e))?);
+                }
 
                 return Ok(DnsResponse { header, answers, authorities, additionals });
             }
-            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock || e.kind() == std::io::ErrorKind::TimedOut => {
+            Err(e) if e.kind() == std::io::ErrorKind::WouldBlock
+                   || e.kind() == std::io::ErrorKind::TimedOut => {
                 if attempt < 2 {
                     eprintln!("  Timeout from {}, retrying ({}/3)...", server, attempt + 2);
                     continue;
@@ -958,18 +1229,44 @@ pub fn query_server(server: &str, name: &str, record_type: RecordType) -> Result
 }
 ```
 
+</details>
+
+Update `resolve` and `resolve_name` to return `Result<Vec<ResourceRecord>, ResolveError>` as well. The `?` operator will propagate `ResolveError` automatically.
+
 ### 15.3 — Test error cases
 
 ```bash
 cargo run -- thisdoesnotexist12345.com
 # NXDOMAIN: 'thisdoesnotexist12345.com' does not exist
-
-cargo run -- google.com --server 192.0.2.1
-# Timeout: no response from 192.0.2.1 (192.0.2.1 is a documentation IP, nothing there)
 ```
 
+### Tests
+
+```rust
+#[test]
+fn test_resolve_error_display() {
+    let err = ResolveError::NxDomain("example.invalid".to_string());
+    assert_eq!(format!("{}", err), "NXDOMAIN: 'example.invalid' does not exist");
+
+    let err = ResolveError::Timeout("192.0.2.1".to_string());
+    assert_eq!(format!("{}", err), "Timeout: no response from 192.0.2.1");
+}
+```
+
+> [!warning] Matching on `io::ErrorKind` for timeouts
+> Different platforms report timeouts differently. Linux uses `WouldBlock`, macOS sometimes uses `TimedOut`. Check both:
+> ```rust
+> Err(e) if e.kind() == ErrorKind::WouldBlock
+>        || e.kind() == ErrorKind::TimedOut => { ... }
+> ```
+> If you only check one, timeouts will be reported as network errors on some platforms.
+
+### Extend it
+
+Add a `--server` flag that lets the user specify a custom DNS server instead of starting from root. For example, `cargo run -- google.com A --server 1.1.1.1` should query Cloudflare's DNS directly (like our Act 1 stub resolver). This is useful for comparing your recursive resolution against a known-good server.
+
 > [!check] Checkpoint
-> Query a non-existent domain and verify you get NXDOMAIN. Verify timeouts are retried and reported gracefully. Stage 15 complete.
+> Query a non-existent domain and verify you get NXDOMAIN. Verify timeouts are retried and reported gracefully. Run `cargo test`. Stage 15 complete.
 
 ---
 
@@ -1002,7 +1299,9 @@ You built a recursive DNS resolver that starts from the root servers and walks t
 | Name compression | `0xC0` pointer decoding |
 | CNAME resolution | Alias chain following |
 | Binary parsing | Every record type's RDATA format |
-| Error handling | Custom `ResolveError` enum, retries, timeouts |
-| Recursive design | NS resolution without glue, CNAME chains |
+| Custom error types | `ResolveError` enum with `Display` |
+| Result propagation | `?` operator throughout resolver |
+| Ownership vs borrowing | `String` vs `&str` in CNAME following |
+| Module organization | `protocol`, `roots`, `resolver` modules |
 
 **Next up — Act 3: The Cache.** Every query currently starts from the root. That's slow and wasteful. Caching stores answers so repeated lookups are instant — but introduces TTLs, negative caching, and the security concern of cache poisoning.

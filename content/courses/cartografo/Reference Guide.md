@@ -1,6 +1,6 @@
 # Reference Guide
 
-> *Quick reference for DNS protocol details, byte manipulation patterns, and Rust networking.*
+> *Quick reference for DNS protocol details, byte manipulation patterns, Rust networking, and project patterns.*
 
 ---
 
@@ -46,6 +46,11 @@ google.com → [6] g o o g l e [3] c o m [0]
 Pointer: top 2 bits = 11, bottom 14 bits = byte offset
 0xC00C = pointer to offset 12
 ```
+
+- Normal label: first byte 0-63 (length)
+- Pointer: first byte ≥ 192 (0xC0) — top 2 bits set
+- Offset: `((byte1 & 0x3F) << 8) | byte2`
+- After following a pointer, cursor advances by 2 bytes (not by the name length)
 
 ### Resource Record
 
@@ -132,9 +137,133 @@ println!("{:02x?}", &buf[..4]);  // [0a, 0b, 0c, 0d] (slice as hex)
 
 ---
 
+## Rust Module System
+
+### File → Module mapping
+
+```
+src/
+├── main.rs          ← crate root, declares modules with `mod`
+├── protocol.rs      ← `mod protocol;` in main.rs
+├── resolver.rs      ← `mod resolver;` in main.rs
+├── roots.rs         ← `mod roots;` in main.rs
+├── cache.rs         ← `mod cache;` in main.rs
+└── config.rs        ← `mod config;` in main.rs
+```
+
+### Key rules
+
+```rust
+// main.rs — declare modules
+mod protocol;   // loads src/protocol.rs
+mod resolver;   // loads src/resolver.rs
+
+// protocol.rs — mark items as public
+pub struct Header { ... }     // visible from other modules
+pub fn encode_name() { ... }  // visible from other modules
+fn private_helper() { ... }   // only visible within protocol.rs
+
+// resolver.rs — reference other modules
+use crate::protocol::{self, Header, RecordType};  // import from protocol
+use crate::roots;                                   // import roots module
+```
+
+### Common errors
+
+| Error | Cause | Fix |
+|-------|-------|-----|
+| `use of undeclared module` | Missing `mod foo;` in main.rs | Add `mod foo;` |
+| `struct is private` | Missing `pub` on struct/fn | Add `pub` |
+| `unresolved import` | Wrong path | Use `crate::module::Item` |
+
+---
+
+## Testing Patterns
+
+### Unit tests (same file as code)
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_something() {
+        assert_eq!(1 + 1, 2);
+    }
+
+    #[test]
+    fn test_error_case() {
+        let result = Header::from_bytes(&[0x00; 5]);
+        assert!(result.is_err());
+    }
+}
+```
+
+### Integration tests (tests/ directory)
+
+```rust
+// tests/integration.rs
+#[test]
+#[ignore] // skip by default, run with: cargo test -- --ignored
+fn test_network_query() {
+    // tests that need network access
+}
+```
+
+### Running tests
+
+```bash
+cargo test                    # all unit tests
+cargo test protocol           # tests in protocol module
+cargo test test_header        # tests matching "test_header"
+cargo test -- --ignored       # include #[ignore] tests
+```
+
+---
+
+## Error Handling Patterns
+
+### The progression
+
+```rust
+// Stage 1-2: .expect() — crashes with a message (OK for main/tests)
+let socket = UdpSocket::bind("0.0.0.0:0").expect("bind failed");
+
+// Stage 3+: Result + ? — propagates errors to caller (library code)
+fn parse(buf: &[u8]) -> Result<Header, String> {
+    if buf.len() < 12 {
+        return Err("buffer too short".to_string());
+    }
+    Ok(Header { ... })
+}
+
+// Stage 15+: Custom error enum — typed errors you can match on
+enum ResolveError {
+    NxDomain(String),
+    Timeout(String),
+    Network(std::io::Error),
+}
+```
+
+### Converting between error types
+
+```rust
+// io::Error → ResolveError
+socket.bind("0.0.0.0:0").map_err(ResolveError::Network)?;
+
+// String → ResolveError
+header.from_bytes(&buf).map_err(|e| ResolveError::ServerFail(e))?;
+
+// Option → Result
+get_referral_ip(&response).ok_or_else(|| "no referral".to_string())?;
+```
+
+---
+
 ## Networking Patterns
 
-### UDP (std)
+### UDP (std — synchronous)
 
 ```rust
 use std::net::UdpSocket;
@@ -147,7 +276,7 @@ let mut buf = [0u8; 4096];
 let (size, addr) = socket.recv_from(&mut buf)?;
 ```
 
-### UDP (tokio async)
+### UDP (tokio — async)
 
 ```rust
 use tokio::net::UdpSocket;
@@ -162,21 +291,35 @@ let (size, addr) = socket.recv_from(&mut buf).await?;
 ### TCP DNS Framing
 
 ```rust
-use std::net::TcpStream;
-use std::io::{Read, Write};
+use tokio::net::TcpStream;
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-let mut stream = TcpStream::connect("8.8.8.8:53")?;
+let mut stream = TcpStream::connect("8.8.8.8:53").await?;
 
 // Send: 2-byte length prefix + message
-stream.write_all(&(query.len() as u16).to_be_bytes())?;
-stream.write_all(&query)?;
+stream.write_all(&(query.len() as u16).to_be_bytes()).await?;
+stream.write_all(&query).await?;
 
 // Receive: 2-byte length prefix + message
 let mut len_buf = [0u8; 2];
-stream.read_exact(&mut len_buf)?;
+stream.read_exact(&mut len_buf).await?;
 let len = u16::from_be_bytes(len_buf) as usize;
 let mut response = vec![0u8; len];
-stream.read_exact(&mut response)?;
+stream.read_exact(&mut response).await?;
+```
+
+### Shared state in async (Arc<Mutex<T>>)
+
+```rust
+use std::sync::{Arc, Mutex};
+
+let cache = Arc::new(Mutex::new(DnsCache::new()));
+let cache_clone = Arc::clone(&cache); // cheap — increments ref count
+
+// Lock to access
+let mut lock = cache.lock().unwrap();
+lock.put("google.com", 1, records);
+drop(lock); // release explicitly, or let it drop at end of scope
 ```
 
 ---
@@ -218,6 +361,12 @@ nslookup -type=MX google.com
 
 # Query your local server
 dig @127.0.0.1 -p 5353 google.com
+
+# Run your resolver
+cargo run -- resolve google.com
+cargo run -- resolve google.com -t MX --trace
+cargo run -- server
+cargo run -- server --bind 127.0.0.1:5300
 ```
 
 ---
@@ -234,9 +383,22 @@ edition = "2024"
 tokio = { version = "1", features = ["full"] }
 clap = { version = "4", features = ["derive"] }
 colored = "2"
-chrono = "0.4"
-toml = "0.8"
 serde = { version = "1", features = ["derive"] }
+toml = "0.8"
 ```
 
 No DNS libraries. The entire protocol is implemented by hand.
+
+---
+
+## Ownership Quick Reference
+
+| Situation | Pattern | Why |
+|-----------|---------|-----|
+| Function reads data | `fn foo(buf: &[u8])` | Borrow — don't need ownership |
+| Function modifies data | `fn foo(buf: &mut Vec<u8>)` | Mutable borrow |
+| Struct stores data | `data: Vec<u8>` | Own it — struct outlives the source |
+| Struct references data | `buf: &'a [u8]` | Borrow with lifetime — efficient but constrained |
+| Loop reassigns a string | `let mut s = name.to_string()` | Own it — can't reassign a borrow |
+| Shared across threads | `Arc<Mutex<T>>` | Shared ownership + mutual exclusion |
+| Copy from borrow to owned | `.to_vec()`, `.to_string()` | Clone the data |

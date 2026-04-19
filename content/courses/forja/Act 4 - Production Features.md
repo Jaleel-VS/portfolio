@@ -21,6 +21,29 @@ This act closes the gap between "works on localhost" and "serves real traffic." 
 
 **Pedagogical shift:** By Act 4, you write more code yourself. Stages give you the key pieces — the tricky Rust parts, the type signatures, the gotchas — and you assemble them. If you get stuck, the checkpoint at the end of each stage has the full working code.
 
+> [!warning] Production Disclaimer
+> This is a learning project. For real-world HTTP servers, use established frameworks like [Axum](https://github.com/tokio-rs/axum), [Actix-web](https://actix.rs/), or [Warp](https://github.com/seanmonstar/warp). Rolling your own HTTP server for production is educational but not recommended — these frameworks handle edge cases, security, and performance that we skip for teaching purposes.
+
+```mermaid
+flowchart LR
+    S23[Stage 23\nKeep-Alive] --> S24[Stage 24\nChunked Transfer]
+    S24 --> S25[Stage 25\nCompression]
+    S25 --> S26[Stage 26\nCORS]
+    S26 --> S27[Stage 27\nRate Limiting]
+    S27 --> S28[Stage 28\nTLS/HTTPS]
+    S28 --> S29[Stage 29\nBenchmarking]
+    S29 --> S30[Stage 30\nDeploy to EC2]
+
+    style S23 fill:#1b4332,stroke:#40916c
+    style S24 fill:#1b4332,stroke:#40916c
+    style S25 fill:#1b4332,stroke:#40916c
+    style S26 fill:#2d6a4f,stroke:#40916c
+    style S27 fill:#1b4332,stroke:#40916c
+    style S28 fill:#540b0e,stroke:#9b2226
+    style S29 fill:#1b4332,stroke:#40916c
+    style S30 fill:#540b0e,stroke:#9b2226
+```
+
 ---
 
 ## Stage 23 — Keep-Alive: Persistent Connections
@@ -255,6 +278,30 @@ end_chunked(&mut stream).await?;
 3. Modify your response builder: if a response has no `Content-Length`, use chunked encoding
 4. Make sure keep-alive still works after a chunked response
 
+<details>
+<summary>Hint: the streaming route handler</summary>
+
+The `/stream` route can't use your normal response builder (which writes headers + body at once). It needs direct access to the stream:
+
+```rust
+// In your router, detect the /stream path and handle it specially
+if request.path() == "/stream" {
+    let headers = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nContent-Type: text/plain\r\n\r\n";
+    stream.write_all(headers.as_bytes()).await?;
+
+    for i in 0..5 {
+        let data = format!("chunk {} at {:?}\n", i, std::time::Instant::now());
+        write_chunk(&mut stream, data.as_bytes()).await?;
+        tokio::time::sleep(Duration::from_secs(1)).await;
+    }
+
+    end_chunked(&mut stream).await?;
+    continue; // Skip normal response writing, go to next request in keep-alive loop
+}
+```
+
+</details>
+
 > [!warning] Common Mistake: forgetting the final chunk
 > If you don't send the `0\r\n\r\n` terminator, the client hangs forever waiting for more data. curl will sit there spinning. Always send the final chunk, even if your stream errors out — wrap it in a cleanup block.
 
@@ -380,6 +427,25 @@ fn maybe_compress(request: &Request, response: &mut Response) {
 4. Handle the edge cases: small bodies, already-compressed content types, client doesn't accept gzip
 5. Make sure `Content-Length` reflects the compressed size
 
+<details>
+<summary>Hint: where compression fits in the pipeline</summary>
+
+In your connection handler, after routing but before writing:
+
+```rust
+let mut response = router.handle(request).await;
+
+// Compression middleware — after handler, before write
+maybe_compress(&request, &mut response);
+
+// Now write response (Content-Length already updated by maybe_compress)
+stream.write_all(response.as_bytes()).await?;
+```
+
+The `maybe_compress` function from the code above does the heavy lifting. The key insight: it modifies the response *in place* — replacing the body with compressed bytes and updating headers.
+
+</details>
+
 > [!warning] Common Mistake: Forgetting `encoder.finish()`
 > — gzip has a footer with a checksum. If you drop the encoder without calling `finish()`, the output is truncated and clients will reject it with a decompression error.
 
@@ -388,11 +454,47 @@ fn maybe_compress(request: &Request, response: &mut Response) {
 
 > [!warning] Common Mistake: Double compression
 > — if your static file is already `style.css.gz`, don't gzip it again. Check for existing `Content-Encoding` headers.
->
-> ### Test it
->
-> ```bash
 
+### Write a test
+
+Compression is a pure function — perfect for unit testing:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn gzip_roundtrip() {
+        let original = b"Hello, World! ".repeat(100); // repetitive data compresses well
+        let compressed = gzip_compress(&original);
+
+        // Compressed should be smaller
+        assert!(compressed.len() < original.len(),
+            "compressed {} should be < original {}", compressed.len(), original.len());
+
+        // Decompress and verify
+        use flate2::read::GzDecoder;
+        use std::io::Read;
+        let mut decoder = GzDecoder::new(&compressed[..]);
+        let mut decompressed = Vec::new();
+        decoder.read_to_end(&mut decompressed).unwrap();
+        assert_eq!(decompressed, original);
+    }
+
+    #[test]
+    fn tiny_body_not_worth_compressing() {
+        let tiny = b"hi";
+        let compressed = gzip_compress(tiny);
+        // gzip header overhead makes tiny payloads larger
+        assert!(compressed.len() >= tiny.len());
+    }
+}
+```
+
+### Test it
+
+```bash
 # Request with gzip support
 curl -v -H "Accept-Encoding: gzip" http://localhost:7878/api/hello | gunzip
 # Response headers should include: Content-Encoding: gzip
@@ -721,11 +823,46 @@ Note `tokio::sync::Mutex`, not `std::sync::Mutex`. You're in async code — a st
 
 > [!warning] Common Mistake: Lock contention
 > — every request locks the entire HashMap. For a high-traffic server, this becomes a bottleneck. Production rate limiters use sharded maps (like `dashmap` crate) or per-IP atomic counters. For Forja, the Mutex approach is fine.
->
-> ### Test it
->
-> ```bash
 
+### Write a test
+
+The rate limiter is pure logic — test it without a server:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::net::Ipv4Addr;
+
+    #[test]
+    fn allows_requests_within_limit() {
+        let mut limiter = RateLimiter::new(5.0, 1.0);
+        let ip = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
+
+        for _ in 0..5 {
+            assert!(limiter.check(ip), "should allow requests within limit");
+        }
+        assert!(!limiter.check(ip), "should deny after bucket is empty");
+    }
+
+    #[test]
+    fn different_ips_have_separate_buckets() {
+        let mut limiter = RateLimiter::new(2.0, 1.0);
+        let ip1 = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 1));
+        let ip2 = IpAddr::V4(Ipv4Addr::new(10, 0, 0, 2));
+
+        assert!(limiter.check(ip1));
+        assert!(limiter.check(ip1));
+        assert!(!limiter.check(ip1)); // ip1 exhausted
+
+        assert!(limiter.check(ip2)); // ip2 still has tokens
+    }
+}
+```
+
+### Test it
+
+```bash
 # Rapid-fire requests — should get 429 after the bucket empties
 for i in $(seq 1 15); do
   echo "Request $i: $(curl -s -o /dev/null -w '%{http_code}' http://localhost:7878/api/hello)"
@@ -914,11 +1051,30 @@ This is Rust generics earning their keep. One function handles both plain TCP an
 
 > [!warning] Common Mistake: Handshake failure with plain HTTP clients
 > — if someone sends a plain HTTP request to your HTTPS port, the TLS handshake fails (the first bytes aren't a TLS ClientHello). This is normal — log it and move on. Don't crash.
->
-> ### Test it
->
-> ```bash
 
+### Concept: Trait Bounds — `where S: AsyncReadExt + AsyncWriteExt + Unpin`
+
+When you made `handle_connection` generic, you wrote:
+
+```rust
+async fn handle_connection<S>(mut stream: S, router: Arc<Router>)
+where
+    S: AsyncReadExt + AsyncWriteExt + Unpin,
+```
+
+This is a **trait bound** — it says "S can be any type, as long as it implements these three traits." It's like Python's duck typing, but checked at compile time:
+
+- `AsyncReadExt` — "I can read bytes from this thing" (like Python's `io.RawIOBase.read()`)
+- `AsyncWriteExt` — "I can write bytes to this thing"
+- `Unpin` — a Rust-specific marker that says "this value can be moved in memory safely" (needed for async code that takes `&mut self`)
+
+Both `TcpStream` and `TlsStream<TcpStream>` implement all three traits, so one function handles both. If you tried to pass a `File` (which doesn't implement `AsyncWriteExt` the same way), the compiler would reject it with a clear error telling you which trait is missing.
+
+This is Rust generics earning their keep — one function, two stream types, zero runtime cost. The compiler generates specialized code for each type.
+
+### Test it
+
+```bash
 # Basic HTTPS request (skip cert verification for self-signed)
 curl -kv https://localhost:7878/api/hello
 # Look for: "SSL connection using TLSv1.3"
