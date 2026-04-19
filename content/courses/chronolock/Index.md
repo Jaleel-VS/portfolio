@@ -10,6 +10,9 @@ A progressive, project-based Rust course. You build ONE project from scratch —
 
 **What makes this different from your other Rust courses:** This is the first course where the primary challenge is *data representation* — how to model a complex, interconnected graph of objects on disk using content-addressable storage. There's no game loop, no network server, no TUI. The entire project is about reading and writing carefully structured data, and the elegance of git's design reveals itself one piece at a time.
 
+> [!warning] This is a learning project
+> For real-world version control, use git. Chronolock teaches you how git works internally, not to replace it.
+
 ---
 
 ## Design Decisions
@@ -62,14 +65,14 @@ The foundation. You learn how git stores data: content-addressable blobs, tree o
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 1 | Forging the Chronolock | `cargo new`, project setup, `.chronolock/` directory structure | Very Easy | 15 min |
-| 2 | The First Crystal | SHA-1 hashing, content addressing — why the same content always gets the same hash | Easy | 30 min |
-| 3 | Storing Memories | Blob objects — compress with zlib, write to `objects/`, the 2-char prefix directory scheme | Easy | 40 min |
-| 4 | Reading Crystals | `chronolock reveal` — decompress and display stored objects, object type headers | Easy | 30 min |
-| 5 | The Moment | Tree objects — representing a directory as a sorted list of (mode, name, hash) entries | Medium | 50 min |
-| 6 | Capturing a Moment | `chronolock stage` — the index/staging area, reading the working directory, building a tree | Medium | 60 min |
-| 7 | Nested Realities | Recursive tree building — subdirectories as tree objects pointing to other trees | Medium | 45 min |
-| 8 | The Object Trinity | Commit objects — author, timestamp, message, parent hash, tree hash. Your first anchor | Medium | 50 min |
+| 1 | Forging the Chronolock | `cargo new`, project setup, `.chronolock/` directory structure | Very Easy | 25 min |
+| 2 | The First Crystal | SHA-1 hashing, content addressing, module system, byte slices and borrowing | Easy | 45 min |
+| 3 | Storing Memories | Blob objects, zlib compression, `Result<T,E>` and the `?` operator | Easy | 60 min |
+| 4 | Reading Crystals | Decompression, object parsing, `clap` CLI, `#[test]` introduction | Easy | 50 min |
+| 5 | The Moment | Tree objects, binary format, closures, `&mut` borrowing | Medium | 75 min |
+| 6 | Capturing a Moment | Staging area, directory walking, conditional compilation `#[cfg(unix)]` | Medium | 90 min |
+| 7 | Nested Realities | Recursive tree building — subdirectories as tree objects pointing to other trees | Medium | 60 min |
+| 8 | The Object Trinity | Commit objects, `Option<T>`, timestamps with `chrono` | Medium | 75 min |
 
 ### [[Act 2 - The Timeline]] — Commits, History, and Diff (Stages 9-15)
 
@@ -77,13 +80,13 @@ You build the timeline — a chain of commits stretching back to the beginning. 
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 9 | Anchoring Time | `chronolock anchor` — create a commit, update HEAD, the parent chain | Medium | 50 min |
-| 10 | Walking Backwards | `chronolock log` — traverse the commit chain, format output, follow parent pointers | Easy | 35 min |
-| 11 | The Present | HEAD as a file, detached HEAD vs symbolic ref, `refs/heads/main` | Medium | 40 min |
-| 12 | Temporal Drift | `chronolock drift` — diff two trees, comparing blob hashes to detect changes | Medium | 60 min |
-| 13 | The Working Drift | Diff working directory against staged (index) and staged against last commit | Medium | 50 min |
-| 14 | Surveying the Present | `chronolock status` — untracked, modified, staged, combining the diffs into a status display | Medium | 45 min |
-| 15 | Ignoring the Noise | `.chronolockignore` — glob pattern matching, filtering the working directory scan | Easy | 30 min |
+| 9 | Anchoring Time | `chronolock anchor` — create a commit, update HEAD, the parent chain | Medium | 75 min |
+| 10 | Walking Backwards | `chronolock log` — traverse the commit chain, format output, follow parent pointers | Easy | 50 min |
+| 11 | The Present | HEAD as a file, detached HEAD vs symbolic ref, `refs/heads/main` | Medium | 60 min |
+| 12 | Temporal Drift | `chronolock drift` — diff two trees, comparing blob hashes to detect changes | Medium | 90 min |
+| 13 | The Working Drift | Diff working directory against staged (index) and staged against last commit | Medium | 75 min |
+| 14 | Surveying the Present | `chronolock status` — untracked, modified, staged, combining the diffs into a status display | Medium | 60 min |
+| 15 | Ignoring the Noise | `.chronolockignore` — glob pattern matching, filtering the working directory scan | Easy | 45 min |
 
 ### [[Act 3 - The Branches]] — Branching and Checkout (Stages 16-21)
 
@@ -91,12 +94,12 @@ Timelines diverge. You build branching — which turns out to be shockingly simp
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 16 | Forking a Timeline | `chronolock branch` — create a ref file in `refs/heads/`, list branches | Easy | 25 min |
-| 17 | Shifting Realities | `chronolock shift` — update HEAD, reconstruct working directory from a tree | Hard | 70 min |
-| 18 | The Safe Shift | Detecting uncommitted changes before checkout, refusing to overwrite dirty files | Medium | 45 min |
-| 19 | Detached Time | Checking out a specific commit (detached HEAD), the "you are not on any branch" state | Medium | 35 min |
-| 20 | Deleting Timelines | Branch deletion — safe delete (only if merged) vs force delete, dangling commits | Easy | 25 min |
-| 21 | The Echo Memory | `chronolock echo` — the reflog, recording every HEAD movement, recovering "lost" commits | Medium | 45 min |
+| 16 | Forking a Timeline | `chronolock branch` — create a ref file in `refs/heads/`, list branches | Easy | 40 min |
+| 17 | Shifting Realities | `chronolock shift` — update HEAD, reconstruct working directory from a tree | Hard | 100 min |
+| 18 | The Safe Shift | Detecting uncommitted changes before checkout, refusing to overwrite dirty files | Medium | 60 min |
+| 19 | Detached Time | Checking out a specific commit (detached HEAD), the "you are not on any branch" state | Medium | 50 min |
+| 20 | Deleting Timelines | Branch deletion — safe delete (only if merged) vs force delete, dangling commits | Easy | 40 min |
+| 21 | The Echo Memory | `chronolock echo` — the reflog, recording every HEAD movement, recovering "lost" commits | Medium | 60 min |
 
 ### [[Act 4 - The Convergence]] — Merging (Stages 22-28)
 
@@ -104,13 +107,13 @@ Two timelines become one. This is the hardest act — three-way merge, conflict 
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 22 | Finding Common Ground | Merge base — walking two commit chains to find the lowest common ancestor | Hard | 60 min |
-| 23 | The Fast Path | Fast-forward merge — when one branch is strictly ahead, just move the pointer | Easy | 25 min |
-| 24 | The Three-Way Mirror | Three-way diff — comparing base, ours, theirs to classify each file's changes | Hard | 70 min |
-| 25 | Clean Convergence | Auto-merge — applying non-conflicting changes from both sides | Hard | 60 min |
-| 26 | The Paradox | Conflict detection — both sides changed the same lines, writing conflict markers | Hard | 60 min |
-| 27 | Resolving the Paradox | `chronolock converge --continue` — reading resolved files, completing the merge commit | Medium | 40 min |
-| 28 | The Merge Commit | Creating a commit with two parents, the merge commit message convention | Medium | 35 min |
+| 22 | Finding Common Ground | Merge base — walking two commit chains to find the lowest common ancestor | Hard | 90 min |
+| 23 | The Fast Path | Fast-forward merge — when one branch is strictly ahead, just move the pointer | Easy | 40 min |
+| 24 | The Three-Way Mirror | Three-way diff — comparing base, ours, theirs to classify each file's changes | Hard | 100 min |
+| 25 | Clean Convergence | Auto-merge — applying non-conflicting changes from both sides | Hard | 90 min |
+| 26 | The Paradox | Conflict detection — both sides changed the same lines, writing conflict markers | Hard | 75 min |
+| 27 | Resolving the Paradox | `chronolock converge --continue` — reading resolved files, completing the merge commit | Medium | 60 min |
+| 28 | The Merge Commit | Creating a commit with two parents, updating log for DAG traversal | Medium | 50 min |
 
 ### [[Act 5 - The Archive]] — Performance, Packing, and Remotes (Stages 29-35)
 
@@ -118,13 +121,13 @@ The Chronolock works but stores every version of every file as a separate compre
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 29 | Counting the Cost | Measuring storage — how much space does the naive approach waste? Motivating pack files | Easy | 25 min |
-| 30 | The Delta | Delta compression — storing the difference between similar blobs instead of full copies | Hard | 70 min |
-| 31 | The Pack File | Packing objects into a single `.pack` file with an `.idx` index for O(1) lookup | Hard | 70 min |
-| 32 | The Other Chronolock | Remote repositories — `chronolock init --bare`, the concept of a remote | Medium | 35 min |
-| 33 | Sending Memories | `chronolock send` — determining what the remote is missing, transferring pack data | Hard | 60 min |
-| 34 | Receiving Memories | `chronolock receive` — fetching remote refs, downloading missing objects, updating local refs | Hard | 60 min |
-| 35 | The Complete Chronolock | Integration — init, stage, anchor, branch, shift, converge, send, receive. The full tool | Medium | 45 min |
+| 29 | Counting the Cost | Measuring storage — how much space does the naive approach waste? Motivating pack files | Easy | 40 min |
+| 30 | The Delta | Delta compression — storing the difference between similar blobs instead of full copies | Hard | 90 min |
+| 31 | The Pack File | Packing objects into a single `.pack` file with an `.idx` index for O(1) lookup | Hard | 90 min |
+| 32 | The Other Chronolock | Remote repositories — `chronolock init --bare`, the concept of a remote | Medium | 50 min |
+| 33 | Sending Memories | `chronolock send` — determining what the remote is missing, transferring objects | Hard | 75 min |
+| 34 | Receiving Memories | `chronolock receive` — fetching remote refs, downloading missing objects | Hard | 75 min |
+| 35 | The Complete Chronolock | Integration — init, stage, anchor, branch, shift, converge, send, receive. The full tool | Medium | 60 min |
 
 ### [[Reference Guide]]
 
@@ -136,12 +139,12 @@ SHA-1 internals, zlib compression, git object format specification, index file b
 
 | Act | Stages | Est. Time |
 |---|---|---|
-| The Crystals | 8 | ~5.5 hrs |
-| The Timeline | 7 | ~5 hrs |
-| The Branches | 6 | ~4 hrs |
-| The Convergence | 7 | ~6 hrs |
-| The Archive | 7 | ~6 hrs |
-| **Total** | **35** | **~26.5 hrs** |
+| The Crystals | 8 | ~8 hrs |
+| The Timeline | 7 | ~7.5 hrs |
+| The Branches | 6 | ~6 hrs |
+| The Convergence | 7 | ~8.5 hrs |
+| The Archive | 7 | ~8 hrs |
+| **Total** | **35** | **~38 hrs** |
 
 ## Tech Stack
 

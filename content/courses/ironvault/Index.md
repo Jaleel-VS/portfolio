@@ -4,7 +4,10 @@ A progressive, project-based Rust course. You build ONE project from scratch —
 
 **Prerequisites:** Python experience. No Rust knowledge required.
 **Project:** `~/juk/ironvault/` (cargo project ready to go)
-**Time estimate:** 40-60 hours across 30 stages
+**Time estimate:** 50-80 hours across 30 stages
+
+> [!warning] This is a learning project
+> For real-world password management, use established tools like [Bitwarden](https://bitwarden.com/), [1Password](https://1password.com/), or [KeePassXC](https://keepassxc.org/). Rolling your own cryptographic tool for production use is dangerous — these tools have years of auditing, bug bounties, and security review that a course project cannot replicate. Ironvault teaches you *how* they work, not to replace them.
 
 ---
 
@@ -16,24 +19,24 @@ A progressive, project-based Rust course. You build ONE project from scratch —
 | # | Stage | Concepts | Est. Time |
 |---|-------|----------|-----------|
 | 1 | **The Foundation Stone** | cargo, crates, main.rs, println! | 30 min |
-| 2 | **The Relic** | structs, derive macros, String vs &str, Option\<T\>, serde | 45 min |
-| 3 | **The Chamber** | HashMap, Vec, nested structs, chrono | 45 min |
-| 4 | **The Scroll** | std::fs, Result\<T,E\>, ? operator, PathBuf | 1 hr |
-| 5 | **The Gatekeeper** | clap derive, enums for subcommands, stdin | 1.5 hr |
-| 6 | **The Ledger** | pattern matching, iterators (find, retain), --show-password | 1.5 hr |
-| 7 | **The Atomic Quill** | File::sync_all, fs::rename, #[test], atomic writes | 1.5 hr |
+| 2 | **The Relic** | structs, derive macros, String vs &str, Option\<T\>, serde | 60 min |
+| 3 | **The Chamber** | HashMap, Vec, nested structs, chrono | 60 min |
+| 4 | **The Scroll** | std::fs, Result\<T,E\>, ? operator, PathBuf | 1.5 hr |
+| 5 | **The Gatekeeper** | clap derive, enums for subcommands, stdin | 2 hr |
+| 6 | **The Ledger** | pattern matching, iterators (find, retain), --show-password | 2 hr |
+| 7 | **The Atomic Quill** | File::sync_all, fs::rename, #[test], atomic writes | 2 hr |
 
 ### [[Act 2 - Forging the Master Key]] — Cryptography
 *The hardest act. Argon2 key derivation, AES-256-GCM encryption, the vault file format, sessions.*
 
 | # | Stage | Concepts | Est. Time |
 |---|-------|----------|-----------|
-| 8 | **The Salt Mines** | arrays, slices, OsRng, Argon2id key derivation | 2 hr |
-| 9 | **The Cipher** | AES-256-GCM, AEAD, nonces, custom error types, From trait | 2.5 hr |
-| 10 | **The Vault Door** | binary I/O, Read/Write traits, Cursor, file format design | 2.5 hr |
-| 11 | **The Master Key Ceremony** | rpassword, master password flow, verify-by-decrypting | 2 hr |
-| 12 | **The Session Seal** | tmpfs, file permissions, PID, session management | 2 hr |
-| 13 | **The Timeout** | chrono Duration, TOML config, session expiry | 1.5 hr |
+| 8 | **The Salt Mines** | arrays, slices, OsRng, Argon2id key derivation | 3 hr |
+| 9 | **The Cipher** | AES-256-GCM, AEAD, nonces, custom error types, From trait | 3.5 hr |
+| 10 | **The Vault Door** | binary I/O, Read/Write traits, Cursor, file format design | 3.5 hr |
+| 11 | **The Master Key Ceremony** | rpassword, master password flow, verify-by-decrypting | 3 hr |
+| 12 | **The Session Seal** | tmpfs, file permissions, PID, session management | 2.5 hr |
+| 13 | **The Timeout** | chrono Duration, TOML config, session expiry | 2 hr |
 
 ### [[Act 3 - Tools of the Trade]] — Utility Belt
 *Password generation, TOTP, clipboard, search — the features that make it usable.*

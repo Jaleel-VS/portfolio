@@ -323,6 +323,173 @@ src/
 
 ---
 
+## Rust Module System
+
+### Declaring modules
+
+Every `.rs` file must be declared in `main.rs` (or its parent module):
+
+```rust
+// src/main.rs
+mod object;    // loads src/object.rs
+mod staging;   // loads src/staging.rs
+mod refs;      // loads src/refs.rs
+```
+
+Without `mod object;`, Rust doesn't know `object.rs` exists — even if the file is right there.
+
+### Visibility
+
+- `pub fn` — visible to other modules
+- `fn` (no `pub`) — private to the current module
+- `pub struct` — struct is visible, but fields are private unless also `pub`
+- `pub(crate)` — visible within the crate but not to external users
+
+### Referencing other modules
+
+```rust
+// From staging.rs, call a function in object.rs:
+use crate::object;
+let hash = object::store_blob(&content)?;
+
+// Or import the function directly:
+use crate::object::store_blob;
+let hash = store_blob(&content)?;
+```
+
+### Common error
+
+```
+error[E0433]: failed to resolve: use of undeclared crate or module `object`
+```
+
+Fix: add `mod object;` to `main.rs`.
+
+---
+
+## Testing Patterns
+
+### Unit tests (inside the source file)
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_something() {
+        assert_eq!(hash_bytes(b"hello"), "aaf4c61d...");
+    }
+
+    #[test]
+    fn test_round_trip() {
+        let original = b"test data";
+        let ops = compute_delta(b"base", original);
+        let result = apply_delta(b"base", &ops);
+        assert_eq!(result, original);
+    }
+}
+```
+
+### Running tests
+
+```bash
+cargo test                    # run all tests
+cargo test test_hash          # run tests matching "test_hash"
+cargo test -- --nocapture     # show println! output during tests
+```
+
+### Key assertions
+
+| Macro | Purpose |
+|-------|---------|
+| `assert_eq!(a, b)` | Check equality |
+| `assert_ne!(a, b)` | Check inequality |
+| `assert!(condition)` | Check boolean |
+| `assert!(result.is_ok())` | Check Result is Ok |
+
+### `#[cfg(test)]` — test-only code
+
+The `#[cfg(test)]` attribute means the module only compiles when running `cargo test`. It's not included in the release binary. This is where you put test helpers, mock data, and test-only imports.
+
+---
+
+## Error Handling Patterns
+
+### The progression
+
+| Stage | Pattern | When to use |
+|-------|---------|-------------|
+| 1-2 | `.expect("msg")` | Prototype code, unrecoverable errors |
+| 3+ | `Result<T, E>` + `?` | Library functions, I/O operations |
+| CLI | `unwrap_or_else` | Top-level command handlers |
+
+### Library functions: return Result, use ?
+
+```rust
+pub fn store_blob(content: &[u8]) -> std::io::Result<String> {
+    let dir = Path::new(".chronolock/objects").join(&hash[..2]);
+    fs::create_dir_all(&dir)?;    // ? propagates error to caller
+    fs::write(&file_path, &compressed)?;
+    Ok(hash)                       // wrap success in Ok()
+}
+```
+
+### CLI handlers: unwrap_or_else for user-friendly errors
+
+```rust
+fn store(file: &str) {
+    let content = fs::read(file).unwrap_or_else(|e| {
+        eprintln!("Cannot read {}: {}", file, e);
+        std::process::exit(1);
+    });
+    match object::store_blob(&content) {
+        Ok(hash) => println!("{}", hash),
+        Err(e) => {
+            eprintln!("Failed to store: {}", e);
+            std::process::exit(1);
+        }
+    }
+}
+```
+
+### Converting error types with .map_err()
+
+```rust
+let header = std::str::from_utf8(&raw[..null_pos])
+    .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+```
+
+### Converting Option to Result with .ok_or_else()
+
+```rust
+let null_pos = raw.iter().position(|&b| b == 0)
+    .ok_or_else(|| std::io::Error::new(
+        std::io::ErrorKind::InvalidData,
+        "No null byte in object header",
+    ))?;
+```
+
+---
+
+## Ownership and Borrowing Quick Reference
+
+| Syntax | Meaning | Python equivalent |
+|--------|---------|-------------------|
+| `data: Vec<u8>` | Owned — this function takes ownership | `data: list[int]` (but Python doesn't transfer ownership) |
+| `data: &[u8]` | Borrowed read-only — looking but not modifying | `data: bytes` (read-only view) |
+| `data: &mut Vec<u8>` | Borrowed read-write — can modify in place | `data: list[int]` (mutable reference) |
+| `data: String` | Owned string | `data: str` |
+| `data: &str` | Borrowed string slice | `data: str` (read-only view) |
+
+**Key rules:**
+- One owner at a time — when you pass ownership, you can't use the original
+- Multiple `&` borrows OR one `&mut` borrow — never both
+- References can't outlive the data they point to
+- `.clone()` creates an owned copy when you need to keep both
+
+---
+
 ## Verifying with Git
 
 At any point, verify your Chronolock's output with real git:

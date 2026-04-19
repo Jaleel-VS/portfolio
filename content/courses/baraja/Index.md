@@ -68,17 +68,17 @@ Acts 1-4 build the game logic and AI with a simple text interface. Act 5 adds th
 
 ### [[Act 1 - The Cards]] — Data Model and Card System (Stages 1-7)
 
-Define what a card is, how effects work, and how decks shuffle and draw. By the end, you can create a deck, draw a hand, and play cards that deal damage and gain block.
+Define what a card is, how effects work, and how decks shuffle and draw. By the end, you can create a deck, draw a hand, and play cards that deal damage and gain block. Introduces the module system, `#[test]`, `Result<T,E>`, and ownership fundamentals.
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 1 | The Deck Box | `cargo new`, Card struct, enums for card type and rarity | Very Easy | 20 min |
-| 2 | The Effect System | `Effect` enum with data — Damage, Block, Draw, Energy, Status | Medium | 40 min |
-| 3 | The Deck | Draw pile, hand, discard pile. Shuffle, draw, discard cycle | Easy | 35 min |
-| 4 | Playing a Card | Energy cost check, resolve effects against a target, move to discard | Medium | 35 min |
-| 5 | Status Effects | Vulnerable, Weak, Strength, Poison — applied and ticking each turn | Medium | 45 min |
-| 6 | The Starter Deck | 5 Strikes (deal 6), 4 Defends (gain 5 block), 1 Bash (deal 8 + vulnerable) | Easy | 25 min |
-| 7 | Card Catalog | 30+ cards defined in data (not code) — attacks, skills, powers | Medium | 40 min |
+| 1 | The Deck Box | `cargo new`, Card struct, enums, module system (`mod`/`use`/`pub`) | Very Easy | 35 min |
+| 2 | The Effect System | `Effect` enum with data, composable effects, `#[test]` and `cargo test` | Medium | 60 min |
+| 3 | The Deck | Draw pile, hand, discard pile. Shuffle, draw, discard cycle. Ownership | Easy | 50 min |
+| 4 | Playing a Card | Energy cost check, `Result<T,E>` and `?` operator, effect resolution | Medium | 55 min |
+| 5 | Status Effects | Vulnerable, Weak, Strength, Poison — damage formula, shared `StatusEffects` struct | Medium | 60 min |
+| 6 | The Starter Deck | 5 Strikes, 4 Defends, 1 Bash. Full draw-play-discard cycle test | Easy | 35 min |
+| 7 | Card Catalog | 30+ cards defined as data (not code) — attacks, skills, powers | Medium | 55 min |
 
 ### [[Act 2 - The Battle]] — Turn-Based Combat (Stages 8-14)
 
@@ -86,13 +86,13 @@ Build the combat system: turns, phases, enemy AI with telegraphed intents, damag
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 8 | The Enemy | Enemy struct — HP, intent, move pattern. The Slime: alternates attack/defend | Easy | 30 min |
-| 9 | The Turn | Draw phase → player plays cards → enemy acts → end turn. Energy resets, block resets | Medium | 45 min |
-| 10 | Damage and Block | Damage reduces block first, then HP. Block resets each turn | Easy | 25 min |
-| 11 | Enemy Intents | Enemies telegraph next action. Patterns: cycle, conditional, random weighted | Medium | 40 min |
-| 12 | The Combat Loop | Full fight: turns repeat until player or enemy HP ≤ 0. Victory/defeat | Medium | 35 min |
-| 13 | Multi-Enemy Fights | 2-3 enemies at once. Target selection. AoE cards hit all | Medium | 40 min |
-| 14 | Elite Enemies | Harder enemies with unique mechanics — the Nob (punishes skills), the Lagavulin (debuffs over time) | Medium | 35 min |
+| 8 | The Enemy | Enemy struct — HP, intent, move pattern. Borrow checker: clone to avoid conflicts | Easy | 45 min |
+| 9 | The Turn | Draw phase → player plays cards → enemy acts → end turn. Field-level borrowing | Medium | 60 min |
+| 10 | Damage and Block | Full damage pipeline end-to-end. Edge cases: overkill, block overflow | Easy | 35 min |
+| 11 | Enemy Intents | Enemies telegraph next action. Patterns: cycle, conditional | Medium | 50 min |
+| 12 | The Combat Loop | Full text-based fight. User input with `stdin`, `Result` error display | Medium | 55 min |
+| 13 | Multi-Enemy Fights | 2-3 enemies at once. Target selection. AoE. Index invalidation | Medium | 55 min |
+| 14 | Elite Enemies | Harder enemies with unique mechanics — Nob, Lagavulin, Sentries | Medium | 50 min |
 
 ### [[Act 3 - The Spire]] — Procedural Map and Progression (Stages 15-20)
 
@@ -100,12 +100,12 @@ Build the roguelike layer: a branching map of encounters, card rewards after com
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 15 | The Map | Procedural branching path — 3 choices per node, 15 floors, boss at top | Medium | 45 min |
-| 16 | Card Rewards | After combat: choose 1 of 3 random cards to add to your deck | Easy | 25 min |
-| 17 | Rest Sites | Heal 30% HP or upgrade a card (increase its numbers) | Easy | 20 min |
-| 18 | Relics | Passive bonuses that last the whole run — "start combat with 1 Strength" | Medium | 40 min |
-| 19 | The Shop | Spend gold to buy cards, remove cards, or buy relics | Medium | 35 min |
-| 20 | The Boss | A boss with multiple phases and unique mechanics. Beat it to win the run | Hard | 50 min |
+| 15 | The Map | Procedural branching path — seeded RNG, 15 floors, boss at top | Medium | 65 min |
+| 16 | Card Rewards | After combat: choose 1 of 3 random cards to add to your deck | Easy | 35 min |
+| 17 | Rest Sites | Heal 30% HP or upgrade a card. Mutable references into enum variants | Easy | 30 min |
+| 18 | Relics | Passive bonuses with trigger events — modeling game events as enums | Medium | 55 min |
+| 19 | The Shop | Spend gold to buy cards, remove cards, or buy relics | Medium | 50 min |
+| 20 | The Boss | Boss fight + full run loop wiring all modules together | Hard | 70 min |
 
 ### [[Act 4 - The Mind]] — AI with Monte Carlo Tree Search (Stages 21-25)
 
@@ -113,11 +113,11 @@ Build an AI that plays the game optimally using MCTS. It simulates thousands of 
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 21 | Cloneable Game State | Make the entire game state cheaply cloneable for simulation | Medium | 35 min |
-| 22 | Random Playout | Given a game state, play randomly until combat ends. Record win/loss | Medium | 40 min |
-| 23 | The MCTS Tree | Tree nodes: state + visit count + win count. Selection, expansion, simulation, backpropagation | Hard | 55 min |
-| 24 | UCB1 Selection | Upper Confidence Bound — balance exploration vs exploitation in the tree | Medium | 35 min |
-| 25 | The AI Player | Wire MCTS into the game loop. The AI picks the move with the highest win rate | Medium | 40 min |
+| 21 | Cloneable Game State | `#[derive(Clone)]`, legal action enumeration, state independence | Medium | 50 min |
+| 22 | Random Playout | Play randomly until combat ends. Evaluate positions by win rate | Medium | 55 min |
+| 23 | The MCTS Tree | Arena allocation, 4 phases: selection, expansion, simulation, backpropagation | Hard | 75 min |
+| 24 | UCB1 Selection | Upper Confidence Bound — `f64` math, exploration vs exploitation | Medium | 50 min |
+| 25 | The AI Player | Wire MCTS into the game loop. Benchmark AI vs random play | Medium | 55 min |
 
 ### [[Act 5 - The Table]] — Terminal UI with ratatui (Stages 26-31)
 
@@ -125,12 +125,12 @@ Replace the text interface with a polished TUI. Cards rendered as bordered boxes
 
 | # | Stage | Concept | Difficulty | ~Time |
 |---|---|---|---|---|
-| 26 | ratatui Setup | Terminal setup, TEA architecture, main render loop | Easy | 30 min |
-| 27 | The Card Widget | Custom `Widget` for rendering a card — border, cost, name, effect text, type badge | Medium | 45 min |
-| 28 | The Hand | Horizontal row of cards, arrow keys to select, Enter to play, card highlighting | Medium | 40 min |
-| 29 | The Battle Screen | Enemy display (HP bar, intent icon), player stats (HP, block, energy), hand at bottom | Medium | 45 min |
-| 30 | The Map Screen | ASCII branching path, current position highlighted, node types as icons | Medium | 40 min |
-| 31 | The Complete Baraja | Card reward screen, rest site, shop, boss intro, victory/defeat, all screens connected | Hard | 50 min |
+| 26 | ratatui Setup | Terminal setup, TEA architecture, panic-safe cleanup | Easy | 45 min |
+| 27 | The Card Widget | Custom `Widget` trait, `Buffer` cell drawing, lifetime `<'a>` | Medium | 60 min |
+| 28 | The Hand | Horizontal layout, keyboard navigation, dynamic hand sizing | Medium | 55 min |
+| 29 | The Battle Screen | Multi-region layout, enemy display, player stats, HP color coding | Medium | 60 min |
+| 30 | The Map Screen | ASCII graph rendering, color-coded nodes, navigation | Medium | 55 min |
+| 31 | The Complete Baraja | All screens connected, AI auto-play, full run playable | Hard | 70 min |
 
 ### [[Reference Guide]]
 
@@ -142,12 +142,12 @@ Card effect system reference, all 30+ cards, enemy patterns, MCTS algorithm, rat
 
 | Act | Stages | Est. Time |
 |---|---|---|
-| The Cards | 7 | ~4 hrs |
-| The Battle | 7 | ~4 hrs |
-| The Spire | 6 | ~3.5 hrs |
-| The Mind | 5 | ~3.5 hrs |
-| The Table | 6 | ~4 hrs |
-| **Total** | **31** | **~19 hrs** |
+| The Cards | 7 | ~5.8 hrs |
+| The Battle | 7 | ~5.8 hrs |
+| The Spire | 6 | ~5.1 hrs |
+| The Mind | 5 | ~4.8 hrs |
+| The Table | 6 | ~5.8 hrs |
+| **Total** | **31** | **~27 hrs** |
 
 ## Tech Stack
 

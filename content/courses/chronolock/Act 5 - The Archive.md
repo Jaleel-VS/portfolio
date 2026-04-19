@@ -2,7 +2,7 @@
 
 > *The Chronolock works. You can store, branch, merge, and recover. But every version of every file sits in its own compressed blob — a library where every edition of every book occupies its own shelf. In this final act, you make the archive efficient and connected: delta compression shrinks storage, pack files consolidate objects, and remote communication lets two Chronolocks share history.*
 
-This act is about engineering — taking a correct system and making it practical. The concepts here (delta compression, pack files, network protocols) are what separate a toy from a tool.
+This act is about engineering — taking a correct system and making it practical. The concepts here (delta compression, pack files, remote protocols) are what separate a toy from a tool.
 
 ```mermaid
 flowchart LR
@@ -20,9 +20,9 @@ flowchart LR
 
 ## Stage 29 — Counting the Cost
 
-> *Difficulty: Easy — Measuring how wasteful the naive approach is.*
+> *Before optimizing, measure. How much space does the Chronolock actually waste? If you have a 10KB file and make 50 commits that each change one line, the naive approach stores 50 × 10KB = 500KB of nearly identical blobs.*
 
-Before optimizing, measure. How much space does the Chronolock actually waste? If you have a 10KB file and make 50 commits that each change one line, the naive approach stores 50 × 10KB = 500KB of nearly identical blobs. This stage quantifies the problem so the solution (delta compression) feels motivated rather than arbitrary.
+*Difficulty: Easy* | *~40 min*
 
 > [!tip] What You'll Learn
 > - Walking the object store to count objects and measure size
@@ -30,9 +30,39 @@ Before optimizing, measure. How much space does the Chronolock actually waste? I
 > - Understanding the duplication problem
 > - Why optimization matters for real repositories
 
-### 29.1 — The stats command
+### 29.1 — Try it yourself: the stats command
 
-Add a new file `src/stats.rs`:
+Create `src/stats.rs` (remember to add `mod stats;` to `main.rs`). Write a function that:
+
+1. Walks `.chronolock/objects/` — each 2-char subdirectory, each file within
+2. Skips the `pack/` subdirectory
+3. For each object: reads the compressed size from filesystem metadata, decompresses to get the type and uncompressed size
+4. Returns totals: object count, blob/tree/commit counts, compressed bytes, uncompressed bytes
+
+The function signature:
+
+```rust
+pub struct StoreStats {
+    pub object_count: usize,
+    pub total_compressed: u64,
+    pub total_uncompressed: u64,
+    pub blobs: usize,
+    pub trees: usize,
+    pub commits: usize,
+}
+
+pub fn collect_stats() -> std::io::Result<StoreStats> {
+    todo!()
+}
+```
+
+Hints:
+- `fs::read_dir(objects_dir)?` to iterate prefix directories
+- `entry.metadata()?.len()` for compressed file size
+- Reconstruct the hash from `prefix + suffix` to call `object::read_object`
+
+<details>
+<summary>Solution — click to reveal</summary>
 
 ```rust
 use std::fs;
@@ -47,53 +77,34 @@ pub struct StoreStats {
     pub commits: usize,
 }
 
-/// Walk the object store and collect statistics.
 pub fn collect_stats() -> std::io::Result<StoreStats> {
     let objects_dir = Path::new(".chronolock/objects");
     let mut stats = StoreStats {
-        object_count: 0,
-        total_compressed: 0,
-        total_uncompressed: 0,
-        blobs: 0,
-        trees: 0,
-        commits: 0,
+        object_count: 0, total_compressed: 0, total_uncompressed: 0,
+        blobs: 0, trees: 0, commits: 0,
     };
 
     if !objects_dir.exists() {
         return Ok(stats);
     }
 
-    // Walk the 2-char prefix directories
     for prefix_entry in fs::read_dir(objects_dir)? {
         let prefix_entry = prefix_entry?;
         let prefix_path = prefix_entry.path();
-
-        if !prefix_path.is_dir() {
+        if !prefix_path.is_dir() || prefix_entry.file_name() == "pack" {
             continue;
         }
 
-        // Skip pack directory (we'll add this later)
-        if prefix_entry.file_name() == "pack" {
-            continue;
-        }
-
+        let prefix = prefix_entry.file_name().to_string_lossy().to_string();
         for obj_entry in fs::read_dir(&prefix_path)? {
             let obj_entry = obj_entry?;
-            let obj_path = obj_entry.path();
+            if !obj_entry.path().is_file() { continue; }
 
-            if !obj_path.is_file() {
-                continue;
-            }
-
-            let compressed_size = obj_entry.metadata()?.len();
-            stats.total_compressed += compressed_size;
+            stats.total_compressed += obj_entry.metadata()?.len();
             stats.object_count += 1;
 
-            // Read and decompress to get the type and uncompressed size
-            let prefix = prefix_path.file_name().unwrap().to_string_lossy();
             let suffix = obj_entry.file_name().to_string_lossy().to_string();
             let hash = format!("{}{}", prefix, suffix);
-
             if let Ok(obj) = crate::object::read_object(&hash) {
                 stats.total_uncompressed += obj.size as u64;
                 match obj.obj_type {
@@ -108,6 +119,8 @@ pub fn collect_stats() -> std::io::Result<StoreStats> {
     Ok(stats)
 }
 ```
+
+</details>
 
 Wire it up:
 
@@ -156,7 +169,9 @@ Object store statistics:
 
 Zlib compression helps, but we're still storing 11 nearly-identical versions of `growing.txt`. Each blob differs by one line, yet each is stored independently. Delta compression would store the first version in full and each subsequent version as "the previous version plus one line."
 
-The waste grows with project size. A real project with thousands of files and hundreds of commits would store enormous amounts of redundant data.
+### Extend it
+
+Add a `--verbose` flag that lists each object with its type, compressed size, and uncompressed size. Sort by uncompressed size descending to find the biggest objects.
 
 > [!check] Checkpoint
 > Run `chronolock stats` and observe the object count growing with each commit. Understand that similar blobs are stored independently. Stage 29 complete.
@@ -165,9 +180,9 @@ The waste grows with project size. A real project with thousands of files and hu
 
 ## Stage 30 — The Delta
 
-> *Difficulty: Hard — Computing and applying deltas between similar blobs.*
+> *Instead of storing every version of a file in full, we can store the difference between two similar versions. The first version (the "base") is stored in full. Subsequent versions are stored as a delta: "take the base, apply these insertions and deletions."*
 
-Instead of storing every version of a file in full, we can store the *difference* between two similar versions. The first version (the "base") is stored in full. Subsequent versions are stored as a delta: "take the base, apply these insertions and deletions." This is **delta compression** — the technique that makes git repositories dramatically smaller.
+*Difficulty: Hard* | *~90 min*
 
 > [!tip] What You'll Learn
 > - Delta encoding — representing changes as instructions
@@ -184,48 +199,70 @@ Our delta format uses two operations:
 
 A delta is a sequence of these operations. Applying them in order against the base reconstructs the target.
 
-### 30.1 — Delta computation
+**Python comparison:** Think of `diff` and `patch`. A delta is like a patch file — instructions for transforming one version into another. But instead of line-based diffs, we work at the byte level for efficiency.
 
-Create `src/delta.rs`:
+### 30.1 — Try it yourself: delta computation
+
+Create `src/delta.rs`. Implement these three functions:
 
 ```rust
-/// A delta operation.
 #[derive(Debug)]
 pub enum DeltaOp {
-    /// Copy bytes from the base: (offset, length)
-    Copy(usize, usize),
-    /// Insert literal bytes
-    Insert(Vec<u8>),
+    Copy(usize, usize),   // (offset in base, length)
+    Insert(Vec<u8>),       // literal bytes to insert
 }
 
 /// Compute a delta from `base` to `target`.
-/// Uses a simple longest-common-substring approach.
+pub fn compute_delta(base: &[u8], target: &[u8]) -> Vec<DeltaOp> {
+    // Walk through target bytes. At each position:
+    // - Try to find the longest match in base (at least 8 bytes)
+    // - If found: emit Copy(offset, length)
+    // - If not: collect bytes into an Insert until a match is found
+    todo!()
+}
+
+/// Apply a delta to a base to reconstruct the target.
+pub fn apply_delta(base: &[u8], ops: &[DeltaOp]) -> Vec<u8> {
+    // Walk through ops, building the result:
+    // - Copy: append base[offset..offset+length]
+    // - Insert: append the literal bytes
+    todo!()
+}
+```
+
+The matching function (helper for `compute_delta`):
+
+```rust
+/// Find the longest match of the start of `needle` in `haystack`.
+fn find_longest_match(haystack: &[u8], needle: &[u8]) -> (usize, usize) {
+    // Simple O(n*m) search — try every offset in haystack,
+    // count how many bytes match from the start of needle
+    todo!()
+}
+```
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
 pub fn compute_delta(base: &[u8], target: &[u8]) -> Vec<DeltaOp> {
     let mut ops = Vec::new();
     let mut target_pos = 0;
 
     while target_pos < target.len() {
-        // Try to find the longest match in base
         let (best_offset, best_length) = find_longest_match(base, &target[target_pos..]);
 
         if best_length >= 8 {
-            // Worth copying from base (minimum 8 bytes to justify the copy instruction overhead)
             ops.push(DeltaOp::Copy(best_offset, best_length));
             target_pos += best_length;
         } else {
-            // No good match — insert literal bytes until we find one
             let insert_start = target_pos;
             target_pos += 1;
-
-            // Extend the insert until we find a match or reach the end
             while target_pos < target.len() {
                 let (_, len) = find_longest_match(base, &target[target_pos..]);
-                if len >= 8 {
-                    break;
-                }
+                if len >= 8 { break; }
                 target_pos += 1;
             }
-
             ops.push(DeltaOp::Insert(target[insert_start..target_pos].to_vec()));
         }
     }
@@ -233,13 +270,10 @@ pub fn compute_delta(base: &[u8], target: &[u8]) -> Vec<DeltaOp> {
     ops
 }
 
-/// Find the longest match of `needle_start` in `haystack`.
-/// Returns (offset_in_haystack, length).
 fn find_longest_match(haystack: &[u8], needle: &[u8]) -> (usize, usize) {
     let mut best_offset = 0;
     let mut best_length = 0;
 
-    // Simple O(n*m) search — good enough for our purposes
     for offset in 0..haystack.len() {
         let mut length = 0;
         while offset + length < haystack.len()
@@ -257,7 +291,6 @@ fn find_longest_match(haystack: &[u8], needle: &[u8]) -> (usize, usize) {
     (best_offset, best_length)
 }
 
-/// Apply a delta to a base to reconstruct the target.
 pub fn apply_delta(base: &[u8], ops: &[DeltaOp]) -> Vec<u8> {
     let mut result = Vec::new();
     for op in ops {
@@ -272,27 +305,31 @@ pub fn apply_delta(base: &[u8], ops: &[DeltaOp]) -> Vec<u8> {
     }
     result
 }
+```
 
+</details>
+
+### 30.2 — Serialization
+
+We also need to serialize deltas to bytes for storage. Add:
+
+```rust
 /// Serialize delta operations to bytes.
 pub fn serialize_delta(base_size: usize, target_size: usize, ops: &[DeltaOp]) -> Vec<u8> {
     let mut bytes = Vec::new();
-
-    // Header: base size and target size as variable-length integers
     encode_varint(base_size, &mut bytes);
     encode_varint(target_size, &mut bytes);
 
     for op in ops {
         match op {
             DeltaOp::Copy(offset, length) => {
-                // Copy instruction: high bit set
-                bytes.push(0x80);
+                bytes.push(0x80); // high bit set = copy
                 encode_varint(*offset, &mut bytes);
                 encode_varint(*length, &mut bytes);
             }
             DeltaOp::Insert(data) => {
-                // Insert instruction: length (high bit clear, max 127)
                 assert!(data.len() <= 127, "Insert too large");
-                bytes.push(data.len() as u8);
+                bytes.push(data.len() as u8); // high bit clear = insert
                 bytes.extend_from_slice(data);
             }
         }
@@ -305,42 +342,55 @@ fn encode_varint(mut value: usize, buf: &mut Vec<u8>) {
     loop {
         let mut byte = (value & 0x7F) as u8;
         value >>= 7;
-        if value > 0 {
-            byte |= 0x80;
-        }
+        if value > 0 { byte |= 0x80; }
         buf.push(byte);
-        if value == 0 {
-            break;
-        }
+        if value == 0 { break; }
     }
 }
 ```
 
+### Concept: Variable-length integers (varints)
+
+The `encode_varint` function encodes a number using as few bytes as possible. Small numbers (< 128) use 1 byte. Larger numbers use more. The high bit of each byte signals "more bytes follow."
+
+This is a common pattern in binary formats — it saves space when most values are small (like offsets and lengths in a delta).
+
 > [!note] Simplification
 > Real git uses a more sophisticated delta algorithm with hash-based matching (similar to rsync). Our O(n*m) approach works for learning but would be too slow for large files. The concept is identical — only the matching speed differs.
 
-### 30.2 — Test delta compression
+### 30.3 — Test delta compression
 
-```bash
-# We'll test this programmatically in the next stage when we build pack files.
-# For now, verify the round-trip works:
-```
-
-Add a quick test in `main.rs` or as a unit test:
+Add tests to `delta.rs`:
 
 ```rust
 #[cfg(test)]
 mod tests {
-    use super::delta;
+    use super::*;
 
     #[test]
     fn test_delta_round_trip() {
         let base = b"Hello, world! This is a test file with some content.";
         let target = b"Hello, world! This is a modified file with some content.";
 
-        let ops = delta::compute_delta(base, target);
-        let reconstructed = delta::apply_delta(base, &ops);
+        let ops = compute_delta(base, target);
+        let reconstructed = apply_delta(base, &ops);
+        assert_eq!(reconstructed, target);
+    }
 
+    #[test]
+    fn test_delta_identical() {
+        let data = b"identical content";
+        let ops = compute_delta(data, data);
+        let reconstructed = apply_delta(data, &ops);
+        assert_eq!(reconstructed, data);
+    }
+
+    #[test]
+    fn test_delta_completely_different() {
+        let base = b"aaaaaaaaaa";
+        let target = b"bbbbbbbbbb";
+        let ops = compute_delta(base, target);
+        let reconstructed = apply_delta(base, &ops);
         assert_eq!(reconstructed, target);
     }
 }
@@ -350,26 +400,28 @@ mod tests {
 cargo test
 ```
 
+### Extend it
+
+Compute the delta between two versions of `growing.txt` (from Stage 29) and compare the delta size to the full blob size. How much space does delta compression save for a file where only one line was added?
+
 > [!check] Checkpoint
-> The delta module can compute a delta between two byte sequences and apply it to reconstruct the target. The round-trip test passes. Stage 30 complete.
+> The delta module can compute a delta between two byte sequences and apply it to reconstruct the target. All round-trip tests pass. Stage 30 complete.
 
 ---
 
 ## Stage 31 — The Pack File
 
-> *Difficulty: Hard — Consolidating loose objects into a single indexed file.*
+> *Every object is a separate file in `objects/`. A repository with 10,000 objects has 10,000 files spread across 256 directories. Pack files solve this by concatenating all objects into a single `.pack` file with an `.idx` index for O(1) lookup.*
 
-Right now, every object is a separate file in `objects/`. A repository with 10,000 objects has 10,000 files spread across 256 directories. This is slow to clone, slow to transfer, and wasteful on filesystems that allocate space in blocks. Pack files solve this by concatenating all objects into a single `.pack` file with an `.idx` index for O(1) lookup.
+*Difficulty: Hard* | *~90 min*
 
 > [!tip] What You'll Learn
 > - The pack file format — a sequence of compressed objects
 > - The index file — mapping hashes to offsets
 > - Packing loose objects into a single file
-> - Reading objects from pack files
+> - Reading objects from pack files transparently
 
 ### The pack format (simplified)
-
-Our simplified pack file:
 
 ```
 PACK                    ← 4-byte magic
@@ -384,30 +436,62 @@ Each entry:
 <hash: 20 bytes>        ← SHA-1 hash
 <type: u8>              ← 1=blob, 2=tree, 3=commit
 <size: u32>             ← uncompressed size
-<compressed data>       ← zlib-compressed object content (without header)
+<compressed_size: u32>  ← compressed data length
+<compressed data>       ← zlib-compressed object content
 ```
 
-The index file maps hashes to byte offsets in the pack file for O(1) lookup.
+### 31.1 — Try it yourself: the pack function
 
-### 31.1 — The pack module
+Create `src/pack.rs`. The `pack_objects` function should:
 
-Create `src/pack.rs`:
+1. Walk all loose objects (same as `collect_stats`)
+2. Read each object's type and content
+3. Write them sequentially into a single `.pack` file with the format above
+4. Write a JSON index mapping hash → byte offset
+5. Delete the loose object files
 
 ```rust
 use crate::object::{self, ObjectType};
 use flate2::write::ZlibEncoder;
-use flate2::read::ZlibDecoder;
 use flate2::Compression;
 use std::collections::HashMap;
 use std::fs;
-use std::io::{Read, Write};
+use std::io::Write;
 use std::path::Path;
 
 const PACK_MAGIC: &[u8] = b"PACK";
 const PACK_VERSION: u32 = 1;
 
-/// Pack all loose objects into a single pack file.
-/// Returns the number of objects packed.
+pub fn pack_objects() -> std::io::Result<usize> {
+    // 1. Collect all loose objects: (hash, type, content)
+    // 2. Write pack file header (magic + version + count)
+    // 3. For each object: write hash + type byte + sizes + compressed content
+    // 4. Build index: hash → offset
+    // 5. Write index as JSON
+    // 6. Delete loose objects
+    todo!()
+}
+```
+
+You'll need `serde` and `serde_json` for the index. Add to `Cargo.toml`:
+
+```toml
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+```
+
+Also make `hex_to_bytes` public in `object.rs`:
+
+```rust
+pub fn hex_to_bytes_pub(hex: &str) -> std::io::Result<Vec<u8>> {
+    hex_to_bytes(hex)
+}
+```
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
 pub fn pack_objects() -> std::io::Result<usize> {
     let objects_dir = Path::new(".chronolock/objects");
     let pack_dir = objects_dir.join("pack");
@@ -428,7 +512,6 @@ pub fn pack_objects() -> std::io::Result<usize> {
             let obj_entry = obj_entry?;
             let suffix = obj_entry.file_name().to_string_lossy().to_string();
             let hash = format!("{}{}", prefix, suffix);
-
             let obj = object::read_object(&hash)?;
             entries.push((hash, obj.obj_type, obj.content));
         }
@@ -440,9 +523,6 @@ pub fn pack_objects() -> std::io::Result<usize> {
     }
 
     let count = entries.len();
-
-    // Write pack file
-    let pack_path = pack_dir.join("main.pack");
     let mut pack_data: Vec<u8> = Vec::new();
 
     // Header
@@ -450,7 +530,6 @@ pub fn pack_objects() -> std::io::Result<usize> {
     pack_data.extend_from_slice(&PACK_VERSION.to_be_bytes());
     pack_data.extend_from_slice(&(count as u32).to_be_bytes());
 
-    // Index: hash → offset
     let mut index: HashMap<String, u64> = HashMap::new();
 
     for (hash, obj_type, content) in &entries {
@@ -477,24 +556,20 @@ pub fn pack_objects() -> std::io::Result<usize> {
         encoder.write_all(content)?;
         let compressed = encoder.finish()?;
 
-        // Compressed size (4 bytes) + data
         pack_data.extend_from_slice(&(compressed.len() as u32).to_be_bytes());
         pack_data.extend_from_slice(&compressed);
     }
 
-    fs::write(&pack_path, &pack_data)?;
+    fs::write(pack_dir.join("main.pack"), &pack_data)?;
 
-    // Write index file
-    let idx_path = pack_dir.join("main.idx");
     let idx_json = serde_json::to_string(&index)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-    fs::write(&idx_path, idx_json)?;
+    fs::write(pack_dir.join("main.idx"), idx_json)?;
 
     // Remove loose objects
     for (hash, _, _) in &entries {
-        let loose_path = objects_dir.join(&hash[..2]).join(&hash[2..]);
-        let _ = fs::remove_file(&loose_path);
-        // Clean up empty prefix directories
+        let loose = objects_dir.join(&hash[..2]).join(&hash[2..]);
+        let _ = fs::remove_file(&loose);
         let prefix_dir = objects_dir.join(&hash[..2]);
         if prefix_dir.read_dir()?.next().is_none() {
             let _ = fs::remove_dir(&prefix_dir);
@@ -505,46 +580,11 @@ pub fn pack_objects() -> std::io::Result<usize> {
 }
 ```
 
-> [!note] Simplification
-> We use a JSON index file for simplicity. Real git uses a binary index format with fan-out tables for O(1) lookup. The concept is the same — map hash to offset — but the binary format is more compact and faster.
+</details>
 
-### 31.2 — Add serde for the index
+### 31.2 — Reading from pack files
 
-Update `Cargo.toml` if not already present:
-
-```toml
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-```
-
-Make `hex_to_bytes` public in `object.rs`:
-
-```rust
-pub fn hex_to_bytes_pub(hex: &str) -> std::io::Result<Vec<u8>> {
-    hex_to_bytes(hex)
-}
-```
-
-### 31.3 — The pack command
-
-```rust
-/// Pack loose objects into a pack file
-Pack,
-```
-
-```rust
-Commands::Pack => {
-    let count = pack::pack_objects().unwrap_or_else(|e| {
-        eprintln!("Pack failed: {}", e);
-        std::process::exit(1);
-    });
-    println!("Packed {} objects.", count);
-}
-```
-
-### 31.4 — Reading from pack files
-
-Update `read_object` in `object.rs` to fall back to pack files when a loose object isn't found. This is the key integration point — the rest of the codebase doesn't need to know whether an object is loose or packed.
+The key integration: update `read_object` in `object.rs` to fall back to pack files when a loose object isn't found. The rest of the codebase doesn't need to know whether an object is loose or packed.
 
 ```rust
 pub fn read_object(hash: &str) -> std::io::Result<Object> {
@@ -562,27 +602,51 @@ pub fn read_object(hash: &str) -> std::io::Result<Object> {
 }
 ```
 
-Add `read_from_pack` that reads the index, finds the offset, and reads the entry from the pack file.
+Implement `read_from_pack`: load the JSON index, find the offset, seek to it in the pack file, read the entry.
 
-### 31.5 — Test it
+### 31.3 — Wire it up
+
+```rust
+/// Pack loose objects into a pack file
+Pack,
+```
+
+```rust
+Commands::Pack => {
+    let count = pack::pack_objects().unwrap_or_else(|e| {
+        eprintln!("Pack failed: {}", e);
+        std::process::exit(1);
+    });
+    println!("Packed {} objects.", count);
+}
+```
+
+### 31.4 — Test it
 
 ```bash
 cargo run -- stats
-# Note the object count and compressed size
+# Note the object count
 
 cargo run -- pack
 # Packed N objects.
 
 cargo run -- stats
-# Objects should now be 0 (all packed)
+# Objects should now be 0 loose (all packed)
 
-# Verify everything still works
+# Verify everything still works transparently
 cargo run -- log
 cargo run -- status
 cargo run -- reveal <some-hash>
 ```
 
 All commands should work identically — the pack file is transparent to the rest of the system.
+
+> [!warning] Common Mistake: Forgetting to update `read_object`
+> If you pack objects but don't add the pack-file fallback to `read_object`, every command that reads objects will break with "object not found." The pack integration must be in `read_object` so it's automatic.
+
+### Extend it
+
+Run `chronolock stats` before and after packing. Compare the total disk usage (compressed bytes) of loose objects vs the pack file size. The pack file should be slightly smaller due to reduced filesystem overhead (one file vs hundreds).
 
 > [!check] Checkpoint
 > Pack all loose objects. Verify `stats` shows 0 loose objects. Verify `log`, `status`, and `reveal` still work. Stage 31 complete.
@@ -591,9 +655,9 @@ All commands should work identically — the pack file is transparent to the res
 
 ## Stage 32 — The Other Chronolock
 
-> *Difficulty: Medium — Bare repositories and the concept of remotes.*
+> *Before we can push and pull, we need bare repositories: Chronolocks that store objects and refs but have no working directory. They exist solely to receive and serve history.*
 
-So far, the Chronolock only knows about itself. But version control's real power is collaboration — sharing history between repositories. Before we can push and pull, we need to understand **bare repositories**: Chronolocks that store objects and refs but have no working directory. They exist solely to receive and serve history.
+*Difficulty: Medium* | *~50 min*
 
 > [!tip] What You'll Learn
 > - Bare repositories — what they are and why they exist
@@ -609,7 +673,7 @@ When you push to a remote, you're updating its refs and adding objects. If the r
 
 ### 32.1 — Init bare
 
-Update the `init` command to support `--bare`:
+Update the `Init` command to support `--bare`:
 
 ```rust
 Init {
@@ -620,18 +684,7 @@ Init {
 ```
 
 ```rust
-Commands::Init { bare } => {
-    if bare {
-        init_bare();
-    } else {
-        init();
-    }
-}
-```
-
-```rust
 fn init_bare() {
-    let root = Path::new(".");
     // Bare repos store objects and refs directly in the current directory
     fs::create_dir_all("objects").expect("Failed to create objects/");
     fs::create_dir_all("refs/heads").expect("Failed to create refs/heads/");
@@ -642,7 +695,7 @@ fn init_bare() {
 
 ### 32.2 — Remote configuration
 
-Add a simple remote tracking file. Create `src/remote.rs`:
+Create `src/remote.rs`:
 
 ```rust
 use std::fs;
@@ -669,7 +722,42 @@ pub fn get_remote(name: &str) -> std::io::Result<Option<String>> {
 
 For this course, remotes are local filesystem paths (not network URLs). This keeps the focus on the data transfer protocol rather than networking.
 
-### 32.3 — Test it
+### 32.3 — Wire it up
+
+Add `mod remote;` to `main.rs`. Add the subcommand:
+
+```rust
+/// Manage remote Chronolocks
+Remote {
+    /// Action: "add"
+    action: String,
+    /// Remote name
+    name: String,
+    /// Remote path
+    path: Option<String>,
+},
+```
+
+```rust
+Commands::Remote { action, name, path } => {
+    match action.as_str() {
+        "add" => {
+            let p = path.unwrap_or_else(|| {
+                eprintln!("Usage: chronolock remote add <name> <path>");
+                std::process::exit(1);
+            });
+            remote::add_remote(&name, &p).unwrap_or_else(|e| {
+                eprintln!("Failed to add remote: {}", e);
+                std::process::exit(1);
+            });
+            println!("Remote '{}' added: {}", name, p);
+        }
+        _ => eprintln!("Unknown remote action: {}", action),
+    }
+}
+```
+
+### 32.4 — Test it
 
 ```bash
 # Create a bare remote
@@ -680,12 +768,17 @@ chronolock init --bare
 # Back in your project, add the remote
 cd ~/juk/chronolock
 cargo run -- remote add origin /tmp/chronolock-remote
+
+# Verify
+cat .chronolock/remotes/origin
 ```
 
 > [!note] Local remotes
 > Real git supports `file://`, `ssh://`, `https://` remotes. We use filesystem paths because the interesting part isn't the transport — it's the object negotiation (what does the remote need that I have?). The protocol is the same regardless of transport.
 
-We have a bare remote. Next stage, we'll push our history to it.
+### Extend it
+
+Add a `chronolock remote list` action that reads all files in `.chronolock/remotes/` and prints each remote name and path.
 
 > [!check] Checkpoint
 > Create a bare repository. Add it as a remote. Verify the remote path is stored in `.chronolock/remotes/origin`. Stage 32 complete.
@@ -694,9 +787,9 @@ We have a bare remote. Next stage, we'll push our history to it.
 
 ## Stage 33 — Sending Memories
 
-> *Difficulty: Hard — Determining what the remote needs and transferring objects.*
+> *Pushing isn't "copy everything." It's "figure out what the remote is missing, then send only that." This is object negotiation — the Chronolock compares its refs with the remote's, walks the commit graph to find missing objects, and transfers them.*
 
-Pushing isn't "copy everything." It's "figure out what the remote is missing, then send only that." This is the **object negotiation** — the Chronolock compares its refs with the remote's refs, walks the commit graph to find missing objects, and transfers them.
+*Difficulty: Hard* | *~75 min*
 
 > [!tip] What You'll Learn
 > - Object negotiation — finding what the remote needs
@@ -730,9 +823,7 @@ fn collect_reachable_inner(hash: &str, visited: &mut HashSet<String>) -> std::io
     match obj.obj_type {
         object::ObjectType::Commit => {
             let info = object::parse_commit(&obj.content);
-            // Visit the tree
             collect_reachable_inner(&info.tree, visited)?;
-            // Visit parents
             for parent in &info.parents {
                 collect_reachable_inner(parent, visited)?;
             }
@@ -743,18 +834,44 @@ fn collect_reachable_inner(hash: &str, visited: &mut HashSet<String>) -> std::io
                 collect_reachable_inner(&entry.hash, visited)?;
             }
         }
-        object::ObjectType::Blob => {
-            // Leaf node — nothing more to visit
-        }
+        object::ObjectType::Blob => {} // leaf node
     }
     Ok(())
 }
 ```
 
-### 33.2 — The push function
+### Concept: Graph traversal and ownership
+
+`collect_reachable_inner` takes `&mut HashSet<String>` — a mutable reference to the visited set. Every recursive call shares the same set. This is safe because:
+
+1. Only one mutable reference exists at a time (Rust enforces this)
+2. The recursive calls are sequential, not parallel
+3. The set grows monotonically — we only insert, never remove
+
+If you tried to pass the set by value, each recursive call would own its own copy and the visited tracking wouldn't work. If you tried `&HashSet` (immutable), you couldn't insert. The `&mut` is exactly right.
+
+### 33.2 — Try it yourself: the push function
+
+Implement `push` in `remote.rs`:
 
 ```rust
 /// Push a branch to a remote repository.
+pub fn push(remote_path: &str, branch: &str) -> std::io::Result<()> {
+    // 1. Read local branch hash
+    // 2. Read remote branch hash (if it exists)
+    // 3. Collect reachable objects from local
+    // 4. Collect reachable objects from remote (if any)
+    // 5. Compute the difference (local - remote = objects to send)
+    // 6. Copy each missing object file to the remote's objects/ dir
+    // 7. Update the remote's refs/heads/<branch> file
+    todo!()
+}
+```
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
 pub fn push(remote_path: &str, branch: &str) -> std::io::Result<()> {
     let local_ref = crate::refs::read_branch(branch)?
         .ok_or_else(|| std::io::Error::new(
@@ -763,7 +880,7 @@ pub fn push(remote_path: &str, branch: &str) -> std::io::Result<()> {
         ))?;
 
     // Check what the remote already has
-    let remote_ref_path = std::path::Path::new(remote_path).join("refs/heads").join(branch);
+    let remote_ref_path = Path::new(remote_path).join("refs/heads").join(branch);
     let remote_has: HashSet<String> = if remote_ref_path.exists() {
         let remote_hash = fs::read_to_string(&remote_ref_path)?.trim().to_string();
         collect_reachable(&remote_hash).unwrap_or_default()
@@ -782,13 +899,10 @@ pub fn push(remote_path: &str, branch: &str) -> std::io::Result<()> {
 
     println!("Sending {} objects...", to_send.len());
 
-    // Copy objects to the remote
-    let remote_objects = std::path::Path::new(remote_path).join("objects");
+    let remote_objects = Path::new(remote_path).join("objects");
     for hash in &to_send {
-        let src = std::path::Path::new(".chronolock/objects")
-            .join(&hash[..2])
-            .join(&hash[2..]);
-
+        let src = Path::new(".chronolock/objects")
+            .join(&hash[..2]).join(&hash[2..]);
         if src.exists() {
             let dst_dir = remote_objects.join(&hash[..2]);
             fs::create_dir_all(&dst_dir)?;
@@ -800,14 +914,16 @@ pub fn push(remote_path: &str, branch: &str) -> std::io::Result<()> {
     }
 
     // Update the remote's branch ref
-    let remote_refs_dir = std::path::Path::new(remote_path).join("refs/heads");
-    fs::create_dir_all(&remote_refs_dir)?;
-    fs::write(remote_refs_dir.join(branch), format!("{}\n", local_ref))?;
+    let remote_refs = Path::new(remote_path).join("refs/heads");
+    fs::create_dir_all(&remote_refs)?;
+    fs::write(remote_refs.join(branch), format!("{}\n", local_ref))?;
 
     println!("Pushed {} to {}/{}", &local_ref[..8], remote_path, branch);
     Ok(())
 }
 ```
+
+</details>
 
 ### 33.3 — Wire it up
 
@@ -856,6 +972,13 @@ GIT_DIR=/tmp/chronolock-remote git log --oneline
 
 Git should show the same history as your local repository.
 
+> [!warning] Common Mistake: Pushing packed objects
+> If you packed objects before pushing, the loose files won't exist to copy. A production implementation would need to read from pack files during push. For now, push before packing (or unpack first).
+
+### Extend it
+
+Push a second time without making changes. Verify it prints "Everything up to date" — the set difference is empty because the remote already has everything.
+
 > [!check] Checkpoint
 > Push to the bare remote. Verify the remote contains all objects and the branch ref is updated. Verify `git log` works on the remote. Stage 33 complete.
 
@@ -863,9 +986,9 @@ Git should show the same history as your local repository.
 
 ## Stage 34 — Receiving Memories
 
-> *Difficulty: Hard — Fetching objects from a remote and updating local refs.*
+> *The inverse of push: read the remote's refs, find objects we don't have, copy them locally, and update our tracking refs.*
 
-The inverse of push: read the remote's refs, find objects we don't have, copy them locally, and update our tracking refs. This completes the two-way communication between Chronolocks.
+*Difficulty: Hard* | *~75 min*
 
 > [!tip] What You'll Learn
 > - Fetching remote refs
@@ -875,43 +998,37 @@ The inverse of push: read the remote's refs, find objects we don't have, copy th
 
 ### 34.1 — The fetch function
 
+The challenge: we need to walk the remote's commit graph to find reachable objects, but the objects are in the *remote's* object store, not ours. We need to read objects from the remote path.
+
 Add to `src/remote.rs`:
 
 ```rust
 /// Fetch objects and refs from a remote.
 pub fn fetch(remote_path: &str, remote_name: &str) -> std::io::Result<()> {
-    let remote_refs_dir = std::path::Path::new(remote_path).join("refs/heads");
+    let remote_refs_dir = Path::new(remote_path).join("refs/heads");
     if !remote_refs_dir.exists() {
         println!("Remote has no branches.");
         return Ok(());
     }
 
-    // Read all remote branches
     for entry in fs::read_dir(&remote_refs_dir)? {
         let entry = entry?;
         let branch = entry.file_name().to_string_lossy().to_string();
         let remote_hash = fs::read_to_string(entry.path())?.trim().to_string();
 
-        // Collect objects we need
+        // Collect all objects reachable from the remote's branch tip
         let remote_objects = collect_reachable_from_remote(&remote_hash, remote_path)?;
-        let local_objects = {
-            let mut set = HashSet::new();
-            // Check which objects we already have
-            for hash in &remote_objects {
-                if object_exists_locally(hash) {
-                    set.insert(hash.clone());
-                }
-            }
-            set
-        };
 
-        let to_fetch: Vec<&String> = remote_objects.difference(&local_objects).collect();
+        // Figure out which ones we're missing locally
+        let to_fetch: Vec<&String> = remote_objects.iter()
+            .filter(|h| !object_exists_locally(h))
+            .collect();
 
         if !to_fetch.is_empty() {
             println!("Fetching {} objects for {}...", to_fetch.len(), branch);
 
-            let remote_obj_dir = std::path::Path::new(remote_path).join("objects");
-            let local_obj_dir = std::path::Path::new(".chronolock/objects");
+            let remote_obj_dir = Path::new(remote_path).join("objects");
+            let local_obj_dir = Path::new(".chronolock/objects");
 
             for hash in &to_fetch {
                 let src = remote_obj_dir.join(&hash[..2]).join(&hash[2..]);
@@ -927,7 +1044,7 @@ pub fn fetch(remote_path: &str, remote_name: &str) -> std::io::Result<()> {
         }
 
         // Update remote-tracking ref
-        let tracking_dir = std::path::Path::new(".chronolock/refs/remotes").join(remote_name);
+        let tracking_dir = Path::new(".chronolock/refs/remotes").join(remote_name);
         fs::create_dir_all(&tracking_dir)?;
         fs::write(tracking_dir.join(&branch), format!("{}\n", remote_hash))?;
 
@@ -937,32 +1054,37 @@ pub fn fetch(remote_path: &str, remote_name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-fn collect_reachable_from_remote(hash: &str, remote_path: &str) -> std::io::Result<HashSet<String>> {
-    // Temporarily read objects from the remote path
-    // In a real implementation, this would use a network protocol
+fn collect_reachable_from_remote(
+    hash: &str,
+    remote_path: &str,
+) -> std::io::Result<HashSet<String>> {
     let mut visited = HashSet::new();
     collect_from_remote_inner(hash, remote_path, &mut visited)?;
     Ok(visited)
 }
 
-fn collect_from_remote_inner(hash: &str, remote_path: &str, visited: &mut HashSet<String>) -> std::io::Result<()> {
+fn collect_from_remote_inner(
+    hash: &str,
+    remote_path: &str,
+    visited: &mut HashSet<String>,
+) -> std::io::Result<()> {
     if visited.contains(hash) {
         return Ok(());
     }
     visited.insert(hash.to_string());
 
-    let obj_path = std::path::Path::new(remote_path)
-        .join("objects")
-        .join(&hash[..2])
-        .join(&hash[2..]);
-
+    let obj_path = Path::new(remote_path)
+        .join("objects").join(&hash[..2]).join(&hash[2..]);
     if !obj_path.exists() {
         return Ok(());
     }
 
-    // Read and parse the object from the remote
+    // Read and parse the object directly from the remote's store
+    use flate2::read::ZlibDecoder;
+    use std::io::Read;
+
     let compressed = fs::read(&obj_path)?;
-    let mut decoder = flate2::read::ZlibDecoder::new(&compressed[..]);
+    let mut decoder = ZlibDecoder::new(&compressed[..]);
     let mut raw = Vec::new();
     decoder.read_to_end(&mut raw)?;
 
@@ -987,9 +1109,8 @@ fn collect_from_remote_inner(hash: &str, remote_path: &str, visited: &mut HashSe
 }
 
 fn object_exists_locally(hash: &str) -> bool {
-    std::path::Path::new(".chronolock/objects")
-        .join(&hash[..2])
-        .join(&hash[2..])
+    Path::new(".chronolock/objects")
+        .join(&hash[..2]).join(&hash[2..])
         .exists()
 }
 ```
@@ -1036,12 +1157,14 @@ Fetching 31 objects for main...
 Updated origin/main -> e5f8a2b4
 ```
 
-The clone now has all the objects. To actually use the fetched branch, merge it:
+The clone now has all the objects and a remote-tracking ref at `refs/remotes/origin/main`.
 
-```bash
-# Set up local main to track the remote
-cargo run -- converge origin/main  # or manually set refs/heads/main
-```
+> [!note] Fetch vs pull
+> `receive` (fetch) downloads objects and updates tracking refs, but doesn't change your working directory or local branches. To actually use the fetched data, you'd merge the tracking ref into your local branch. Real git's `pull` is just `fetch` + `merge` combined.
+
+### Extend it
+
+After fetching, manually set your local `main` to match the remote: copy the hash from `refs/remotes/origin/main` to `refs/heads/main`, then run `chronolock shift main` to update the working directory. This is what `git pull` does under the hood.
 
 > [!check] Checkpoint
 > Fetch from a remote into a new repository. Verify all objects are transferred and remote-tracking refs are created. Stage 34 complete.
@@ -1050,9 +1173,9 @@ cargo run -- converge origin/main  # or manually set refs/heads/main
 
 ## Stage 35 — The Complete Chronolock
 
-> *Difficulty: Medium — Integration testing and the full workflow.*
+> *The Chronolock is complete. This final stage is about verification — running through the entire workflow end-to-end, confirming git compatibility at every step, and reflecting on what you've built.*
 
-The Chronolock is complete. This final stage is about verification — running through the entire workflow end-to-end, confirming git compatibility at every step, and reflecting on what you've built.
+*Difficulty: Medium* | *~60 min*
 
 > [!tip] What You'll Learn
 > - End-to-end integration testing
@@ -1061,6 +1184,8 @@ The Chronolock is complete. This final stage is about verification — running t
 > - What you've actually built (and what real git does differently)
 
 ### 35.1 — The full workflow test
+
+Run through every command in sequence:
 
 ```bash
 # Start fresh
@@ -1072,7 +1197,7 @@ cd /tmp/chronolock-test
 chronolock init
 
 # Create some files
-echo "fn main() { println!(\"Chronolock\"); }" > main.rs
+echo 'fn main() { println!("Chronolock"); }' > main.rs
 echo "# The Chronolock" > README.md
 
 # First commit
@@ -1123,17 +1248,19 @@ GIT_DIR=.chronolock git cat-file -p HEAD
 
 ### 35.2 — Git compatibility checklist
 
-| Command | Git equivalent | Compatible? |
-|---------|---------------|-------------|
-| `chronolock init` | `git init` | ✓ HEAD, objects/, refs/ |
-| `chronolock store` | `git hash-object -w` | ✓ Same blob format |
-| `chronolock reveal` | `git cat-file -p` | ✓ Same object parsing |
-| `chronolock anchor` | `git add . && git commit` | ✓ Same commit format |
-| `chronolock log` | `git log` | ✓ Same parent chain |
-| `chronolock branch` | `git branch` | ✓ Same ref files |
-| `chronolock shift` | `git checkout` | ✓ Same HEAD update |
-| `chronolock converge` | `git merge` | ✓ Same merge commits |
-| `chronolock send` | `git push` | ✓ Same object transfer |
+Verify each command produces git-compatible output:
+
+| Command | Git equivalent | How to verify |
+|---------|---------------|---------------|
+| `chronolock init` | `git init` | `GIT_DIR=.chronolock git status` |
+| `chronolock store` | `git hash-object -w` | `GIT_DIR=.chronolock git cat-file -p <hash>` |
+| `chronolock reveal` | `git cat-file -p` | Compare output with git's |
+| `chronolock anchor` | `git add . && git commit` | `GIT_DIR=.chronolock git log` |
+| `chronolock log` | `git log` | Compare commit hashes |
+| `chronolock branch` | `git branch` | `GIT_DIR=.chronolock git branch` |
+| `chronolock shift` | `git checkout` | Verify HEAD file content |
+| `chronolock converge` | `git merge` | `GIT_DIR=.chronolock git log --graph` |
+| `chronolock send` | `git push` | `GIT_DIR=<remote> git log` |
 
 ### 35.3 — What real git does differently
 
@@ -1148,6 +1275,41 @@ GIT_DIR=.chronolock git cat-file -p HEAD
 | Garbage collection | Manual pack | Auto-gc with reachability analysis |
 
 These differences are engineering optimizations, not conceptual ones. The data model — content-addressed objects, trees, commits, refs — is identical.
+
+### 35.4 — Write a final test suite
+
+Add integration tests that exercise the full workflow programmatically:
+
+```rust
+#[cfg(test)]
+mod integration_tests {
+    use std::process::Command;
+
+    #[test]
+    fn test_init_creates_structure() {
+        let dir = std::env::temp_dir().join("chronolock-test-init");
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+
+        // Run chronolock init in the temp directory
+        // Verify .chronolock/HEAD, objects/, refs/heads/ exist
+        // Clean up
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn test_store_and_reveal_roundtrip() {
+        // Store a file, reveal it, verify content matches
+    }
+
+    #[test]
+    fn test_anchor_creates_commit_chain() {
+        // Create two commits, verify parent chain
+    }
+}
+```
+
+Fill in these tests as a final exercise — they verify that your entire system works end-to-end.
 
 > [!check] Checkpoint
 > Run the full workflow. Verify git can read every object the Chronolock creates. Stage 35 complete.
@@ -1176,6 +1338,15 @@ flowchart TD
     style FW fill:#a4e,stroke:#333
 ```
 
+| Rust Concept | Where You Used It |
+|-------------|-------------------|
+| `HashSet` operations | Set difference for object negotiation |
+| Recursive graph traversal | Collecting reachable objects |
+| Binary serialization | Pack file format, varint encoding |
+| `serde` + JSON | Pack index file |
+| File copying | Object transfer between repos |
+| Byte-level algorithms | Delta computation and application |
+
 ---
 
 ## Course Complete — The Chronolock
@@ -1196,20 +1367,23 @@ You built a version control system from scratch. Not a toy — a working tool wi
 | Remote communication | Push/fetch with object negotiation, bare repositories |
 | Safety systems | Dirty-checkout protection, reflog, merge state tracking |
 
-### What you learned
+### Rust concepts learned
 
-| Rust Concept | Where |
-|-------------|-------|
+| Concept | Where |
+|---------|-------|
 | Structs and enums | Object types, merge actions, diff entries, CLI commands |
-| Ownership and borrowing | Object store (content moves into storage), tree building |
+| Ownership and borrowing (`&`, `&mut`, `&[u8]`) | Object store, tree building, function parameters |
 | `Option` and `Result` | Every I/O operation, parent chains, merge state |
-| Pattern matching | Three-way diff (12+ arms), command dispatch, object type handling |
+| The `?` operator | Error propagation from Stage 3 onward |
+| Pattern matching | Three-way diff (12+ arms), command dispatch, object types |
 | `HashMap` and `HashSet` | Tree diffing, ancestor collection, object negotiation |
-| Recursive functions | Tree flattening, directory scanning, reachable object collection |
-| Byte manipulation | Tree binary format, pack files, SHA-1 hashing |
+| Recursive functions | Tree flattening, directory scanning, reachable objects |
+| Byte manipulation | Tree binary format, pack files, SHA-1 hashing, varints |
+| Closures | `sort_by`, `filter_map`, `map`, `filter` |
 | External crates | sha1, flate2, clap, chrono, glob, colored, serde |
-| Modules | 10+ modules with clear boundaries |
-| Testing | Unit tests, integration tests, git compatibility verification |
+| Modules (`mod`, `pub`, `use`) | 10+ modules with clear boundaries |
+| Testing (`#[test]`, `cargo test`) | Unit tests throughout, integration tests |
+| Conditional compilation | `#[cfg(unix)]` for file modes, `#[cfg(test)]` for tests |
 
 ### The deeper lesson
 

@@ -15,7 +15,8 @@ This guide covers every Rust concept, language rule, and interpreter term used a
 5. [Runescript Built-in Function Reference](#5-runescript-built-in-function-reference)
 6. [Common Rust Patterns for Interpreters](#6-common-rust-patterns-for-interpreters)
 7. [Runescript Error Reference](#7-runescript-error-reference)
-8. [Project File Map](#8-project-file-map)
+8. [Testing Patterns](#8-testing-patterns)
+9. [Project File Map](#9-project-file-map)
 
 ---
 
@@ -923,7 +924,72 @@ xyz → hp (distance 3) — not suggested
 
 ---
 
-## 8. Project File Map
+## 8. Testing Patterns
+
+### Unit Tests
+
+Tests live in the same file as the code they test, inside a `#[cfg(test)]` module:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_something() {
+        assert_eq!(1 + 1, 2);
+    }
+}
+```
+
+- `#[cfg(test)]` — module only compiles during `cargo test`, stripped from release builds
+- `use super::*` — imports everything from the parent module
+- `#[test]` — marks a function as a test case
+- `assert_eq!(a, b)` — fails if `a != b`
+- `assert!(condition)` — fails if condition is false
+- `assert!(matches!(val, Pattern))` — fails if val doesn't match the pattern
+
+### Running Tests
+
+```bash
+cargo test                    # run all tests
+cargo test test_name          # run tests matching "test_name"
+cargo test -- --nocapture     # show println! output
+cargo test --release          # test with optimizations (for benchmarks)
+cargo test -- --ignored       # run #[ignore] tests only
+```
+
+### Test Helpers
+
+Common pattern: a helper that sets up the pipeline for testing:
+
+```rust
+fn parser_for(source: &str) -> Parser {
+    let mut lexer = Lexer::new(source);
+    let tokens = lexer.scan_tokens().unwrap();
+    Parser::new(tokens)
+}
+```
+
+### Integration Tests
+
+Files in `tests/` at the project root compile as separate binaries and can only access public API:
+
+```rust
+// tests/integration.rs
+use std::process::Command;
+
+#[test]
+fn run_example_script() {
+    let output = Command::new("cargo")
+        .args(["run", "--quiet", "--", "examples/01_hello.rune"])
+        .output()
+        .expect("Failed to run");
+    assert!(output.status.success());
+}
+```
+
+## 9. Project File Map
 
 > *A map of the grimoire's chapters — what each scroll contains and why.*
 

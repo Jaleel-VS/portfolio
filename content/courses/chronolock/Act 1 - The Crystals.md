@@ -25,9 +25,9 @@ flowchart LR
 
 ## Stage 1 — Forging the Chronolock
 
-> *Difficulty: Very Easy — Your first Rust program and the directory that holds time.*
+> *Every tool must be forged before it can be used. Before we can store a single byte of history, we need a project that compiles and a directory structure to hold the Chronolock's data.*
 
-Every tool must be forged before it can be used. Before we can store a single byte of history, we need a project that compiles and a directory structure to hold the Chronolock's data. This stage solves the bootstrapping problem — getting from nothing to a working anvil.
+*Difficulty: Very Easy* | *~25 min*
 
 > [!tip] What You'll Learn
 > - `cargo new` — creating a Rust project
@@ -52,9 +52,27 @@ chronolock/
     └── main.rs   ← entry point
 ```
 
-**Python comparison:** `Cargo.toml` is `pyproject.toml`. `cargo run` is `python main.py` except it compiles first — typos are caught before the program runs.
+Open `src/main.rs` — Cargo generated a hello-world program:
 
-**TypeScript comparison:** `Cargo.toml` ≈ `package.json`. `cargo run` ≈ `npx ts-node main.ts`, but stricter.
+```rust
+fn main() {
+    println!("Hello, world!");
+}
+```
+
+Run it:
+
+```bash
+cargo run
+```
+
+```
+Hello, world!
+```
+
+`cargo run` compiles *then* runs. If you have a typo, the compiler catches it before anything executes. This is the biggest difference from Python — errors at compile time, not at runtime.
+
+**Python comparison:** `Cargo.toml` is `pyproject.toml`. `cargo run` is `python main.py` except it compiles first — typos are caught before the program runs.
 
 ### 1.2 — The Chronolock directory structure
 
@@ -72,7 +90,27 @@ The structure we need:
 
 That's it. The entire version control system lives in this directory. No database, no server — just files and folders.
 
-### 1.3 — The init command
+### 1.3 — Try it yourself: the init command
+
+Before looking at the solution, try writing the `init` function yourself. Here's what it needs to do:
+
+1. Read command-line arguments with `std::env::args().collect::<Vec<String>>()`
+2. Check if the first argument (after the program name) is `"init"`
+3. Check if `.chronolock/` already exists — if so, print a message and return
+4. Create `.chronolock/objects/` and `.chronolock/refs/heads/` (hint: `fs::create_dir_all` creates parent directories too)
+5. Write `ref: refs/heads/main\n` to `.chronolock/HEAD`
+
+You'll need these imports:
+
+```rust
+use std::fs;
+use std::path::Path;
+```
+
+Give it a try. When you're ready, compare with the solution below.
+
+<details>
+<summary>Solution — click to reveal</summary>
 
 Replace `src/main.rs`:
 
@@ -113,17 +151,33 @@ fn init() {
 }
 ```
 
-Let's unpack what's new:
+</details>
+
+Let's unpack the new Rust concepts:
 
 | Code | What it does |
 |------|-------------|
 | `std::env::args().collect()` | Reads command-line arguments into a `Vec<String>`. Like `sys.argv` in Python. |
 | `Vec<String>` | A growable list of strings. `args[0]` is the program name, `args[1]` is the command. |
-| `match args[1].as_str()` | Pattern match on the command string. Like `switch` in JS but exhaustive — the `_` arm catches everything else. |
+| `match args[1].as_str()` | Pattern match on the command string. Like a `switch` but exhaustive — the `_` arm catches everything else. |
 | `Path::new(".chronolock")` | Creates a path object. Like `pathlib.Path` in Python. |
 | `fs::create_dir_all(...)` | Creates a directory and all parent directories. Like `mkdir -p` or `os.makedirs()`. |
-| `.expect("msg")` | Unwrap a `Result` or crash with a message. We'll replace this with proper error handling later. |
+| `.expect("msg")` | Unwrap a `Result` or crash with a message. This is a development shortcut — we'll replace it with proper error handling starting in Stage 3. |
 | `eprintln!` | Print to stderr, not stdout. For error messages. |
+
+### Concept: Result and .expect() — a first look
+
+`fs::create_dir_all()` doesn't just create a directory — it returns a `Result<(), std::io::Error>`. In Rust, operations that can fail return `Result` instead of throwing exceptions:
+
+```rust
+// Python: just throws OSError if it fails
+os.makedirs("some/path")
+
+// Rust: returns Ok(()) on success, Err(error) on failure
+fs::create_dir_all("some/path")  // returns Result<(), io::Error>
+```
+
+`.expect("msg")` says "I believe this will succeed — if it doesn't, crash with this message." It's fine for a prototype, but in production code you'd handle the error gracefully. We'll start doing that in Stage 3 when we introduce the `?` operator.
 
 The `HEAD` file contains `ref: refs/heads/main\n` — a symbolic reference pointing to the `main` branch. This is exactly what `git init` writes. We'll understand why HEAD works this way in Act 2.
 
@@ -168,10 +222,16 @@ GIT_DIR=.chronolock git status
 
 Git should recognize it as a valid repository (though with no commits yet).
 
-> [!warning] Common Mistake
-> **Forgetting `--` when passing arguments.** `cargo run init` tries to pass `init` to cargo itself. `cargo run -- init` passes it to your program. This trips up everyone the first time.
+> [!warning] Common Mistake: Forgetting `--` when passing arguments
+> ```bash
+> cargo run init     # ❌ cargo tries to interpret "init" itself
+> cargo run -- init  # ✅ passes "init" to your program
+> ```
+> `cargo run init` tries to pass `init` to cargo itself. `cargo run -- init` passes it to your program. This trips up everyone the first time.
 
-The Chronolock exists, but it's empty — a forge with no metal. Next stage, we'll learn the fundamental operation that makes everything else possible: turning content into a unique, reproducible hash.
+### Extend it
+
+Add a second subcommand: `chronolock version` that prints `chronolock 0.1.0`. You'll need to add another arm to the `match` block. No solution provided — use the pattern you just learned.
 
 > [!check] Checkpoint
 > Run `cargo run -- init`. Verify `.chronolock/HEAD` exists and contains `ref: refs/heads/main`. Stage 1 complete.
@@ -180,15 +240,16 @@ The Chronolock exists, but it's empty — a forge with no metal. Next stage, we'
 
 ## Stage 2 — The First Crystal
 
-> *Difficulty: Easy — SHA-1 hashing and the idea that changed everything.*
+> *Right now we have an empty directory structure but no way to store anything in it. Before we can save files, we need to solve a deeper problem: how do you name a piece of data so that the name is unique, permanent, and derived from the data itself?*
 
-Right now we have an empty directory structure but no way to store anything in it. Before we can save files, we need to solve a deeper problem: how do you *name* a piece of data so that the name is unique, permanent, and derived from the data itself? This is the core insight of git — content addressing — and it's what makes everything else possible.
+*Difficulty: Easy* | *~45 min*
 
 > [!tip] What You'll Learn
 > - SHA-1 hashing — turning any data into a 40-character hex string
 > - Content addressing — the same content always produces the same hash
 > - Adding an external crate (`sha1`)
 > - Working with bytes vs strings in Rust
+> - Creating a new module file and wiring it into `main.rs`
 
 ### Why content addressing?
 
@@ -214,7 +275,7 @@ sha1 = "0.10"
 
 Next `cargo run` will download and compile `sha1` automatically.
 
-### 2.2 — The hash function
+### 2.2 — Create the object module
 
 Create a new file `src/object.rs`:
 
@@ -237,11 +298,29 @@ Line by line:
 |------|-------------|
 | `use sha1::{Sha1, Digest}` | Import the hasher and the `Digest` trait that provides `.update()` and `.finalize()`. |
 | `pub fn` | `pub` makes this function visible to other files. Without it, only `object.rs` can call it. |
-| `data: &[u8]` | A **byte slice** — a borrowed reference to a sequence of bytes. This is how Rust handles raw binary data. `&[u8]` is to bytes what `&str` is to text. |
+| `data: &[u8]` | A **byte slice** — a borrowed reference to a sequence of bytes. More on this below. |
 | `Sha1::new()` | Create a new hasher instance. |
 | `hasher.update(data)` | Feed bytes into the hasher. You can call this multiple times to hash data incrementally. |
 | `hasher.finalize()` | Compute the final hash. After this, the hasher is consumed — you can't add more data. |
 | `format!("{:x}", result)` | Format the hash bytes as lowercase hexadecimal. Produces a 40-character string like `a1b2c3d4...`. |
+
+### Concept: &[u8] — byte slices and borrowing
+
+`data: &[u8]` is your first encounter with Rust's borrowing system. Let's break it down:
+
+- `[u8]` is a slice of bytes — a sequence of unsigned 8-bit integers
+- `&` means "I'm borrowing this data, not owning it"
+
+**In Python**, you'd write `def hash_bytes(data: bytes) -> str:` and never think about ownership. Python's garbage collector handles memory.
+
+**In Rust**, the `&` is a promise: "I'll look at this data but I won't modify it or keep it after I'm done." The compiler enforces this promise at compile time — if you try to modify borrowed data or use it after the owner frees it, the code won't compile.
+
+Why does this matter? Because it means:
+- No data races — two threads can't modify the same data simultaneously
+- No use-after-free — you can't access memory that's been deallocated
+- No garbage collector needed — the compiler knows exactly when to free memory
+
+You don't need to fully understand ownership yet. For now, think of `&` as "read-only access." We'll hit real ownership challenges in later stages when the compiler forces us to think about who owns what.
 
 **Python comparison:**
 ```python
@@ -252,15 +331,40 @@ def hash_bytes(data: bytes) -> str:
 
 Same thing, but Rust's version is explicit about ownership — the hasher is created, used, and consumed. No hidden state.
 
-### 2.3 — Wire it into main
+### 2.3 — Wire the module into main
 
-First, declare the module. Add this line at the top of `src/main.rs`:
+This is the first time we're adding a new `.rs` file, so let's understand how Rust's module system works.
+
+Add this line at the top of `src/main.rs` (before any `use` statements):
 
 ```rust
 mod object;
 ```
 
-This tells Rust that `src/object.rs` exists and is part of the project. Like `import object` in Python, but declared at the module level.
+This single line does three things:
+1. Tells Rust that a module called `object` exists
+2. Tells Rust to look for it in `src/object.rs` (or `src/object/mod.rs`)
+3. Makes everything marked `pub` in that file available as `object::function_name`
+
+**Without `mod object;`**, Rust doesn't know `object.rs` exists — even though the file is right there. This is different from Python, where any `.py` file in the directory can be imported. Rust requires explicit declaration.
+
+**What happens if you forget it:**
+
+```
+error[E0433]: failed to resolve: use of undeclared crate or module `object`
+ --> src/main.rs:15:19
+  |
+15|         let hash = object::hash_bytes(args[2].as_bytes());
+  |                    ^^^^^^ use of undeclared crate or module `object`
+```
+
+The fix is always the same: add `mod object;` at the top of `main.rs`.
+
+**The difference between `mod` and `use`:**
+- `mod object;` — "this module exists, load it from `object.rs`" (declaration)
+- `use object::hash_bytes;` — "bring `hash_bytes` into scope so I can call it without the `object::` prefix" (import)
+
+You need `mod` first. `use` is optional convenience.
 
 Now add a `hash` subcommand to test it. Update the `match` in `main()`:
 
@@ -301,7 +405,7 @@ echo -n "hello" | shasum
 ```
 
 ```
-aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d  -
+aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d
 ```
 
 Identical. The same input always produces the same hash, regardless of who computes it or when.
@@ -314,15 +418,24 @@ cargo run -- hash "Hello"    # completely different — case matters
 cargo run -- hash "hello "   # different — trailing space matters
 ```
 
-This is the property that makes content addressing work: **any change, no matter how small, produces a completely different hash.** A single flipped bit cascades through the entire output.
+**Any change, no matter how small, produces a completely different hash.** A single flipped bit cascades through the entire output.
 
-> [!warning] Common Mistake
-> **Hashing strings vs bytes.** `"hello".as_bytes()` gives you the UTF-8 bytes of the string. If you accidentally hash the Rust `String` struct itself (which includes length and capacity metadata), you'll get a different hash than every other tool. Always hash the raw bytes.
+> [!warning] Common Mistake: Hashing strings vs bytes
+> ```rust
+> // ❌ Wrong — this hashes the String struct's internal representation
+> let hash = hash_bytes(&format!("{:?}", my_string).as_bytes());
+>
+> // ✅ Right — hash the raw UTF-8 bytes of the text
+> let hash = hash_bytes(my_string.as_bytes());
+> ```
+> `"hello".as_bytes()` gives you the UTF-8 bytes of the string. If you accidentally hash a debug representation or include extra metadata, you'll get a different hash than every other tool. Always hash the raw bytes.
 
 > [!note] Why SHA-1?
 > Git chose SHA-1 in 2005 when it was the standard. SHA-1 is now considered cryptographically broken (you can craft collisions), but git doesn't use it for security — it uses it for content addressing. The probability of an accidental collision is astronomically low. Git is slowly migrating to SHA-256, but the SHA-1 format is what we'll implement since it's what existing git repos use.
 
-But a hash alone is just a number — we can't reconstruct the original data from it. Next stage, we'll learn to store the actual content alongside its hash, compressed and organized in the object store.
+### Extend it
+
+Write a function `hash_file(path: &str) -> String` in `object.rs` that reads a file from disk and returns its SHA-1 hash. You'll need `std::fs::read()` to read the file into a `Vec<u8>`, then pass that to `hash_bytes`. Add a `hash-file` subcommand to test it. Verify that hashing a file containing `hello` (no newline) gives the same hash as `cargo run -- hash "hello"`.
 
 > [!check] Checkpoint
 > Run `cargo run -- hash "hello"` and verify you get `aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d`. Stage 2 complete.
@@ -331,14 +444,15 @@ But a hash alone is just a number — we can't reconstruct the original data fro
 
 ## Stage 3 — Storing Memories
 
-> *Difficulty: Easy — Blob objects, zlib compression, and the object store.*
+> *We can hash content, but the hash is just a fingerprint — it doesn't preserve the original data. We need to store the content in a way that's retrievable by its hash. This is the blob object — git's simplest storage unit.*
 
-We can hash content, but the hash is just a fingerprint — it doesn't preserve the original data. Right now if someone gives us a hash, we can't give them back the file. We need to *store* the content in a way that's retrievable by its hash. This is the blob object — git's simplest storage unit.
+*Difficulty: Easy* | *~60 min*
 
 > [!tip] What You'll Learn
 > - Git's blob object format: `blob <size>\0<content>`
 > - Zlib compression with the `flate2` crate
 > - Writing to the object store with the 2-character prefix scheme
+> - The `Result` type and the `?` operator — proper error handling
 > - Why git compresses objects (and why the header matters)
 
 ### Why the header?
@@ -362,9 +476,53 @@ flate2 = "1"
 
 `flate2` provides zlib compression — the same algorithm git uses. Compressing objects saves disk space and makes the object store more efficient, especially for text files where compression ratios of 3:1 or better are common.
 
+### Concept: Result, the ? operator, and why .expect() must go
+
+Up to now we've used `.expect("msg")` to handle errors — it crashes the program if something fails. That's fine for `init` (if we can't create directories, there's nothing to recover from), but `store_blob` is different. It's a library function that other code will call, and crashing isn't acceptable.
+
+Rust's error handling is built on `Result<T, E>`:
+
+```rust
+enum Result<T, E> {
+    Ok(T),    // success — contains the value
+    Err(E),   // failure — contains the error
+}
+```
+
+**Python comparison:**
+```python
+# Python: exceptions fly up the call stack automatically
+def store_blob(content: bytes) -> str:
+    hash = compute_hash(content)
+    os.makedirs(dir)          # throws OSError on failure
+    open(path, 'wb').write(compressed)  # throws IOError on failure
+    return hash
+
+# Rust: errors are values you must handle explicitly
+fn store_blob(content: &[u8]) -> Result<String, io::Error> {
+    let hash = compute_hash(content);
+    fs::create_dir_all(&dir)?;    // ? returns the error to the caller
+    fs::write(&path, &compressed)?;
+    Ok(hash)                       // wrap success in Ok()
+}
+```
+
+The `?` operator is the key: it means "if this returns `Err`, return that error immediately to *my* caller. If it returns `Ok`, unwrap the value and continue." It's like an automatic `try/except` that re-raises.
+
+**What happens when `.expect()` panics:**
+
+```
+thread 'main' panicked at 'Failed to create directory: Os { code: 13, kind: PermissionDenied, message: "Permission denied" }', src/object.rs:25:10
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+```
+
+This is a crash — the program dies with a stack trace. In a CLI tool, the user sees a wall of internal Rust details instead of a helpful error message. With `?` and `Result`, the caller decides how to handle the error.
+
+**From this stage onward, all new functions will return `Result` and use `?` instead of `.expect()`.** The `init` function in Stage 1 still uses `.expect()` — that's OK for now, but we'll clean it up later.
+
 ### 3.2 — The store function
 
-Add to `src/object.rs`:
+Add these imports at the top of `src/object.rs`:
 
 ```rust
 use flate2::write::ZlibEncoder;
@@ -372,9 +530,38 @@ use flate2::Compression;
 use std::fs;
 use std::io::Write;
 use std::path::Path;
+```
 
+Now try implementing `store_blob` yourself. Here's the signature and the steps:
+
+```rust
 /// Store a blob object in the Chronolock object store.
 /// Returns the SHA-1 hash of the stored object.
+pub fn store_blob(content: &[u8]) -> std::io::Result<String> {
+    // Step 1: Build the header — "blob <size>\0"
+    // Step 2: Concatenate header + content into the full object
+    // Step 3: Hash the full object (header + content)
+    // Step 4: Compress with zlib
+    // Step 5: Write to .chronolock/objects/<first 2 chars>/<remaining 38 chars>
+    // Step 6: Return Ok(hash)
+    todo!()
+}
+```
+
+Hints:
+- `format!("blob {}\0", content.len())` builds the header
+- `header.into_bytes()` converts a `String` to `Vec<u8>`
+- `vec.extend_from_slice(bytes)` appends bytes to a vector
+- `ZlibEncoder::new(Vec::new(), Compression::default())` creates a compressor
+- `encoder.write_all(&data)?` feeds data into the compressor
+- `encoder.finish()?` returns the compressed bytes
+- `&hash[..2]` slices the first 2 characters, `&hash[2..]` slices the rest
+- Skip writing if the file already exists (content-addressable = idempotent)
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
 pub fn store_blob(content: &[u8]) -> std::io::Result<String> {
     // Step 1: Build the header — "blob <size>\0"
     let header = format!("blob {}\0", content.len());
@@ -405,6 +592,8 @@ pub fn store_blob(content: &[u8]) -> std::io::Result<String> {
 }
 ```
 
+</details>
+
 Let's trace through what happens when you store the text `"hello"`:
 
 1. **Header:** `"blob 5\0"` — it's a blob, 5 bytes long
@@ -416,17 +605,6 @@ Let's trace through what happens when you store the text `"hello"`:
 **The 2-character prefix scheme:** Git splits the hash into a 2-char directory name and a 38-char filename. Why? Filesystems slow down when a single directory contains thousands of files. Splitting by the first two hex characters creates up to 256 subdirectories, keeping each one small. This is a performance optimization, not a logical requirement.
 
 **Idempotency:** If the object already exists, we skip the write. Since the hash is derived from the content, an existing file with the same hash *must* contain the same data. This is why git never duplicates content — store the same file twice and it occupies disk space only once.
-
-| Code | Explanation |
-|------|-------------|
-| `format!("blob {}\0", content.len())` | Build the header string. `\0` is a null byte. |
-| `header.into_bytes()` | Convert the header `String` into a `Vec<u8>` (owned byte vector). |
-| `.extend_from_slice(content)` | Append the file content bytes to the header bytes. |
-| `ZlibEncoder::new(Vec::new(), ...)` | Create a compressor that writes into a new `Vec<u8>`. |
-| `encoder.write_all(&full_object)?` | Feed all bytes into the compressor. The `?` propagates errors. |
-| `encoder.finish()?` | Flush and finalize compression, returning the compressed bytes. |
-| `&hash[..2]` | Slice the first 2 characters of the hash string. Rust string slicing. |
-| `&hash[2..]` | Slice from character 2 to the end. |
 
 ### 3.3 — The store command
 
@@ -454,6 +632,8 @@ use std::fs;
     }
 }
 ```
+
+Notice how we handle the `Result` from `store_blob`: `match` on `Ok`/`Err`, print the hash on success, print the error on failure. The user sees a clean error message instead of a panic.
 
 `fs::read()` reads a file into a `Vec<u8>` — the raw bytes, not a string. This is important because git stores binary files too, not just text.
 
@@ -500,13 +680,22 @@ hello
 
 Git recognizes our object as a valid blob and can read its content. The Chronolock and git speak the same language.
 
-> [!warning] Common Mistake
-> **Hashing the content without the header.** If you hash just `"hello"` instead of `"blob 5\0hello"`, you'll get a different hash than git expects. The header is part of the hashed data — always include it.
+> [!warning] Common Mistake: Hashing content without the header
+> If you hash just `"hello"` instead of `"blob 5\0hello"`, you'll get `aaf4c61d...` instead of `ce013625...`. Git always includes the type header in the hash. The header is part of the hashed data — always include it.
 
-> [!warning] Common Mistake
-> **Using `fs::read_to_string` instead of `fs::read`.** `read_to_string` fails on binary files. Always use `fs::read` (which returns `Vec<u8>`) for git objects — you need to handle any file type.
+> [!warning] Common Mistake: Using `fs::read_to_string` instead of `fs::read`
+> ```rust
+> // ❌ Fails on binary files (images, compiled code, etc.)
+> let content = fs::read_to_string("photo.png")?;
+>
+> // ✅ Works on any file — returns raw bytes
+> let content = fs::read("photo.png")?;
+> ```
+> `read_to_string` fails on binary files because they aren't valid UTF-8. Always use `fs::read` (which returns `Vec<u8>`) for git objects — you need to handle any file type.
 
-We can store objects, but we can't read them back yet. A memory you can't retrieve is no memory at all. Next stage, we'll build the `reveal` command to decompress and display stored objects.
+### Extend it
+
+Store the same file twice and observe that the second `store` doesn't create a new object (the file already exists). Then modify `test.txt` to contain `"hello world"`, store it again, and verify you get a *different* hash. Content addressing in action.
 
 > [!check] Checkpoint
 > Store `test.txt` and verify the hash is `ce013625030ba8dba906f756967f9e9ca394464a`. Confirm `GIT_DIR=.chronolock git cat-file -p <hash>` shows `hello`. Stage 3 complete.
@@ -515,24 +704,36 @@ We can store objects, but we can't read them back yet. A memory you can't retrie
 
 ## Stage 4 — Reading Crystals
 
-> *Difficulty: Easy — Decompression, object parsing, and your first real CLI.*
+> *We can write objects into the store, but we can't read them back. That's like a library where you can shelve books but never check them out. This stage completes the round trip: store → retrieve → display.*
 
-We can write objects into the store, but we can't read them back. That's like a library where you can shelve books but never check them out. This stage completes the round trip: store → retrieve → display. It also introduces `clap` for proper CLI argument parsing, replacing our manual `args` handling.
+*Difficulty: Easy* | *~50 min*
 
 > [!tip] What You'll Learn
 > - Zlib decompression with `flate2`
 > - Parsing the object header to extract type and size
 > - The `clap` crate for CLI argument parsing
+> - Enums and structs for modeling data
 > - Splitting bytes on a null byte delimiter
 
 ### 4.1 — The read function
 
-Add to `src/object.rs`:
+Try implementing `read_object` yourself. Here's the signature and the algorithm:
 
 ```rust
-use flate2::read::ZlibDecoder;
-use std::io::Read;
+pub fn read_object(hash: &str) -> std::io::Result<Object> {
+    // 1. Build the path: .chronolock/objects/<first 2>/<remaining 38>
+    // 2. Read and decompress the file (ZlibDecoder)
+    // 3. Find the null byte separating header from content
+    // 4. Parse the header: "blob 5" → type=Blob, size=5
+    // 5. Extract content (everything after the null byte)
+    // 6. Verify content.len() == declared size
+    todo!()
+}
+```
 
+You'll need these types (add them to `object.rs`):
+
+```rust
 /// The type of a git object.
 #[derive(Debug, PartialEq)]
 pub enum ObjectType {
@@ -547,7 +748,27 @@ pub struct Object {
     pub size: usize,
     pub content: Vec<u8>,
 }
+```
 
+And these imports:
+
+```rust
+use flate2::read::ZlibDecoder;
+use std::io::Read;
+```
+
+Hints:
+- `ZlibDecoder::new(&compressed[..])` creates a decompressor from a byte slice
+- `decoder.read_to_end(&mut vec)?` decompresses into a `Vec<u8>`
+- `raw.iter().position(|&b| b == 0)` finds the null byte index
+- `std::str::from_utf8(&bytes)` interprets bytes as a UTF-8 string
+- `header.split_once(' ')` splits `"blob 5"` into `("blob", "5")`
+- `"5".parse::<usize>()` parses a string into a number
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
 /// Read and decompress an object from the store by its hash.
 pub fn read_object(hash: &str) -> std::io::Result<Object> {
     let path = Path::new(".chronolock/objects")
@@ -596,7 +817,8 @@ pub fn read_object(hash: &str) -> std::io::Result<Object> {
     if content.len() != size {
         return Err(std::io::Error::new(
             std::io::ErrorKind::InvalidData,
-            format!("Size mismatch: header says {} but content is {} bytes", size, content.len()),
+            format!("Size mismatch: header says {} but content is {} bytes",
+                size, content.len()),
         ));
     }
 
@@ -604,7 +826,9 @@ pub fn read_object(hash: &str) -> std::io::Result<Object> {
 }
 ```
 
-This is the inverse of `store_blob`. Let's trace through reading our `"hello"` blob:
+</details>
+
+Let's trace through reading our `"hello"` blob:
 
 1. **Read** the compressed file from `.chronolock/objects/ce/0136...`
 2. **Decompress** → `"blob 5\0hello"` (raw bytes)
@@ -613,18 +837,14 @@ This is the inverse of `store_blob`. Let's trace through reading our `"hello"` b
 5. **Extract content** → everything after the null byte = `"hello"`
 6. **Verify size** → content is 5 bytes, header says 5 ✓
 
-New concepts:
+New patterns worth noting:
 
 | Code | Explanation |
 |------|-------------|
 | `#[derive(Debug, PartialEq)]` | Auto-generate debug printing and equality comparison for the enum. |
-| `pub enum ObjectType` | The three types of git objects. We'll use `Tree` and `Commit` in later stages. |
-| `pub struct Object` | A parsed object with its type, declared size, and raw content bytes. |
-| `raw.iter().position(\|&b\| b == 0)` | Find the index of the first null byte. `.position()` returns `Option<usize>`. |
-| `.ok_or_else(\|\| ...)` | Convert `None` into an `Err`. This is how you turn "not found" into a proper error. |
-| `std::str::from_utf8(...)` | Try to interpret bytes as a UTF-8 string. The header is always ASCII, but the content might be binary. |
-| `.split_once(' ')` | Split a string on the first space, returning `Option<(&str, &str)>`. |
-| `size_str.parse()` | Parse a string into a number. Rust infers the target type (`usize`) from the annotation. |
+| `.ok_or_else(\|\| ...)` | Convert `None` (from `.position()`) into an `Err`. Turns "not found" into a proper error. |
+| `.map_err(\|e\| ...)` | Convert one error type into another. `from_utf8` returns a `Utf8Error`, but we need `io::Error`. |
+| `raw[null_pos + 1..].to_vec()` | Slice from after the null byte to the end, then copy into an owned `Vec<u8>`. |
 
 ### 4.2 — Switch to clap
 
@@ -633,9 +853,6 @@ Our manual argument parsing is getting unwieldy. Let's use `clap` — the standa
 Add to `Cargo.toml`:
 
 ```toml
-[dependencies]
-sha1 = "0.10"
-flate2 = "1"
 clap = { version = "4", features = ["derive"] }
 ```
 
@@ -735,7 +952,6 @@ fn reveal(hash: &str, show_type: bool, show_size: bool) {
         return;
     }
 
-    // For blobs, print the content as text (or note it's binary)
     match obj.obj_type {
         object::ObjectType::Blob => {
             match std::str::from_utf8(&obj.content) {
@@ -787,27 +1003,101 @@ cargo run -- --help
 cargo run -- reveal --help
 ```
 
-> [!warning] Common Mistake
-> **Forgetting `features = ["derive"]` for clap.** Without the `derive` feature, the `#[derive(Parser)]` and `#[derive(Subcommand)]` macros won't work. You'll get a confusing "cannot find derive macro" error.
+### 4.4 — Your first test
 
-We can store and retrieve individual files. But a version control system doesn't track files in isolation — it tracks *directories*. A snapshot of your project is a tree of files, not a single blob. Next stage, we'll build tree objects that represent an entire directory structure.
+Let's introduce `#[test]` — Rust's built-in testing framework. Add this at the bottom of `src/object.rs`:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_hash_bytes_deterministic() {
+        let hash1 = hash_bytes(b"hello");
+        let hash2 = hash_bytes(b"hello");
+        assert_eq!(hash1, hash2, "Same input must produce same hash");
+    }
+
+    #[test]
+    fn test_hash_bytes_different_input() {
+        let hash1 = hash_bytes(b"hello");
+        let hash2 = hash_bytes(b"world");
+        assert_ne!(hash1, hash2, "Different input must produce different hash");
+    }
+
+    #[test]
+    fn test_hash_known_value() {
+        // "hello" should always hash to this value
+        assert_eq!(
+            hash_bytes(b"hello"),
+            "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d"
+        );
+    }
+}
+```
+
+Run the tests:
+
+```bash
+cargo test
+```
+
+```
+running 3 tests
+test object::tests::test_hash_bytes_deterministic ... ok
+test object::tests::test_hash_bytes_different_input ... ok
+test object::tests::test_hash_known_value ... ok
+
+test result: ok. 3 passed; 0 failed; 0 finished in 0.01s
+```
+
+Key concepts:
+- `#[cfg(test)]` — this module only compiles when running tests, not in the final binary
+- `mod tests` — a nested module for test functions
+- `use super::*` — import everything from the parent module (`object`)
+- `#[test]` — marks a function as a test case
+- `assert_eq!` / `assert_ne!` — check equality/inequality, panic with a message on failure
+- `cargo test` — compile and run all tests. `cargo test test_hash` runs only tests matching that name
+
+**Python comparison:** `#[test]` is like `def test_something(self):` in `unittest`. `cargo test` is like `pytest`. The difference: Rust tests live *inside* the source file in a `#[cfg(test)]` module, not in a separate `test_` file (though you can do that too).
+
+From this point on, we'll add tests for every pure function we write. Tests are checkpoints — if they pass, your implementation is correct.
+
+> [!warning] Common Mistake: Forgetting `features = ["derive"]` for clap
+> ```toml
+> # ❌ Missing derive feature
+> clap = "4"
+>
+> # ✅ Correct
+> clap = { version = "4", features = ["derive"] }
+> ```
+> Without the `derive` feature, `#[derive(Parser)]` and `#[derive(Subcommand)]` won't work. You'll get:
+> ```
+> error: cannot find derive macro `Parser` in this scope
+> ```
+
+### Extend it
+
+Add a test `test_store_and_read_roundtrip` that stores a blob with known content, reads it back with `read_object`, and asserts the content matches. You'll need to create a `.chronolock/objects/` directory in a temp location first — use `std::env::temp_dir()` or hardcode a test path. This is trickier than it sounds because `store_blob` assumes `.chronolock/` is in the current directory.
 
 > [!check] Checkpoint
-> Run `cargo run -- reveal <hash>` with the hash from Stage 3. Verify it prints `hello`. Run `cargo run -- reveal -t <hash>` and verify it prints `Blob`. Stage 4 complete.
+> Run `cargo run -- reveal <hash>` with the hash from Stage 3. Verify it prints `hello`. Run `cargo test` and verify all 3 tests pass. Stage 4 complete.
 
 ---
 
 ## Stage 5 — The Moment
 
-> *Difficulty: Medium — Tree objects and representing directories.*
+> *We can store individual files as blobs, but a project isn't a pile of loose files — it's a directory tree. A tree object is a snapshot of a directory: which files exist, what they're named, and what their contents are.*
 
-We can store individual files as blobs, but a project isn't a pile of loose files — it's a directory tree. If you want to capture the state of your project at a point in time, you need to record *which files exist, what they're named, and what their contents are*. That's what a tree object does — it's a snapshot of a directory.
+*Difficulty: Medium* | *~75 min*
 
 > [!tip] What You'll Learn
 > - Git's tree object format — a sorted list of entries
 > - File modes (regular file, executable, directory)
 > - Binary format: mode, name, null byte, raw hash bytes
 > - Why trees reference blobs by hash (not by filename)
+> - Closures and sorting in Rust
 
 ### The tree format
 
@@ -845,19 +1135,71 @@ pub struct TreeEntry {
 }
 ```
 
-Why separate `mode`, `name`, and `hash` into a struct? Because we'll need to sort entries by name, build them incrementally, and serialize them into the binary format. A struct gives us a handle on each piece.
+### 5.2 — Hex-to-bytes conversion
 
-### 5.2 — Storing a tree
+Tree entries store hashes as 20 raw bytes, not 40 hex characters. We need a conversion function:
+
+```rust
+/// Convert a 40-character hex string to 20 raw bytes.
+fn hex_to_bytes(hex: &str) -> std::io::Result<Vec<u8>> {
+    (0..hex.len())
+        .step_by(2)
+        .map(|i| {
+            u8::from_str_radix(&hex[i..i + 2], 16)
+                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
+        })
+        .collect()
+}
+```
+
+This is dense — let's unpack it:
+
+| Code | Explanation |
+|------|-------------|
+| `(0..hex.len()).step_by(2)` | Iterate in steps of 2: 0, 2, 4, 6, ... Each pair of hex characters becomes one byte. |
+| `&hex[i..i + 2]` | Slice two characters: `"ce"`, `"01"`, `"36"`, ... |
+| `u8::from_str_radix("ce", 16)` | Parse `"ce"` as base-16 → `206u8`. |
+| `.map(...)` | Transform each step into a `Result<u8, io::Error>`. |
+| `.collect()` | Collect all results into `Result<Vec<u8>, io::Error>`. If any parse fails, the whole thing fails. |
+
+The `.collect()` call is doing something clever: it collects an iterator of `Result<u8, E>` into a `Result<Vec<u8>, E>`. If every element is `Ok`, you get `Ok(vec![...])`. If any element is `Err`, you get that error immediately. This is a common Rust pattern for fallible iteration.
+
+### 5.3 — Storing a tree
+
+Now implement `store_tree`. The pattern is the same as `store_blob` — build content, prepend header, hash, compress, write — but the content is binary entries instead of raw file data.
+
+Try it yourself with this signature:
 
 ```rust
 /// Store a tree object from a list of entries.
 /// Entries are sorted by name before hashing (git requirement).
 pub fn store_tree(entries: &mut Vec<TreeEntry>) -> std::io::Result<String> {
+    // 1. Sort entries by name (directories sort as if they have trailing '/')
+    // 2. Build binary content: for each entry, write mode + space + name + null + 20 hash bytes
+    // 3. Prepend "tree <size>\0" header
+    // 4. Hash, compress, write (same as store_blob)
+    todo!()
+}
+```
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
+pub fn store_tree(entries: &mut Vec<TreeEntry>) -> std::io::Result<String> {
     // Git requires tree entries sorted by name
     entries.sort_by(|a, b| {
         // Directories sort as if they have a trailing '/'
-        let a_name = if a.mode == "40000" { format!("{}/", a.name) } else { a.name.clone() };
-        let b_name = if b.mode == "40000" { format!("{}/", b.name) } else { b.name.clone() };
+        let a_name = if a.mode == "40000" {
+            format!("{}/", a.name)
+        } else {
+            a.name.clone()
+        };
+        let b_name = if b.mode == "40000" {
+            format!("{}/", b.name)
+        } else {
+            b.name.clone()
+        };
         a_name.cmp(&b_name)
     });
 
@@ -895,45 +1237,46 @@ pub fn store_tree(entries: &mut Vec<TreeEntry>) -> std::io::Result<String> {
 
     Ok(hash)
 }
-
-/// Convert a 40-character hex string to 20 raw bytes.
-fn hex_to_bytes(hex: &str) -> std::io::Result<Vec<u8>> {
-    (0..hex.len())
-        .step_by(2)
-        .map(|i| {
-            u8::from_str_radix(&hex[i..i + 2], 16)
-                .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))
-        })
-        .collect()
-}
 ```
 
-The pattern is the same as `store_blob` — build the content, prepend a header, hash the whole thing, compress, write. The difference is the content format: binary entries instead of raw file data.
+</details>
 
-| Code | Explanation |
-|------|-------------|
-| `entries.sort_by(...)` | Sort entries by name. The closure compares two entries. Directories get a trailing `/` for sort purposes (git convention). |
-| `content.push(0)` | Append a null byte. `b' '` is a space byte, `0` is null. |
-| `hex_to_bytes(...)` | Convert `"ce0136..."` (40 hex chars) to 20 raw bytes. Tree entries store hashes in binary, not hex. |
-| `(0..hex.len()).step_by(2)` | Iterate in steps of 2 — each pair of hex characters becomes one byte. |
-| `u8::from_str_radix(&hex[i..i+2], 16)` | Parse two hex characters as a base-16 number → one byte. |
+### Concept: Closures — `|a, b| { ... }`
 
-### 5.3 — Reading a tree
-
-Add the tree parsing to `read_object`'s display logic. Update the `reveal` function in `main.rs`:
+The `sort_by` call uses a **closure** — an anonymous function:
 
 ```rust
-object::ObjectType::Tree => {
-    let entries = object::parse_tree(&obj.content);
-    for entry in &entries {
-        println!("{} {} {}\t{}", entry.mode,
-            if entry.mode == "40000" { "tree" } else { "blob" },
-            entry.hash, entry.name);
-    }
-}
+entries.sort_by(|a, b| a_name.cmp(&b_name));
 ```
 
-And add the parser in `src/object.rs`:
+**Python comparison:**
+```python
+entries.sort(key=lambda e: e.name + "/" if e.mode == "40000" else e.name)
+```
+
+Rust closures use `|params|` instead of `lambda params:`. They can capture variables from the surrounding scope, and the compiler infers their types. You'll see closures everywhere in Rust — they're the standard way to pass behavior to functions like `sort_by`, `filter`, `map`.
+
+### Concept: &mut Vec — why the function takes a mutable reference
+
+Notice the parameter: `entries: &mut Vec<TreeEntry>`. The `&mut` means "I'm borrowing this vector *and I might modify it*" (because we sort it in place).
+
+If we tried `entries: &Vec<TreeEntry>` (immutable borrow), the compiler would reject the `sort_by` call:
+
+```
+error[E0596]: cannot borrow `*entries` as mutable, as it is behind a `&` reference
+  --> src/object.rs:45:5
+   |
+44 | pub fn store_tree(entries: &Vec<TreeEntry>) -> std::io::Result<String> {
+   |                            --------------- help: consider changing this to be a mutable reference: `&mut Vec<TreeEntry>`
+45 |     entries.sort_by(|a, b| {
+   |     ^^^^^^^ `entries` is a `&` reference, so the data it refers to cannot be borrowed as mutable
+```
+
+The compiler tells you exactly what's wrong and how to fix it. This is Rust's borrowing system at work — you must declare your intent (read-only `&` vs read-write `&mut`), and the compiler enforces it.
+
+### 5.4 — Reading a tree
+
+Add the tree parser to `object.rs`:
 
 ```rust
 /// Parse tree content bytes into a list of entries.
@@ -956,7 +1299,9 @@ pub fn parse_tree(content: &[u8]) -> Vec<TreeEntry> {
 
         // Next 20 bytes are the raw SHA-1 hash
         let hash_bytes = &content[null_pos + 1..null_pos + 21];
-        let hash = hash_bytes.iter().map(|b| format!("{:02x}", b)).collect::<String>();
+        let hash = hash_bytes.iter()
+            .map(|b| format!("{:02x}", b))
+            .collect::<String>();
 
         entries.push(TreeEntry { mode, name, hash });
         pos = null_pos + 21;
@@ -968,9 +1313,40 @@ pub fn parse_tree(content: &[u8]) -> Vec<TreeEntry> {
 
 This is a manual binary parser — we walk through the bytes, finding delimiters (space, null byte) and extracting fields. There's no JSON, no newlines — just raw bytes with known structure.
 
-### 5.4 — Test it
+Now update the `reveal` function in `main.rs` to display trees:
 
-Let's manually create a tree with two files:
+```rust
+object::ObjectType::Tree => {
+    let entries = object::parse_tree(&obj.content);
+    for entry in &entries {
+        println!("{} {} {}\t{}", entry.mode,
+            if entry.mode == "40000" { "tree" } else { "blob" },
+            entry.hash, entry.name);
+    }
+}
+```
+
+### 5.5 — Add tests
+
+Add to the `tests` module in `object.rs`:
+
+```rust
+#[test]
+fn test_hex_to_bytes() {
+    let bytes = hex_to_bytes("aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d").unwrap();
+    assert_eq!(bytes.len(), 20);
+    assert_eq!(bytes[0], 0xaa);
+    assert_eq!(bytes[1], 0xf4);
+}
+```
+
+```bash
+cargo test
+```
+
+### 5.6 — Test it
+
+Create two files and store them as blobs:
 
 ```bash
 echo -n "hello" > hello.txt
@@ -986,27 +1362,33 @@ cargo run -- reveal <hello-hash>
 cargo run -- reveal <readme-hash>
 ```
 
-> [!warning] Common Mistake
-> **Storing the hash as hex text in tree entries instead of raw bytes.** Tree entries use 20 raw bytes for the hash, not 40 hex characters. If you write hex, git won't be able to parse your trees and `git cat-file -p <tree-hash>` will show garbage.
+> [!warning] Common Mistake: Storing hashes as hex text in tree entries instead of raw bytes
+> Tree entries use 20 raw bytes for the hash, not 40 hex characters. If you write hex text, git won't be able to parse your trees and `git cat-file -p <tree-hash>` will show garbage. The `hex_to_bytes` function handles this conversion.
 
-We can represent a flat directory as a tree object. But we have no way to *build* a tree from the actual files on disk — we'd have to manually list every file and its hash. Next stage, we'll build the staging area that scans the working directory and assembles a tree automatically.
+> [!warning] Common Mistake: Using mode `040000` instead of `40000`
+> Git's tree format omits the leading zero — it's `40000`, not `040000`. However, `git cat-file -p` *displays* it as `040000`. When writing tree entries, use `40000`. This inconsistency trips up everyone.
+
+### Extend it
+
+Add a `bytes_to_hex` function that does the reverse of `hex_to_bytes` — takes `&[u8]` and returns a hex `String`. Write a test that round-trips: `hex_to_bytes` then `bytes_to_hex` should return the original string.
 
 > [!check] Checkpoint
-> You have `store_tree`, `parse_tree`, and `hex_to_bytes` functions. The tree format uses binary hashes (20 bytes, not 40 hex chars). Stage 5 complete.
+> You have `store_tree`, `parse_tree`, and `hex_to_bytes` functions. `cargo test` passes. The tree format uses binary hashes (20 bytes, not 40 hex chars). Stage 5 complete.
 
 ---
 
 ## Stage 6 — Capturing a Moment
 
-> *Difficulty: Medium — The staging area and building trees from the working directory.*
+> *Creating a tree requires manually constructing entries with pre-computed hashes. We need a command that scans the working directory, stores every file as a blob, and assembles the tree automatically. This is what `git add` does — and it's more subtle than it looks.*
 
-Right now, creating a tree requires manually constructing `TreeEntry` structs with pre-computed hashes. That's like writing a book's table of contents by hand after memorizing every page number. We need a command that scans the working directory, stores every file as a blob, and assembles the tree automatically. This is what `git add` does — and it's more subtle than it looks.
+*Difficulty: Medium* | *~90 min*
 
 > [!tip] What You'll Learn
 > - The **index** (staging area) — why `add` and `commit` are separate
 > - Walking a directory with `std::fs::read_dir`
 > - Building a tree from the filesystem
-> - Why the staging area exists (it's not just a formality)
+> - Creating a new module and wiring it in
+> - Conditional compilation with `#[cfg(unix)]`
 
 ### Why a staging area?
 
@@ -1020,9 +1402,46 @@ This three-step design lets you commit *part* of your changes. You edited five f
 
 For now, we'll implement a simplified version: `chronolock stage .` stages everything (like `git add .`). We'll add selective staging later.
 
-### 6.1 — The stage command
+### 6.1 — Create the staging module
 
-Add a new file `src/staging.rs`:
+Create a new file `src/staging.rs`. Remember from Stage 2: Rust won't know this file exists until you declare it.
+
+Add `mod staging;` at the top of `src/main.rs` (next to `mod object;`):
+
+```rust
+mod object;
+mod staging;
+```
+
+Now implement `stage_directory`. Try it yourself — here's the signature and algorithm:
+
+```rust
+use crate::object;
+use std::fs;
+use std::path::Path;
+
+/// Scan a directory and build a tree object from its contents.
+/// Stores all blobs and returns the tree hash.
+pub fn stage_directory(dir: &Path) -> std::io::Result<String> {
+    // 1. Read directory entries with fs::read_dir(dir)?
+    // 2. Sort entries by filename
+    // 3. For each file: read it, store as blob, create a TreeEntry
+    // 4. Skip .chronolock, .git, target directories
+    // 5. Call object::store_tree with the entries
+    // (Skip subdirectories for now — we'll handle them in Stage 7)
+    todo!()
+}
+```
+
+Hints:
+- `fs::read_dir(dir)?` returns an iterator of `Result<DirEntry, io::Error>`
+- `.filter_map(|e| e.ok())` skips entries that fail to read
+- `entry.file_name().to_string_lossy().to_string()` gets the filename
+- `entry.metadata()?.is_file()` checks if it's a regular file
+- On Unix, check executable permission with `metadata.permissions().mode() & 0o111 != 0`
+
+<details>
+<summary>Solution — click to reveal</summary>
 
 ```rust
 use crate::object;
@@ -1077,19 +1496,40 @@ pub fn stage_directory(dir: &Path) -> std::io::Result<String> {
 }
 ```
 
+</details>
+
 New concepts:
 
 | Code | Explanation |
 |------|-------------|
+| `crate::object` | `crate` refers to the root of your project. `crate::object` means "the `object` module in this crate." |
 | `fs::read_dir(dir)?` | Returns an iterator over directory entries. Like `os.listdir()` in Python. |
-| `.filter_map(\|e\| e.ok())` | Skip entries that fail to read (permission errors, etc.). `.ok()` converts `Result` to `Option`. |
-| `.to_string_lossy()` | Convert an OS filename to a Rust `String`, replacing invalid Unicode with `�`. Filenames aren't always valid UTF-8. |
+| `.filter_map(\|e\| e.ok())` | Skip entries that fail to read (permission errors, etc.). `.ok()` converts `Result` to `Option`, and `filter_map` drops `None` values. |
+| `.to_string_lossy()` | Convert an OS filename to a Rust string, replacing invalid Unicode with `�`. Filenames aren't always valid UTF-8. |
 | `#[cfg(unix)]` | Conditional compilation — this block only compiles on Unix systems. The `#[cfg(not(unix))]` block compiles everywhere else. |
-| `metadata.permissions().mode()` | Get the Unix file permission bits. `& 0o111` checks if any execute bit is set. |
+
+### Concept: #[cfg(unix)] — conditional compilation
+
+```rust
+#[cfg(unix)]
+let mode = {
+    use std::os::unix::fs::PermissionsExt;
+    if metadata.permissions().mode() & 0o111 != 0 {
+        "100755".to_string()
+    } else {
+        "100644".to_string()
+    }
+};
+
+#[cfg(not(unix))]
+let mode = "100644".to_string();
+```
+
+**Python comparison:** In Python you'd write `if sys.platform == "linux":` — a runtime check. Rust's `#[cfg(...)]` is a *compile-time* check. The non-matching code doesn't even exist in the binary. This means you can use platform-specific APIs (like `PermissionsExt`) without worrying about compilation errors on other platforms.
 
 ### 6.2 — Wire it up
 
-Add `mod staging;` to the top of `main.rs`, and add the subcommand:
+Add the subcommand to the `Commands` enum in `main.rs`:
 
 ```rust
 /// Stage files for the next anchor (commit)
@@ -1142,13 +1582,15 @@ GIT_DIR=.chronolock git cat-file -p <tree-hash>
 
 Git sees a valid tree with two blob entries, sorted alphabetically.
 
-> [!warning] Common Mistake
-> **Not sorting directory entries.** If entries aren't sorted, the same directory contents will produce different tree hashes depending on filesystem ordering. Git requires sorted entries — always sort before hashing.
+> [!warning] Common Mistake: Not sorting directory entries
+> If entries aren't sorted, the same directory contents will produce different tree hashes depending on filesystem ordering (which varies between macOS and Linux). Git requires sorted entries — always sort before hashing.
 
-> [!warning] Common Mistake
-> **Including `.chronolock/` in the tree.** The object store should never be tracked by itself. Always skip `.chronolock`, `.git`, and build directories like `target/`.
+> [!warning] Common Mistake: Including `.chronolock/` in the tree
+> The object store should never be tracked by itself. Always skip `.chronolock`, `.git`, and build directories like `target/`. If you forget, you'll get an infinitely growing repository.
 
-We can stage a flat directory, but real projects have subdirectories — `src/`, `tests/`, nested folders. Right now those are silently skipped. Next stage, we'll make tree building recursive so nested directories become nested tree objects.
+### Extend it
+
+Add a `--verbose` flag to the `stage` command that prints each file as it's stored: `stored blob <hash> <filename>`. You'll need to add `#[arg(short, long)] verbose: bool` to the `Stage` variant and pass it through to `stage_directory`.
 
 > [!check] Checkpoint
 > Run `chronolock stage test_project`. Verify `git cat-file -p <tree-hash>` shows sorted blob entries. Stage 6 complete.
@@ -1157,9 +1599,9 @@ We can stage a flat directory, but real projects have subdirectories — `src/`,
 
 ## Stage 7 — Nested Realities
 
-> *Difficulty: Medium — Recursive tree building for subdirectories.*
+> *Real projects aren't flat. They have `src/`, `tests/`, `docs/`, and deeper nesting. Right now our staging function silently skips directories. We need to make tree building recursive.*
 
-Real projects aren't flat. They have `src/`, `tests/`, `docs/`, and deeper nesting. Right now our staging function silently skips directories — a project with subdirectories would lose most of its files. We need to make tree building recursive: when we encounter a subdirectory, stage *it* as a tree object, then include that tree's hash in the parent tree.
+*Difficulty: Medium* | *~60 min*
 
 > [!tip] What You'll Learn
 > - Recursive functions in Rust
@@ -1181,9 +1623,14 @@ root tree
 
 This design has a powerful consequence: **if two commits share the same `src/` directory, they share the same tree object.** Git doesn't duplicate the subtree — it just points to the same hash. Deduplication happens automatically because identical content produces identical hashes.
 
-### 7.1 — Make staging recursive
+### 7.1 — Try it yourself: make staging recursive
 
-Update `stage_directory` in `src/staging.rs`:
+The change is small — add an `else if metadata.is_dir()` branch to `stage_directory` that recursively calls itself. When you encounter a directory, stage it as its own tree object, then include that tree's hash in the parent tree with mode `40000`.
+
+Try modifying `stage_directory` in `src/staging.rs` yourself. The only addition is handling the directory case inside the `for entry in dir_entries` loop.
+
+<details>
+<summary>Solution — click to reveal</summary>
 
 ```rust
 pub fn stage_directory(dir: &Path) -> std::io::Result<String> {
@@ -1199,7 +1646,9 @@ pub fn stage_directory(dir: &Path) -> std::io::Result<String> {
         let path = entry.path();
 
         // Skip internal and build directories
-        if name == ".chronolock" || name == ".git" || name == "target" || name.starts_with('.') {
+        if name == ".chronolock" || name == ".git"
+            || name == "target" || name.starts_with('.')
+        {
             continue;
         }
 
@@ -1237,7 +1686,9 @@ pub fn stage_directory(dir: &Path) -> std::io::Result<String> {
 }
 ```
 
-The only change: the `else if metadata.is_dir()` branch. When we encounter a directory, we call `stage_directory` recursively. The subdirectory becomes a tree object, and its hash becomes an entry in the parent tree with mode `40000`.
+</details>
+
+The recursive call is the key line: `let subtree_hash = stage_directory(&path)?;`. Each subdirectory becomes a tree object, and its hash becomes an entry in the parent tree.
 
 This is the same recursive pattern you'd use to walk a filesystem in any language — but in Rust, the ownership system guarantees we're not accidentally sharing mutable state between recursive calls. Each call owns its own `entries` vector.
 
@@ -1279,31 +1730,74 @@ GIT_DIR=.chronolock git cat-file -p <src-tree-hash>
 100644 blob <hash>    main.rs
 ```
 
-Two tree objects — one for the root, one for `src/`. The root tree points to the `src` tree by hash. This is the recursive structure that lets git represent any directory hierarchy.
+Two tree objects — one for the root, one for `src/`. The root tree points to the `src` tree by hash.
 
 > [!note] Deduplication in action
 > Stage the same directory twice. The second time, `store_blob` and `store_tree` skip writing because the objects already exist (same content → same hash → file already present). Git never stores duplicate content, and neither does the Chronolock.
 
-> [!warning] Common Mistake
-> **Using mode `040000` instead of `40000`.** Git's tree format omits the leading zero — it's `40000`, not `040000`. However, `git cat-file -p` *displays* it as `040000`. When writing tree entries, use `40000`. This inconsistency trips up everyone.
+### 7.3 — Add a test
 
-We can capture a full directory snapshot as a tree of trees. But a snapshot without context is just data — who took it? When? Why? Next stage, we'll wrap a tree in a commit object that records the author, timestamp, and message — anchoring the moment in the timeline.
+Add to the `tests` module in `object.rs`:
+
+```rust
+#[test]
+fn test_parse_tree_roundtrip() {
+    // Create entries, store as tree, parse back, verify
+    let mut entries = vec![
+        TreeEntry {
+            mode: "100644".to_string(),
+            name: "b.txt".to_string(),
+            hash: "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d".to_string(),
+        },
+        TreeEntry {
+            mode: "100644".to_string(),
+            name: "a.txt".to_string(),
+            hash: "aaf4c61ddcc5e8a2dabede0f3b482cd9aea9434d".to_string(),
+        },
+    ];
+
+    // Build tree content manually (without storing to disk)
+    entries.sort_by(|a, b| a.name.cmp(&b.name));
+    let mut content: Vec<u8> = Vec::new();
+    for entry in &entries {
+        content.extend_from_slice(entry.mode.as_bytes());
+        content.push(b' ');
+        content.extend_from_slice(entry.name.as_bytes());
+        content.push(0);
+        content.extend_from_slice(&hex_to_bytes(&entry.hash).unwrap());
+    }
+
+    let parsed = parse_tree(&content);
+    assert_eq!(parsed.len(), 2);
+    assert_eq!(parsed[0].name, "a.txt"); // sorted
+    assert_eq!(parsed[1].name, "b.txt");
+}
+```
+
+```bash
+cargo test
+```
+
+### Extend it
+
+Add a `--dry-run` flag to the `stage` command that prints what *would* be staged without actually writing any objects. Print each file path and its computed hash. This is useful for debugging — you can see what the staging area would contain without modifying the object store.
 
 > [!check] Checkpoint
-> Stage a directory with subdirectories. Verify `git cat-file -p` shows tree entries pointing to subtrees. Stage 7 complete.
+> Stage a directory with subdirectories. Verify `git cat-file -p` shows tree entries pointing to subtrees. `cargo test` passes. Stage 7 complete.
 
 ---
 
 ## Stage 8 — The Object Trinity
 
-> *Difficulty: Medium — Commit objects and your first anchor in time.*
+> *We have blobs (file content) and trees (directory snapshots). These capture what exists at a point in time, but not who captured it, when, or why. A commit is a photograph with a date stamp, a caption, and a link to the previous photograph.*
 
-We have blobs (file content) and trees (directory snapshots). These capture *what* exists at a point in time, but not *who* captured it, *when*, or *why*. A tree is a photograph — a commit is a photograph with a date stamp, a caption, and a link to the previous photograph. This stage completes the three-object model that is the entire foundation of git.
+*Difficulty: Medium* | *~75 min*
 
 > [!tip] What You'll Learn
 > - Commit object format — tree hash, parent hash, author, committer, message
 > - Timestamps in git's format (Unix epoch + timezone)
 > - The `chrono` crate for time handling
+> - `Option<T>` — Rust's way of saying "this value might not exist"
 > - How commits form a chain (each points to its parent)
 
 ### The commit format
@@ -1342,16 +1836,12 @@ Key details:
 Update `Cargo.toml`:
 
 ```toml
-[dependencies]
-sha1 = "0.10"
-flate2 = "1"
-clap = { version = "4", features = ["derive"] }
 chrono = "0.4"
 ```
 
-### 8.2 — The commit function
+### 8.2 — Try it yourself: the commit function
 
-Add to `src/object.rs`:
+Implement `store_commit` in `object.rs`. The pattern is the same as blob/tree — build content, prepend header, hash, compress, write. The new concept is `Option<&str>` for the parent hash.
 
 ```rust
 use chrono::Local;
@@ -1365,12 +1855,38 @@ pub fn store_commit(
     author_email: &str,
     message: &str,
 ) -> std::io::Result<String> {
+    // 1. Get current timestamp: Local::now().timestamp() and .format("%z")
+    // 2. Build the commit text:
+    //    - "tree <hash>\n"
+    //    - "parent <hash>\n" (only if parent_hash is Some)
+    //    - "author <name> <<email>> <timestamp> <tz>\n"
+    //    - "committer <name> <<email>> <timestamp> <tz>\n"
+    //    - "\n" (blank line)
+    //    - message + "\n"
+    // 3. Prepend "commit <size>\0" header
+    // 4. Hash, compress, write (same pattern as blob/tree)
+    todo!()
+}
+```
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
+pub fn store_commit(
+    tree_hash: &str,
+    parent_hash: Option<&str>,
+    author_name: &str,
+    author_email: &str,
+    message: &str,
+) -> std::io::Result<String> {
     let now = Local::now();
     let timestamp = now.timestamp();
-    let tz_offset = now.format("%z").to_string(); // e.g., "+0200"
+    let tz_offset = now.format("%z").to_string();
 
-    let author_line = format!("{} <{}> {} {}",
-        author_name, author_email, timestamp, tz_offset);
+    let author_line = format!(
+        "{} <{}> {} {}", author_name, author_email, timestamp, tz_offset
+    );
 
     let mut content = String::new();
     content.push_str(&format!("tree {}\n", tree_hash));
@@ -1381,7 +1897,7 @@ pub fn store_commit(
 
     content.push_str(&format!("author {}\n", author_line));
     content.push_str(&format!("committer {}\n", author_line));
-    content.push_str("\n"); // blank line before message
+    content.push('\n'); // blank line before message
     content.push_str(message);
     content.push('\n');
 
@@ -1408,15 +1924,37 @@ pub fn store_commit(
 }
 ```
 
-The pattern is now familiar — build content, prepend header, hash, compress, write. The only new element is `Option<&str>` for the parent hash:
+</details>
 
-| Code | Explanation |
-|------|-------------|
-| `Option<&str>` | Either `Some("abc123...")` or `None`. The first commit has no parent, so this is optional. |
-| `if let Some(parent) = parent_hash` | Pattern match on the Option — only add the parent line if there is one. |
-| `Local::now()` | Get the current local time. `chrono` handles timezone detection. |
-| `.timestamp()` | Unix epoch seconds — the number of seconds since January 1, 1970. |
-| `.format("%z")` | Format the timezone offset as `+0200` or `-0500`. |
+### Concept: Option<T> — values that might not exist
+
+The first commit has no parent. How do we represent "there might not be a parent hash"? In Python, you'd use `None`:
+
+```python
+def store_commit(tree_hash: str, parent_hash: str | None, ...):
+    if parent_hash is not None:
+        content += f"parent {parent_hash}\n"
+```
+
+Rust uses `Option<T>` — an enum with two variants:
+
+```rust
+enum Option<T> {
+    Some(T),   // the value exists
+    None,      // no value
+}
+```
+
+The `if let` pattern extracts the value only when it exists:
+
+```rust
+if let Some(parent) = parent_hash {
+    content.push_str(&format!("parent {}\n", parent));
+}
+// If parent_hash is None, this block is skipped entirely
+```
+
+**Why is this better than `None`?** Because the compiler forces you to handle both cases. You can't accidentally use a `None` value without checking — there's no `NoneType has no attribute` error at runtime. The type system prevents it at compile time.
 
 ### 8.3 — Reading commits
 
@@ -1435,7 +1973,7 @@ Commits are plain text, so we just print them directly.
 
 ### 8.4 — A manual test commit
 
-We're not building the full `anchor` command yet (that's Stage 9 in Act 2 — it needs to update HEAD and refs). But we can test the commit object format:
+We're not building the full `anchor` command yet (that's Stage 9 in Act 2 — it needs to update HEAD and refs). But we can test the commit object format.
 
 Add a temporary test subcommand:
 
@@ -1455,8 +1993,8 @@ Commands::TestCommit { tree, message } => {
     let hash = object::store_commit(
         &tree,
         None, // no parent for first commit
-        "JD van Staden",
-        "jd@example.com",
+        "Chronomancer",
+        "chronomancer@chronolock.dev",
         &message,
     ).unwrap_or_else(|e| {
         eprintln!("Failed to create commit: {}", e);
@@ -1483,8 +2021,8 @@ cargo run -- reveal <commit-hash>
 
 ```
 tree <tree-hash>
-author JD van Staden <jd@example.com> 1713500000 +0200
-committer JD van Staden <jd@example.com> 1713500000 +0200
+author Chronomancer <chronomancer@chronolock.dev> 1713500000 +0200
+committer Chronomancer <chronomancer@chronolock.dev> 1713500000 +0200
 
 The first anchor
 ```
@@ -1497,14 +2035,41 @@ GIT_DIR=.chronolock git cat-file -p <commit-hash>
 
 Git should show the same commit data. The Chronolock has created its first anchor in time.
 
-> [!warning] Common Mistake
-> **Forgetting the blank line before the commit message.** The blank line between the headers and the message is required. Without it, git will treat the first line of your message as another header and fail to parse the commit.
+> [!warning] Common Mistake: Forgetting the blank line before the commit message
+> ```
+> author Chronomancer <...> 1713500000 +0200
+> committer Chronomancer <...> 1713500000 +0200
+> The first anchor          ← git thinks this is a header!
+> ```
+> The blank line between headers and message is required. Without it, git treats the first line of your message as another header and fails to parse the commit.
 
-> [!warning] Common Mistake
-> **Trailing newline on the message.** Git expects the commit message to end with a newline. If you omit it, `git log` will display the message without a trailing newline, which looks broken in the terminal.
+> [!warning] Common Mistake: Missing trailing newline on the message
+> Git expects the commit message to end with `\n`. If you omit it, `git log` displays the message without a trailing newline, which looks broken in the terminal. Always `content.push('\n')` after the message.
+
+### 8.6 — Add tests
+
+```rust
+#[test]
+fn test_hash_includes_header() {
+    // Hashing "hello" directly vs as a blob should give different results
+    let raw_hash = hash_bytes(b"hello");
+    let blob_data = b"blob 5\0hello";
+    let blob_hash = hash_bytes(blob_data);
+    assert_ne!(raw_hash, blob_hash,
+        "Blob hash must include the header");
+}
+```
+
+```bash
+cargo test
+```
+
+### Extend it
+
+Create a second commit that has the first commit as its parent. Pass `Some("<first-commit-hash>")` as the `parent_hash`. Verify with `cargo run -- reveal <second-hash>` that the parent line appears. Then verify with `GIT_DIR=.chronolock git log <second-hash>` that git can walk the two-commit chain.
 
 > [!check] Checkpoint
-> Create a commit with `test-commit`. Verify `git cat-file -p <hash>` shows the tree hash, author, and message. Stage 8 complete.
+> Create a commit with `test-commit`. Verify `git cat-file -p <hash>` shows the tree hash, author, and message. `cargo test` passes all tests. Stage 8 complete.
 
 ---
 
@@ -1538,18 +2103,23 @@ Every object is:
 - **Compressed** — zlib-compressed on disk
 - **Compatible** — readable by real git
 
-Here's what you've learned:
+### Rust concepts learned
 
-| Rust Concept | Where You Used It |
-|-------------|-------------------|
-| Modules | `object.rs`, `staging.rs` |
+| Concept | Where You Used It |
+|---------|-------------------|
+| Modules (`mod`, `pub`) | `object.rs`, `staging.rs` — and why `mod` is required |
 | Structs | `Object`, `TreeEntry`, `Cli` |
 | Enums | `ObjectType`, `Commands` |
-| `Option` | Parent hash in commits |
-| `Result` and `?` | Every I/O operation |
+| `Option<T>` | Parent hash in commits |
+| `Result<T, E>` and `?` | Every I/O operation from Stage 3 onward |
+| Borrowing (`&`, `&mut`, `&[u8]`) | Function parameters, mutable sort |
 | Byte manipulation | Tree binary format, hex conversion |
 | Recursive functions | Nested directory staging |
+| Closures | `sort_by`, `filter_map`, `map` |
 | External crates | `sha1`, `flate2`, `clap`, `chrono` |
 | Conditional compilation | `#[cfg(unix)]` for file modes |
+| Testing | `#[test]`, `assert_eq!`, `cargo test` |
 
-**What's missing:** We can create commits, but they float in space — nothing points to them. HEAD still says `ref: refs/heads/main`, but `refs/heads/main` doesn't exist. In Act 2, we'll build the timeline: the `anchor` command that updates HEAD, the `log` command that walks the commit chain, and the `drift` command that shows what changed between any two points in time.
+### What's missing
+
+We can create commits, but they float in space — nothing points to them. HEAD still says `ref: refs/heads/main`, but `refs/heads/main` doesn't exist. In Act 2, we'll build the timeline: the `anchor` command that updates HEAD, the `log` command that walks the commit chain, and the `drift` command that shows what changed between any two points in time.

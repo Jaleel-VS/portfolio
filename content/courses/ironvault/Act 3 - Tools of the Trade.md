@@ -613,6 +613,27 @@ Commands::Get { name, copy, show_password } => {
 3. `cargo run -- generate --copy`, then quickly copy something else (Cmd+C on any text), wait 30 seconds — your new clipboard content should survive (the cleaner only clears if it's still the password)
 4. Try on a headless server (SSH without X forwarding) — you should get a clean error message, not a panic
 
+### Extend it
+
+The clear delay is hardcoded to 30 seconds. Make it configurable:
+
+1. Add a `--clear-after <seconds>` flag to the CLI (default: 30)
+2. Pass it through to `copy_and_clear`
+3. Test with `--clear-after 5` so you don't have to wait 30 seconds every time
+
+<details>
+<summary>Hint</summary>
+
+Change `copy_and_clear` to accept the delay as a parameter:
+
+```rust
+pub fn copy_and_clear(text: &str, clear_after_secs: u64) -> Result<(), String> {
+    // ... same code, but use clear_after_secs instead of CLEAR_DELAY_SECS
+}
+```
+
+</details>
+
 > [!warning] Common Mistakes
 > | Mistake | Why It's Wrong | Fix |
 > |---------|---------------|-----|
@@ -975,6 +996,14 @@ pub fn filter_by_chamber<'a>(relics: &'a [Relic], chamber: &str) -> Vec<&'a Reli
 }
 
 /// Filter relics by tag (exact match, case-insensitive).
+/// Try implementing this yourself before looking at the solution.
+/// Signature: pub fn filter_by_tag<'a>(relics: &'a [Relic], tag: &str) -> Vec<&'a Relic>
+/// Hint: combine .filter() with .any() — check if any tag in the relic's tags matches.
+
+<details>
+<summary>Solution</summary>
+
+```rust
 pub fn filter_by_tag<'a>(relics: &'a [Relic], tag: &str) -> Vec<&'a Relic> {
     let tag_lower = tag.to_lowercase();
     relics
@@ -983,6 +1012,8 @@ pub fn filter_by_tag<'a>(relics: &'a [Relic], tag: &str) -> Vec<&'a Relic> {
         .collect()
 }
 ```
+
+</details>
 
 These are simpler — exact match instead of substring. Notice the pattern is always the same: `.iter().filter(|r| condition).collect()`. This is Rust's equivalent of Python's list comprehension `[r for r in relics if condition(r)]`.
 
@@ -1176,6 +1207,55 @@ Commands::List { chamber, tag } => {
 > ```
 >
 > You can find any relic instantly. But credentials aren't static — passwords rotate, accounts move between teams, URLs change. Stage 18 builds the Scribe, an interactive editor that lets you reshape any relic field by field.
+
+### Write a test
+
+Search is a pure function — test it:
+
+```rust
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::model::Relic;
+    use chrono::Utc;
+
+    fn test_relic(name: &str, chamber: &str, tags: &[&str]) -> Relic {
+        Relic {
+            id: "test".into(),
+            name: name.into(),
+            username: "user@test.com".into(),
+            password: "secret".into(),
+            url: None,
+            chamber: chamber.into(),
+            tags: tags.iter().map(|t| t.to_string()).collect(),
+            notes: None,
+            created_at: Utc::now(),
+            updated_at: Utc::now(),
+        }
+    }
+
+    #[test]
+    fn search_matches_name_case_insensitive() {
+        let relics = vec![
+            test_relic("GitHub", "Armory", &["dev"]),
+            test_relic("Gmail", "Library", &["email"]),
+        ];
+        let results = search_relics(&relics, "git");
+        assert_eq!(results.len(), 1);
+        assert_eq!(results[0].name, "GitHub");
+    }
+
+    #[test]
+    fn filter_by_tag_works() {
+        let relics = vec![
+            test_relic("GitHub", "Armory", &["dev", "git"]),
+            test_relic("Gmail", "Library", &["email"]),
+        ];
+        let results = filter_by_tag(&relics, "dev");
+        assert_eq!(results.len(), 1);
+    }
+}
+```
 
 ### What to Try
 2. `cargo run -- search github` — should find relics with "github" in any field

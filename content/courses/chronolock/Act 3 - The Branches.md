@@ -19,9 +19,9 @@ flowchart LR
 
 ## Stage 16 — Forking a Timeline
 
-> *Difficulty: Easy — Creating branches is embarrassingly simple.*
+> *Creating branches is embarrassingly simple. A branch is a file containing a commit hash. Creating a branch means writing 41 bytes to disk.*
 
-Right now we have one branch — `main`. If we want to experiment without risking our stable timeline, we need a way to fork. You might expect branching to involve copying commits or duplicating data. It doesn't. A branch is a file containing a commit hash. Creating a branch means writing 41 bytes to disk. That's it.
+*Difficulty: Easy* | *~40 min*
 
 > [!tip] What You'll Learn
 > - Creating a branch (writing a ref file)
@@ -29,12 +29,24 @@ Right now we have one branch — `main`. If we want to experiment without riskin
 > - Why branches are "cheap" — no data is copied
 > - The difference between creating a branch and switching to it
 
-### 16.1 — Create branch
+### 16.1 — Try it yourself: create branch
 
 Add to `src/refs.rs`:
 
 ```rust
 /// Create a new branch pointing to the given commit.
+pub fn create_branch(name: &str, commit_hash: &str) -> std::io::Result<()> {
+    // 1. Build path: .chronolock/refs/heads/<name>
+    // 2. Check if it already exists → return error
+    // 3. Write the commit hash + newline
+    todo!()
+}
+```
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
 pub fn create_branch(name: &str, commit_hash: &str) -> std::io::Result<()> {
     let path = Path::new(".chronolock/refs/heads").join(name);
     if path.exists() {
@@ -48,20 +60,13 @@ pub fn create_branch(name: &str, commit_hash: &str) -> std::io::Result<()> {
 }
 ```
 
+</details>
+
 That's the entire implementation. One `fs::write`. A branch is born.
 
-### 16.2 — Update the branch command
+### 16.2 — Wire it up
 
-Replace the placeholder in `main.rs`:
-
-```rust
-Commands::Branch { name } => {
-    match name {
-        Some(branch_name) => create_branch(&branch_name),
-        None => list_branches(),
-    }
-}
-```
+Update the `Branch` command handler in `main.rs`:
 
 ```rust
 fn create_branch(name: &str) {
@@ -104,7 +109,6 @@ cargo run -- branch
 ```
 
 ```bash
-# Verify it's just a file
 cat .chronolock/refs/heads/feature
 ```
 
@@ -112,23 +116,25 @@ cat .chronolock/refs/heads/feature
 e5f8a2b4...
 ```
 
-The branch exists, but we're still on `main` — creating a branch doesn't switch to it. HEAD still says `ref: refs/heads/main`. The branch is a bookmark pointing to the same commit as `main`.
+The branch exists, but we're still on `main` — creating a branch doesn't switch to it.
 
-> [!warning] Common Mistake
-> **Assuming branch creation switches to the new branch.** `git branch feature` creates the branch but stays on the current one. `git checkout -b feature` creates *and* switches. We'll build switching next.
+> [!warning] Common Mistake: Assuming branch creation switches to the new branch
+> `git branch feature` creates the branch but stays on the current one. `git checkout -b feature` creates *and* switches. We'll build switching next.
 
-We can create branches, but we can't switch to them. A branch you can't visit is just a label. Next stage, we'll build the `shift` command — the hardest stage in this act — which reconstructs the working directory from a different commit's tree.
+### Extend it
+
+Add a `chronolock branch <name> <commit-hash>` variant that creates a branch pointing to a specific commit instead of HEAD. This is useful for creating a branch at an older point in history.
 
 > [!check] Checkpoint
-> Create a branch with `chronolock branch feature`. Verify `chronolock branch` shows both `main` and `feature`, with `*` next to `main`. Verify `.chronolock/refs/heads/feature` contains a commit hash. Stage 16 complete.
+> Create a branch. Verify `chronolock branch` shows both `main` and the new branch, with `*` next to `main`. Stage 16 complete.
 
 ---
 
 ## Stage 17 — Shifting Realities
 
-> *Difficulty: Hard — Reconstructing the working directory from a commit.*
+> *Switching branches means: read the target commit's tree, compare it against the current working directory, and update files to match. This is the most complex stage in Act 3.*
 
-This is the most complex stage in Act 3. Switching branches means: read the target commit's tree, compare it against the current working directory, and update files to match. Files that exist in the target but not the current tree need to be created. Files that exist in the current tree but not the target need to be deleted. Files that differ need to be overwritten. And HEAD needs to be updated to point to the new branch.
+*Difficulty: Hard* | *~100 min*
 
 > [!tip] What You'll Learn
 > - Reconstructing a working directory from a tree object
@@ -147,11 +153,11 @@ Creating a branch is one line of code. Checking out a branch requires:
 5. For each difference: create, delete, or overwrite the file on disk
 6. Update HEAD to point to the new branch
 
-Steps 1-4 we've already built. Step 5 is new — we need to *write* to the working directory, not just read from it. Step 6 is a one-liner, but it must happen last (if file operations fail, HEAD should stay unchanged).
+Steps 1-4 we've already built. Step 5 is new — we need to *write* to the working directory. Step 6 must happen last (if file operations fail, HEAD should stay unchanged).
 
 ### 17.1 — Read a blob's content
 
-We need a helper that reads a blob and returns its raw content. Add to `src/object.rs`:
+Add to `src/object.rs`:
 
 ```rust
 /// Read a blob object and return its content bytes.
@@ -167,9 +173,9 @@ pub fn read_blob_content(hash: &str) -> std::io::Result<Vec<u8>> {
 }
 ```
 
-### 17.2 — The checkout function
+### 17.2 — Try it yourself: the checkout function
 
-Create `src/checkout.rs`:
+Create `src/checkout.rs` (add `mod checkout;` to `main.rs`). Implement `checkout_branch`:
 
 ```rust
 use crate::{diff, object, refs};
@@ -177,24 +183,40 @@ use std::collections::HashMap;
 use std::fs;
 use std::path::Path;
 
-/// Switch to a branch or commit.
-/// Updates the working directory to match the target tree.
 pub fn checkout_branch(name: &str) -> std::io::Result<()> {
-    // Resolve the target: is it a branch name or a commit hash?
+    // 1. Resolve target: branch name → commit hash (or treat as raw hash)
+    // 2. Read target commit's tree → flatten → HashMap<path, hash>
+    // 3. Read current commit's tree → flatten → HashMap<path, hash>
+    // 4. Delete files in current but not in target
+    // 5. Create/update files that differ between current and target
+    // 6. Update HEAD (symbolic ref for branch, raw hash for detached)
+    todo!()
+}
+```
+
+Hints:
+- `refs::read_branch(name)?` returns `Some(hash)` if it's a branch, `None` if not
+- `diff::flatten_tree(tree_hash, "")` gives you `Vec<(path, hash)>`
+- `object::read_blob_content(hash)?` gets the file content to write
+- Delete empty parent directories after removing files
+- Update HEAD *last* — if file operations fail, HEAD should stay unchanged
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
+pub fn checkout_branch(name: &str) -> std::io::Result<()> {
     let (target_hash, is_branch) = if let Some(hash) = refs::read_branch(name)? {
         (hash, true)
     } else {
-        // Might be a raw commit hash
         (name.to_string(), false)
     };
 
-    // Read the target commit's tree
     let target_obj = object::read_object(&target_hash)?;
     let target_commit = object::parse_commit(&target_obj.content);
     let target_files = diff::flatten_tree(&target_commit.tree, "")?;
     let target_map: HashMap<String, String> = target_files.into_iter().collect();
 
-    // Read the current commit's tree (if any)
     let current_map: HashMap<String, String> = match refs::resolve_head()? {
         Some(hash) => {
             let obj = object::read_object(&hash)?;
@@ -204,14 +226,12 @@ pub fn checkout_branch(name: &str) -> std::io::Result<()> {
         None => HashMap::new(),
     };
 
-    // Apply changes to the working directory
-    // 1. Delete files that exist in current but not in target
+    // Delete files in current but not in target
     for (path, _) in &current_map {
         if !target_map.contains_key(path) {
             let file_path = Path::new(path);
             if file_path.exists() {
                 fs::remove_file(file_path)?;
-                // Clean up empty parent directories
                 if let Some(parent) = file_path.parent() {
                     let _ = remove_empty_dirs(parent);
                 }
@@ -219,13 +239,12 @@ pub fn checkout_branch(name: &str) -> std::io::Result<()> {
         }
     }
 
-    // 2. Create or update files that differ
+    // Create or update files that differ
     for (path, hash) in &target_map {
         let needs_write = match current_map.get(path) {
-            Some(current_hash) => current_hash != hash, // modified
-            None => true, // new file
+            Some(current_hash) => current_hash != hash,
+            None => true,
         };
-
         if needs_write {
             let content = object::read_blob_content(hash)?;
             let file_path = Path::new(path);
@@ -236,7 +255,7 @@ pub fn checkout_branch(name: &str) -> std::io::Result<()> {
         }
     }
 
-    // 3. Update HEAD
+    // Update HEAD last
     if is_branch {
         fs::write(".chronolock/HEAD", format!("ref: refs/heads/{}\n", name))?;
     } else {
@@ -246,7 +265,6 @@ pub fn checkout_branch(name: &str) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Remove empty directories up the tree.
 fn remove_empty_dirs(dir: &Path) -> std::io::Result<()> {
     if dir == Path::new("") || dir == Path::new(".") {
         return Ok(());
@@ -261,31 +279,42 @@ fn remove_empty_dirs(dir: &Path) -> std::io::Result<()> {
 }
 ```
 
-This is the most code-heavy stage so far. Let's trace through what happens when you switch from `main` to `feature`:
+</details>
 
-1. Resolve `feature` → commit hash `abc123`
-2. Read commit `abc123` → tree hash `def456`
-3. Flatten tree `def456` → `[("README.md", "aaa"), ("src/main.rs", "bbb")]`
-4. Flatten current tree → `[("README.md", "aaa"), ("src/main.rs", "ccc"), ("old.txt", "ddd")]`
-5. Delete `old.txt` (in current but not in target)
-6. Update `src/main.rs` (hash differs)
-7. Skip `README.md` (hash matches)
-8. Write `ref: refs/heads/feature\n` to HEAD
+### Concept: Ownership and HashMap — into_iter() vs iter()
+
+Notice this line:
+
+```rust
+let target_map: HashMap<String, String> = target_files.into_iter().collect();
+```
+
+`.into_iter()` *consumes* `target_files` — it takes ownership of each `(String, String)` tuple and moves them into the HashMap. After this line, `target_files` no longer exists.
+
+If you tried to use `target_files` after this, the compiler would stop you:
+
+```
+error[E0382]: borrow of moved value: `target_files`
+  --> src/checkout.rs:20:20
+   |
+15 |     let target_map: HashMap<String, String> = target_files.into_iter().collect();
+   |                                               ------------ value moved here
+...
+20 |     println!("{}", target_files.len());
+   |                    ^^^^^^^^^^^^ value borrowed here after move
+```
+
+This is Rust's ownership system: `into_iter()` moves the data, `iter()` borrows it. We use `into_iter()` here because we don't need `target_files` anymore — the HashMap is a more efficient lookup structure.
+
+**Python comparison:** In Python, `dict(pairs)` copies the data. In Rust, `into_iter().collect()` *moves* it — zero copies, zero allocations beyond the HashMap itself.
 
 ### 17.3 — The shift command
-
-Add `mod checkout;` to `main.rs`. Add the subcommand:
 
 ```rust
 /// Shift to a different branch or commit
 Shift {
-    /// Branch name or commit hash
     target: String,
 },
-```
-
-```rust
-Commands::Shift { target } => shift(&target),
 ```
 
 ```rust
@@ -301,11 +330,6 @@ fn shift(target: &str) {
 ### 17.4 — Test it
 
 ```bash
-# Make sure we have divergent branches
-cargo run -- branch
-# * main
-
-# Create a branch and switch to it
 cargo run -- branch experiment
 cargo run -- shift experiment
 
@@ -313,68 +337,75 @@ cargo run -- branch
 # * experiment
 #   main
 
-# Make a change on experiment
 echo "experiment content" > experiment.txt
 cargo run -- anchor -m "Add experiment file"
 
-# Switch back to main
 cargo run -- shift main
-
-# experiment.txt should be gone
 ls experiment.txt 2>/dev/null || echo "File gone — correct!"
 
-# Switch back to experiment
 cargo run -- shift experiment
 ls experiment.txt
 # experiment.txt is back
 ```
 
-The working directory transforms to match whichever branch you're on. Files appear and disappear as you shift between timelines.
+> [!warning] Common Mistake: Updating HEAD before updating files
+> If file operations fail halfway through, HEAD would point to the new branch but the working directory would be a mix of old and new files. Always update HEAD last.
 
-> [!warning] Common Mistake
-> **Updating HEAD before updating files.** If file operations fail halfway through, HEAD would point to the new branch but the working directory would be a mix of old and new files. Always update HEAD last.
+> [!warning] Common Mistake: Not cleaning up empty directories
+> When you delete the last file in a subdirectory, the empty directory lingers. The `remove_empty_dirs` helper walks up the tree removing empty directories.
 
-> [!warning] Common Mistake
-> **Not cleaning up empty directories.** When you delete the last file in a subdirectory, the empty directory lingers. The `remove_empty_dirs` helper walks up the tree removing empty directories.
+### Extend it
 
-We can switch branches, but there's a dangerous edge case — what if you have uncommitted changes? Checkout would silently overwrite them. Next stage, we'll add safety checks.
+Add a `-b` flag to `shift` that creates a new branch *and* switches to it in one step (like `git checkout -b`). It should call `refs::create_branch` then `checkout_branch`.
 
 > [!check] Checkpoint
-> Create a branch, switch to it, make a commit, switch back. Verify files from the branch disappear. Switch back to the branch and verify they reappear. Stage 17 complete.
+> Create a branch, switch to it, make a commit, switch back. Verify files from the branch disappear. Switch back and verify they reappear. Stage 17 complete.
 
 ---
 
 ## Stage 18 — The Safe Shift
 
-> *Difficulty: Medium — Protecting uncommitted work from checkout.*
+> *Right now, `shift` will happily overwrite your uncommitted changes. That's data loss — the one thing a version control system must never cause.*
 
-Right now, `shift` will happily overwrite your uncommitted changes. Edit a file, switch branches, and your edits vanish without warning. That's data loss — the one thing a version control system must never cause. This stage adds a safety check: refuse to shift if the working directory has uncommitted changes that would be overwritten.
+*Difficulty: Medium* | *~60 min*
 
 > [!tip] What You'll Learn
 > - Detecting uncommitted changes before a destructive operation
 > - The difference between "safe" and "forced" operations
 > - Error handling as user protection
-> - Why git sometimes refuses to checkout (and when `--force` is appropriate)
+> - Why git sometimes refuses to checkout
 
-### 18.1 — Check for dirty working directory
+### 18.1 — Try it yourself: dirty working directory check
 
 Add to `src/checkout.rs`:
 
 ```rust
 /// Check if the working directory has uncommitted changes.
 pub fn has_uncommitted_changes() -> std::io::Result<bool> {
+    todo!()
+}
+```
+
+Hint: call `diff::diff_working` and check if the result is empty.
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
+pub fn has_uncommitted_changes() -> std::io::Result<bool> {
     let diffs = diff::diff_working(std::path::Path::new("."))?;
     Ok(!diffs.is_empty())
 }
 ```
 
+</details>
+
 ### 18.2 — Guard the shift command
 
-Update `checkout_branch` to check before proceeding:
+Update `checkout_branch` to accept a `force` flag:
 
 ```rust
 pub fn checkout_branch(name: &str, force: bool) -> std::io::Result<()> {
-    // Safety check: refuse if there are uncommitted changes
     if !force && has_uncommitted_changes()? {
         return Err(std::io::Error::new(
             std::io::ErrorKind::Other,
@@ -382,7 +413,8 @@ pub fn checkout_branch(name: &str, force: bool) -> std::io::Result<()> {
         ));
     }
 
-    // ... rest of the function unchanged
+    // ... rest unchanged
+}
 ```
 
 Update the `Shift` subcommand:
@@ -390,29 +422,16 @@ Update the `Shift` subcommand:
 ```rust
 Shift {
     target: String,
-    /// Force shift even with uncommitted changes
     #[arg(short, long)]
     force: bool,
 },
 ```
 
-```rust
-Commands::Shift { target, force } => {
-    checkout::checkout_branch(&target, force).unwrap_or_else(|e| {
-        eprintln!("Cannot shift: {}", e);
-        std::process::exit(1);
-    });
-    println!("Shifted to '{}'", target);
-}
-```
-
 ### 18.3 — Test it
 
 ```bash
-# Make an uncommitted change
 echo "unsaved work" >> README.md
 
-# Try to shift
 cargo run -- shift experiment
 ```
 
@@ -421,7 +440,6 @@ Cannot shift: Uncommitted changes would be overwritten. Anchor your changes firs
 ```
 
 ```bash
-# Force it (accepting the loss)
 cargo run -- shift experiment --force
 ```
 
@@ -429,41 +447,34 @@ cargo run -- shift experiment --force
 Shifted to 'experiment'
 ```
 
-```bash
-# Or commit first, then shift safely
-cargo run -- shift main --force
-echo "saved work" >> README.md
-cargo run -- anchor -m "Save work"
-cargo run -- shift experiment  # works without --force
-```
-
 > [!note] The philosophy of safety
-> Git's approach is conservative: refuse the operation and explain why. The user can always override with `--force`, but they have to be explicit about accepting the risk. This is better than silently losing data and better than asking "are you sure?" (which everyone clicks through without reading).
+> Git's approach is conservative: refuse the operation and explain why. The user can always override with `--force`, but they have to be explicit about accepting the risk. This is better than silently losing data.
 
-We can shift safely between branches. But what happens when you check out a specific commit instead of a branch name? Next stage, we'll handle detached HEAD — the state where you're not on any branch.
+### Extend it
+
+Instead of a blanket refusal, check whether the uncommitted changes *conflict* with the checkout. If the changed files aren't affected by the branch switch, allow it (this is what real git does). You'll need to intersect the set of changed files with the set of files that differ between the two trees.
 
 > [!check] Checkpoint
-> Make an uncommitted change, try to shift, and verify it's refused. Use `--force` to override. Commit first and verify shift works without `--force`. Stage 18 complete.
+> Make an uncommitted change, try to shift, verify it's refused. Use `--force` to override. Stage 18 complete.
 
 ---
 
 ## Stage 19 — Detached Time
 
-> *Difficulty: Medium — Checking out a commit directly, without a branch.*
+> *Sometimes you want to look at a specific moment in history without being on any branch. Checking out a commit hash directly puts you in detached HEAD state.*
 
-Sometimes you want to look at a specific moment in history without being on any branch. Maybe you're investigating a bug introduced three commits ago, or you want to see what the project looked like last week. Checking out a commit hash directly puts you in **detached HEAD** state — HEAD points to a commit, not a branch. Commits you make here aren't on any timeline and will be lost unless you create a branch to save them.
+*Difficulty: Medium* | *~50 min*
 
 > [!tip] What You'll Learn
 > - Detached HEAD — what it means and when it's useful
 > - Writing a raw hash to HEAD instead of a symbolic ref
 > - Warning the user about the implications
-> - Why detached commits become "dangling" (and how the reflog saves them)
 
 ### 19.1 — Detect and handle detached HEAD
 
-Our `checkout_branch` function already handles this — if the target isn't a branch name, it writes the hash directly to HEAD. But we should warn the user:
+Our `checkout_branch` already handles this — if the target isn't a branch name, it writes the hash directly to HEAD. But we should warn the user.
 
-Update the `shift` handler in `main.rs`:
+Try it yourself: update the `shift` handler to detect detached HEAD after checkout and print a warning.
 
 ```rust
 fn shift(target: &str, force: bool) {
@@ -472,7 +483,22 @@ fn shift(target: &str, force: bool) {
         std::process::exit(1);
     });
 
-    // Check if we ended up in detached HEAD
+    // Check if we ended up detached — print appropriate message
+    // Hint: refs::current_branch() returns None when detached
+    todo!()
+}
+```
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
+fn shift(target: &str, force: bool) {
+    checkout::checkout_branch(target, force).unwrap_or_else(|e| {
+        eprintln!("Cannot shift: {}", e);
+        std::process::exit(1);
+    });
+
     match refs::current_branch() {
         Ok(Some(branch)) => println!("Shifted to branch '{}'", branch),
         Ok(None) => {
@@ -489,97 +515,81 @@ fn shift(target: &str, force: bool) {
 }
 ```
 
-### 19.2 — Update status for detached HEAD
+</details>
 
-The `status` function already handles this — it shows "HEAD detached at" when `current_branch()` returns `None`. Verify it works:
+### 19.2 — Test it
 
 ```bash
-# Get a commit hash from log
 cargo run -- log
 # Note a commit hash
 
-# Check out the commit directly
 cargo run -- shift <commit-hash> --force
 ```
 
 ```
 Note: you are in 'detached HEAD' state.
-You are not on any branch. Commits made here will be lost
-unless you create a branch to save them:
-
-  chronolock branch <new-branch-name>
-
-HEAD is now at a3b7c9d1
-```
-
-```bash
-cargo run -- status
-```
-
-```
-HEAD detached at a3b7c9d
 ...
 ```
 
 ```bash
+cargo run -- status
+# HEAD detached at a3b7c9d
+
 cargo run -- branch
+# No * next to any branch
 ```
 
-```
-  experiment
-  main
-```
+> [!warning] Common Mistake: Panicking about detached HEAD
+> It's not an error — it's a feature. Detached HEAD is useful for inspecting old commits or experimenting. Just remember to create a branch if you want to keep your work.
 
-No `*` next to any branch — you're not on one.
+### Extend it
 
-### 19.3 — Making commits in detached state
-
-Commits in detached HEAD state work normally — `anchor` creates a commit and updates HEAD to point to it. But since HEAD isn't pointing to a branch, no branch advances. The commit exists in the object store but nothing references it except HEAD. If you shift to a branch, HEAD moves and the commit becomes **dangling** — it exists but nothing points to it.
-
-```bash
-# In detached state, make a commit
-echo "detached work" > detached.txt
-cargo run -- anchor -m "Detached experiment"
-
-# Now shift back to main
-cargo run -- shift main --force
-
-# The detached commit still exists in the object store,
-# but nothing points to it. It's a ghost in the timeline.
-```
-
-We'll build the reflog in Stage 21 to recover these ghosts.
-
-> [!warning] Common Mistake
-> **Panicking about detached HEAD.** It's not an error — it's a feature. Detached HEAD is useful for inspecting old commits, running tests against a specific version, or experimenting without affecting any branch. Just remember to create a branch if you want to keep your work.
-
-We can visit any point in history. But branches accumulate — experiments that went nowhere, features that got merged. Next stage, we'll add branch deletion with safety checks.
+Make a commit in detached state, then shift back to `main`. The detached commit is now a ghost — nothing points to it. Verify you can still access it with `chronolock reveal <hash>` if you remember the hash.
 
 > [!check] Checkpoint
-> Check out a commit hash directly. Verify `status` shows "HEAD detached." Verify `branch` shows no `*`. Shift back to a branch and verify normal state is restored. Stage 19 complete.
+> Check out a commit hash directly. Verify `status` shows "HEAD detached." Shift back to a branch and verify normal state is restored. Stage 19 complete.
 
 ---
 
 ## Stage 20 — Deleting Timelines
 
-> *Difficulty: Easy — Removing branches with safety checks.*
+> *Branches accumulate. After a feature is merged or an experiment is abandoned, the branch pointer is just clutter.*
 
-Branches accumulate. After a feature is merged or an experiment is abandoned, the branch pointer is just clutter. Deleting it is simple — remove the file from `refs/heads/`. But we need a safety check: don't delete a branch whose commits aren't reachable from another branch, or the user will lose work.
+*Difficulty: Easy* | *~40 min*
 
 > [!tip] What You'll Learn
 > - Safe vs force deletion
 > - Checking if a commit is reachable from another branch
 > - Preventing deletion of the current branch
-> - Why "deleting a branch" doesn't delete any commits
 
-### 20.1 — Branch deletion
+### 20.1 — Try it yourself: branch deletion
 
 Add to `src/refs.rs`:
 
 ```rust
-/// Delete a branch. Returns an error if it's the current branch.
 pub fn delete_branch(name: &str, force: bool) -> std::io::Result<()> {
-    // Can't delete the current branch
+    // 1. Refuse if it's the current branch
+    // 2. Check the branch file exists
+    // 3. If not force: check if the branch tip is reachable from HEAD (is_ancestor)
+    // 4. Delete the file
+    todo!()
+}
+```
+
+You'll also need a helper to walk the commit chain checking ancestry:
+
+```rust
+fn is_ancestor(ancestor: &str, descendant: &str) -> std::io::Result<bool> {
+    // Walk from descendant back through parents. If we hit ancestor, return true.
+    todo!()
+}
+```
+
+<details>
+<summary>Solution — click to reveal</summary>
+
+```rust
+pub fn delete_branch(name: &str, force: bool) -> std::io::Result<()> {
     if let Some(current) = current_branch()? {
         if current == name {
             return Err(std::io::Error::new(
@@ -598,15 +608,11 @@ pub fn delete_branch(name: &str, force: bool) -> std::io::Result<()> {
     }
 
     if !force {
-        // Safety check: is the branch's tip reachable from HEAD?
         let branch_hash = fs::read_to_string(&path)?.trim().to_string();
         if !is_ancestor(&branch_hash, &resolve_head()?.unwrap_or_default())? {
             return Err(std::io::Error::new(
                 std::io::ErrorKind::Other,
-                format!(
-                    "Branch '{}' is not fully merged. Use --force to delete anyway.",
-                    name
-                ),
+                format!("Branch '{}' is not fully merged. Use --force to delete anyway.", name),
             ));
         }
     }
@@ -615,7 +621,6 @@ pub fn delete_branch(name: &str, force: bool) -> std::io::Result<()> {
     Ok(())
 }
 
-/// Check if `ancestor` is reachable by walking back from `descendant`.
 fn is_ancestor(ancestor: &str, descendant: &str) -> std::io::Result<bool> {
     let mut current = Some(descendant.to_string());
     while let Some(hash) = current {
@@ -630,147 +635,114 @@ fn is_ancestor(ancestor: &str, descendant: &str) -> std::io::Result<bool> {
 }
 ```
 
-**Why the safety check?** Deleting a branch only removes the pointer — the commits still exist in the object store. But without a branch pointing to them, they become unreachable. `git gc` (or our future `chronolock pack`) would eventually clean them up. The safety check ensures you don't accidentally lose a line of work.
+</details>
 
 ### 20.2 — Wire it up
 
-Add a delete flag to the `Branch` command:
+Add delete/force flags to the `Branch` command:
 
 ```rust
 Branch {
     name: Option<String>,
-    /// Delete the branch
     #[arg(short, long)]
     delete: bool,
-    /// Force delete even if not merged
     #[arg(long)]
     force: bool,
 },
 ```
 
-```rust
-Commands::Branch { name, delete, force } => {
-    match (name, delete) {
-        (Some(branch_name), true) => {
-            refs::delete_branch(&branch_name, force).unwrap_or_else(|e| {
-                eprintln!("{}", e);
-                std::process::exit(1);
-            });
-            println!("Deleted branch '{}'", branch_name);
-        }
-        (Some(branch_name), false) => create_branch(&branch_name),
-        (None, _) => list_branches(),
-    }
-}
-```
-
 ### 20.3 — Test it
 
 ```bash
-# Delete a merged branch
-cargo run -- branch -d experiment
-```
-
-```
-Deleted branch 'experiment'
-```
-
-```bash
-# Try to delete current branch
-cargo run -- branch -d main
-```
-
-```
-Cannot delete branch 'main': it is the current branch
-```
-
-```bash
-# Try to delete unmerged branch
-cargo run -- branch unmerged
-cargo run -- shift unmerged
-echo "unmerged work" > unmerged.txt
-cargo run -- anchor -m "Unmerged work"
-cargo run -- shift main
-cargo run -- branch -d unmerged
-```
-
-```
-Branch 'unmerged' is not fully merged. Use --force to delete anyway.
+cargo run -- branch -d experiment   # delete merged branch
+cargo run -- branch -d main         # refused: current branch
+cargo run -- branch -d unmerged     # refused: not merged
+cargo run -- branch -d --force unmerged  # forced delete
 ```
 
 > [!note] Commits survive branch deletion
-> Deleting a branch removes the pointer, not the commits. If you know the commit hash, you can still access it with `chronolock reveal <hash>`. The reflog (next stage) records these hashes so you can recover.
+> Deleting a branch removes the pointer, not the commits. If you know the commit hash, you can still access it. The reflog (next stage) records these hashes for recovery.
 
-We can create, switch, and delete branches. But what about mistakes? What if you delete a branch and realize you needed it? What if you shift away from a detached commit? Next stage, we'll build the reflog — a safety net that remembers every HEAD movement.
+### Extend it
+
+Add a `--all` flag that lists branches with their merge status: `merged` or `not merged` relative to HEAD. Like `git branch --merged` / `--no-merged`.
 
 > [!check] Checkpoint
-> Delete a merged branch. Verify deletion of the current branch is refused. Verify deletion of an unmerged branch requires `--force`. Stage 20 complete.
+> Delete a merged branch. Verify deletion of the current branch is refused. Verify unmerged deletion requires `--force`. Stage 20 complete.
 
 ---
 
 ## Stage 21 — The Echo Memory
 
-> *Difficulty: Medium — The reflog that remembers everything.*
+> *Every time HEAD moves, the old position is lost. The reflog records every HEAD movement so you can always find your way back.*
 
-Every time HEAD moves — a commit, a branch switch, a checkout — the old position is lost. If you accidentally delete a branch or shift away from a detached commit, the work seems gone. But the commits still exist in the object store. The problem is finding them. The reflog solves this: it records every HEAD movement with a timestamp, so you can always find your way back.
+*Difficulty: Medium* | *~60 min*
 
 > [!tip] What You'll Learn
 > - Append-only log files
 > - Recording HEAD movements with timestamps
 > - Recovering "lost" commits
-> - Why `git reflog` is the ultimate safety net
 
-### Why the reflog matters
+### 21.1 — Try it yourself: the reflog module
 
-The reflog is git's undo history. Every time HEAD changes, a line is appended:
+Create `src/reflog.rs` (add `mod reflog;` to `main.rs`). Implement:
 
+```rust
+/// Append an entry to the reflog.
+pub fn record(old_hash: &str, new_hash: &str, action: &str) -> std::io::Result<()> {
+    // Append a line to .chronolock/logs/HEAD:
+    // "<old> <new> Chronomancer <email> <timestamp> <tz> <action>\n"
+    todo!()
+}
+
+pub struct ReflogEntry {
+    pub old_hash: String,
+    pub new_hash: String,
+    pub action: String,
+}
+
+/// Read all reflog entries, newest first.
+pub fn read_reflog() -> std::io::Result<Vec<ReflogEntry>> {
+    todo!()
+}
 ```
-<old-hash> <new-hash> <author> <timestamp> <action>: <description>
-```
 
-Even if no branch points to a commit, the reflog remembers it was once HEAD. You can recover any commit that was HEAD within the reflog's retention period (default: 90 days in git).
+Hints:
+- Use `OpenOptions::new().create(true).append(true).open(path)?` for append-only writing
+- `chrono::Local::now()` for timestamps
+- Parse by splitting each line with `splitn(5, ' ')`
 
-### 21.1 — Recording HEAD movements
-
-Create `src/reflog.rs`:
+<details>
+<summary>Solution — click to reveal</summary>
 
 ```rust
 use chrono::Local;
 use std::fs::{self, OpenOptions};
 use std::io::Write;
 
-/// Append an entry to the reflog.
 pub fn record(old_hash: &str, new_hash: &str, action: &str) -> std::io::Result<()> {
     let log_dir = std::path::Path::new(".chronolock/logs");
     fs::create_dir_all(log_dir)?;
 
     let now = Local::now();
-    let timestamp = now.timestamp();
-    let tz = now.format("%z");
-
     let entry = format!(
         "{} {} Chronomancer <chrono@chronolock> {} {} {}\n",
-        old_hash, new_hash, timestamp, tz, action
+        old_hash, new_hash, now.timestamp(), now.format("%z"), action
     );
 
     let mut file = OpenOptions::new()
         .create(true)
         .append(true)
         .open(log_dir.join("HEAD"))?;
-
-    file.write_all(entry.as_bytes())?;
-    Ok(())
+    file.write_all(entry.as_bytes())
 }
 
-/// A parsed reflog entry.
 pub struct ReflogEntry {
     pub old_hash: String,
     pub new_hash: String,
     pub action: String,
-    pub timestamp: String,
 }
 
-/// Read all reflog entries, newest first.
 pub fn read_reflog() -> std::io::Result<Vec<ReflogEntry>> {
     let path = std::path::Path::new(".chronolock/logs/HEAD");
     if !path.exists() {
@@ -787,7 +759,6 @@ pub fn read_reflog() -> std::io::Result<Vec<ReflogEntry>> {
                 Some(ReflogEntry {
                     old_hash: parts[0].to_string(),
                     new_hash: parts[1].to_string(),
-                    timestamp: format!("{} {}", parts[2], parts[3]),
                     action: parts[4..].join(" "),
                 })
             } else {
@@ -796,41 +767,54 @@ pub fn read_reflog() -> std::io::Result<Vec<ReflogEntry>> {
         })
         .collect();
 
-    entries.reverse(); // newest first
+    entries.reverse();
     Ok(entries)
 }
 ```
 
-### 21.2 — Record events in anchor and shift
+</details>
 
-Add `mod reflog;` to `main.rs`. Then add recording calls:
-
-In the `anchor` function, after `update_head`:
+### 21.2 — Add tests
 
 ```rust
-let old_hash = parent.as_deref().unwrap_or("0000000000000000000000000000000000000000");
-reflog::record(old_hash, &commit_hash, &format!("anchor: {}", message))
-    .unwrap_or_else(|e| eprintln!("Warning: failed to update reflog: {}", e));
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_reflog_entry_parsing() {
+        // Simulate a reflog line
+        let line = "aaa bbb Chronomancer <c@c> 1000 +0000 anchor: test";
+        let parts: Vec<&str> = line.splitn(5, ' ').collect();
+        assert_eq!(parts[0], "aaa");
+        assert_eq!(parts[1], "bbb");
+        assert!(parts[4].contains("anchor: test"));
+    }
+}
 ```
 
-In `checkout_branch`, before the `Ok(())` at the end:
+### 21.3 — Record events in anchor and shift
+
+In `anchor`, after `update_head`:
 
 ```rust
-let old_hash = refs::resolve_head()?.unwrap_or_else(|| "0".repeat(40));
-reflog::record(&old_hash, &target_hash, &format!("shift: moving to {}", name))?;
+let old = parent.as_deref().unwrap_or("0000000000000000000000000000000000000000");
+reflog::record(old, &commit_hash, &format!("anchor: {}", message))
+    .unwrap_or_else(|e| eprintln!("Warning: reflog: {}", e));
 ```
 
-### 21.3 — The echo command
+In `checkout_branch`, before the final `Ok(())`:
 
-Add the subcommand:
+```rust
+let old = refs::resolve_head()?.unwrap_or_else(|| "0".repeat(40));
+reflog::record(&old, &target_hash, &format!("shift: moving to {}", name))?;
+```
+
+### 21.4 — The echo command
 
 ```rust
 /// Show the reflog — every HEAD movement
 Echo,
-```
-
-```rust
-Commands::Echo => echo_reflog(),
 ```
 
 ```rust
@@ -841,48 +825,39 @@ fn echo_reflog() {
     });
 
     if entries.is_empty() {
-        println!("No echoes yet. The reflog is empty.");
+        println!("No echoes yet.");
         return;
     }
 
     for (i, entry) in entries.iter().enumerate() {
         println!("{} {} {}",
             format!("HEAD@{{{}}}", i).yellow(),
-            &entry.new_hash[..8],
+            &entry.new_hash[..8.min(entry.new_hash.len())],
             entry.action,
         );
     }
 }
 ```
 
-### 21.4 — Test it
+### 21.5 — Test it
 
 ```bash
-# Make some commits and branch switches
-cargo run -- anchor -m "First"
-cargo run -- branch test-branch
-cargo run -- shift test-branch
-cargo run -- anchor -m "On test branch"
+cargo run -- anchor -m "Test"
 cargo run -- shift main
-
-# View the reflog
 cargo run -- echo
 ```
 
 ```
 HEAD@{0} e5f8a2b4 shift: moving to main
-HEAD@{1} c7d9e1f3 anchor: On test branch
-HEAD@{2} a1b2c3d4 shift: moving to test-branch
-HEAD@{3} a1b2c3d4 anchor: First
+HEAD@{1} a1b2c3d4 anchor: Test
 ```
 
-Every HEAD movement is recorded. Even if you delete `test-branch`, the reflog still has the commit hash `c7d9e1f3` — you can recover it with `chronolock shift c7d9e1f3` or `chronolock branch recovered c7d9e1f3`.
+### Extend it
 
-> [!note] The reflog as a safety net
-> In real git, `git reflog` has saved countless developers from disaster. Accidentally reset to the wrong commit? Reflog has the old one. Deleted a branch? Reflog has the tip. Force-pushed and lost commits? Reflog has them locally. It's the last line of defense against data loss.
+Add a `chronolock echo <n>` variant that shows only the last `n` entries. Default to showing all.
 
 > [!check] Checkpoint
-> Make several commits and branch switches. Run `chronolock echo` and verify every HEAD movement is recorded with timestamps. Stage 21 complete.
+> Make several commits and branch switches. Run `chronolock echo` and verify every HEAD movement is recorded. Stage 21 complete.
 
 ---
 
@@ -890,16 +865,11 @@ Every HEAD movement is recorded. Even if you delete `test-branch`, the reflog st
 
 ```mermaid
 flowchart TD
-    CR["Create branch - write a 41-byte file"]
-    SH["Shift - reconstruct working directory"]
-    SF["Safe shift - protect uncommitted work"]
-    DT["Detached HEAD - visit any moment"]
-    DL["Delete branch - remove the pointer"]
-    RL["Reflog - remember everything"]
-    CR --> SH --> SF
-    SH --> DT
-    CR --> DL
-    SH --> RL
+    CR["Create branch"] --> SH["Shift"]
+    SH --> SF["Safe shift"]
+    SH --> DT["Detached HEAD"]
+    CR --> DL["Delete branch"]
+    SH --> RL["Reflog"]
     style CR fill:#49a,stroke:#333
     style RL fill:#a4e,stroke:#333
 ```
@@ -907,21 +877,18 @@ flowchart TD
 The Chronolock now supports parallel timelines:
 
 - **Create** branches instantly (41-byte files)
-- **Shift** between branches (reconstruct working directory from trees)
+- **Shift** between branches (reconstruct working directory)
 - **Protect** uncommitted work (refuse unsafe shifts)
 - **Visit** any moment in history (detached HEAD)
 - **Delete** branches safely (with merge checks)
-- **Recover** from mistakes (reflog records every HEAD movement)
+- **Recover** from mistakes (reflog)
 
 | Rust Concept | Where You Used It |
 |-------------|-------------------|
-| `HashMap` | File comparison during checkout |
-| Error handling patterns | Safety checks, force flags |
-| `OpenOptions` | Append-only reflog file |
+| `into_iter()` vs `iter()` | Consuming vs borrowing collections in checkout |
+| `HashMap` ownership | Moving data into lookup maps |
+| Error as user protection | Force flags, safety checks |
+| `OpenOptions` append mode | Reflog file |
 | `splitn` | Parsing reflog entries |
-| Recursive directory cleanup | `remove_empty_dirs` |
-| `#[arg]` attributes | CLI flags (`--force`, `--delete`) |
 
-**The big reveal:** Branches are just files. The entire branching model — create, switch, delete, recover — is built on reading and writing small text files in `refs/heads/`. The complexity isn't in the data model; it's in the operations (especially checkout).
-
-**Next up — Act 4: The Convergence.** Two timelines become one. You'll build three-way merge, conflict detection, and conflict resolution — the hardest and most rewarding part of the entire course.
+**Next up — Act 4: The Convergence.** Two timelines become one. Three-way merge, conflict detection, and conflict resolution.
