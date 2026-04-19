@@ -54,6 +54,18 @@ export default function CoursesPage() {
                 style={{ backgroundColor: course.theme.accent }}
               />
             </div>
+            {course.tags.length > 0 && (
+              <div className="flex flex-wrap gap-1 mt-2.5">
+                {course.tags.map((tag) => (
+                  <span
+                    key={tag}
+                    className="text-[10px] font-mono px-1.5 py-0.5 rounded bg-surface border border-border text-tertiary"
+                  >
+                    {tag}
+                  </span>
+                ))}
+              </div>
+            )}
           </Link>
         ))}
       </div>
