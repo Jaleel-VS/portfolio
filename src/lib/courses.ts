@@ -32,6 +32,7 @@ export const COURSE_THEMES: Record<string, CourseTheme> = {
   runa: { color: "violet", accent: "#7c3aed", tags: ["spaced-repetition", "tui", "algorithms", "fsrs", "serde", "productivity"] },
   piloto: { color: "rose", accent: "#e11d48", tags: ["neural-networks", "genetic-algorithm", "ai", "simulation", "physics", "macroquad"] },
   genesis: { color: "lime", accent: "#65a30d", tags: ["evolution", "physics", "genetic-algorithm", "ai", "simulation", "macroquad"] },
+  baraja: { color: "fuchsia", accent: "#c026d3", tags: ["card-game", "deckbuilder", "mcts", "ai", "tui", "roguelike"] },
 }
 
 export type Act = {
