@@ -30,6 +30,7 @@ export const COURSE_THEMES: Record<string, CourseTheme> = {
   cartografo: { color: "emerald", accent: "#059669" },
   runa: { color: "violet", accent: "#7c3aed" },
   piloto: { color: "rose", accent: "#e11d48" },
+  genesis: { color: "lime", accent: "#65a30d" },
 }
 
 export type Act = {
