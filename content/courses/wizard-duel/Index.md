@@ -101,5 +101,5 @@ Standalone companion — Rust cheat sheet, game design patterns, ratatui widget 
 - Rust installed (`rustup`)
 - A terminal (Ghostty, iTerm2, etc.)
 - A text editor (nvim, VS Code, etc.)
-- Knows Python or TypeScript (comparisons throughout)
+- Knows Python (comparisons throughout)
 - Zero Rust experience required

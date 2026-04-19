@@ -110,21 +110,20 @@ pub fn import_relics(
 }
 ```
 
-### Checkpoint
-
-1. Export to JSON — open the file and verify all passwords are in plaintext (this is expected and correct)
-2. Export to CSV — open in a spreadsheet and verify the columns make sense
-3. Delete a relic from the vault, then import the JSON file — the deleted relic should reappear
-4. Import a file with a duplicate relic name — verify your conflict strategy works
-5. **Delete the export file when you're done testing.** Seriously. It contains all your passwords in plaintext.
-
-Data can flow in and out of the vault, but what happens when the vault file itself is lost — disk failure, accidental deletion, a bad password change? Stage 26 builds the backup system that protects against data loss.
-
-### Common Mistakes
-
-**Leaving the export file on disk.** Print a reminder after export: "Remember to securely delete this file when you're done." Better yet, print the path so the user can `shred` or `rm` it.
-
-**Not validating imported data.** A malformed JSON file shouldn't crash the program. Validate that required fields exist, that dates parse correctly, and that chamber references point to existing chambers (or create them).
+> [!check] Checkpoint
+> 1. Export to JSON — open the file and verify all passwords are in plaintext (this is expected and correct)
+> 2. Export to CSV — open in a spreadsheet and verify the columns make sense
+> 3. Delete a relic from the vault, then import the JSON file — the deleted relic should reappear
+> 4. Import a file with a duplicate relic name — verify your conflict strategy works
+> 5. **Delete the export file when you're done testing.** Seriously. It contains all your passwords in plaintext.
+>
+> Data can flow in and out of the vault, but what happens when the vault file itself is lost — disk failure, accidental deletion, a bad password change? Stage 26 builds the backup system that protects against data loss.
+>
+> > [!warning] Common Mistake: Leaving the export file on disk
+> > Print a reminder after export: "Remember to securely delete this file when you're done." Better yet, print the path so the user can `shred` or `rm` it.
+>
+> > [!warning] Common Mistake: Not validating imported data
+> > A malformed JSON file shouldn't crash the program. Validate that required fields exist, that dates parse correctly, and that chamber references point to existing chambers (or create them).
 
 ---
 
@@ -237,20 +236,19 @@ Here's a subtle gotcha: if you change your master password and then restore from
 
 The backup contains the old salt, old Argon2 parameters, and ciphertext encrypted with the old derived key. The new password won't work. This is correct behavior — but you should warn the user during restore.
 
-### Checkpoint
-
-1. Create a backup — verify the file appears in the backups directory
-2. Add a new relic, then restore the backup — the new relic should be gone
-3. Create 12 backups, run `iv backup rotate` — should keep 10, delete 2
-4. Change your master password, create a backup, change it again, restore the first backup — verify you need the *first* password
-
-The vault is backed up and recoverable. But there's a hidden flaw in everything you've built so far: when Rust drops a value, the memory isn't cleared. Your master password and derived key linger in freed memory. Stage 27 fixes this with secure memory handling.
-
-### Common Mistakes
-
-**Using `fs::copy` directly to the vault path for restore.** If the copy fails halfway (disk full), you've corrupted the vault and lost the backup's data. Always copy to a temp file first, then atomic rename.
-
-**Not creating the backup directory.** First-time users won't have `~/.ironvault/backups/`. Use `fs::create_dir_all` which creates the directory and all parents, and is a no-op if it already exists.
+> [!check] Checkpoint
+> 1. Create a backup — verify the file appears in the backups directory
+> 2. Add a new relic, then restore the backup — the new relic should be gone
+> 3. Create 12 backups, run `iv backup rotate` — should keep 10, delete 2
+> 4. Change your master password, create a backup, change it again, restore the first backup — verify you need the *first* password
+>
+> The vault is backed up and recoverable. But there's a hidden flaw in everything you've built so far: when Rust drops a value, the memory isn't cleared. Your master password and derived key linger in freed memory. Stage 27 fixes this with secure memory handling.
+>
+> > [!warning] Common Mistake: Using `fs::copy` directly to the vault path for restore
+> > If the copy fails halfway (disk full), you've corrupted the vault and lost the backup's data. Always copy to a temp file first, then atomic rename.
+>
+> > [!warning] Common Mistake: Not creating the backup directory
+> > First-time users won't have `~/.ironvault/backups/`. Use `fs::create_dir_all` which creates the directory and all parents, and is a no-op if it already exists.
 
 ---
 
@@ -453,16 +451,15 @@ Go through your codebase and apply these changes:
 | AES-GCM key | `&key` | `key.expose_secret()` |
 | Debug logging | might print passwords | `SecretBox` prints `[REDACTED]` |
 
-### Checkpoint
-
-1. Add `zeroize` and `secrecy` to `Cargo.toml` and verify it compiles
-2. Wrap the master password in `SecretString` — fix all compilation errors that result
-3. Wrap the derived key in `SecretSlice<u8>` — fix all compilation errors
-4. Add `Zeroize, ZeroizeOnDrop` to `Relic` — verify serialization still works
-5. Try `println!("{:?}", secret_password)` — should print `SecretBox([REDACTED])`
-6. Run your full test suite — everything should still pass
-
-Secrets are now actively destroyed when they leave scope. But the codebase is still littered with `unwrap()` calls that can panic and crash the program with a stack trace. Stage 28 replaces every panic point with proper error handling.
+> [!check] Checkpoint
+> 1. Add `zeroize` and `secrecy` to `Cargo.toml` and verify it compiles
+> 2. Wrap the master password in `SecretString` — fix all compilation errors that result
+> 3. Wrap the derived key in `SecretSlice<u8>` — fix all compilation errors
+> 4. Add `Zeroize, ZeroizeOnDrop` to `Relic` — verify serialization still works
+> 5. Try `println!("{:?}", secret_password)` — should print `SecretBox([REDACTED])`
+> 6. Run your full test suite — everything should still pass
+>
+> Secrets are now actively destroyed when they leave scope. But the codebase is still littered with `unwrap()` calls that can panic and crash the program with a stack trace. Stage 28 replaces every panic point with proper error handling.
 
 ### What to Try
 
@@ -470,24 +467,25 @@ Secrets are now actively destroyed when they leave scope. But the codebase is st
 - Try to `.clone()` a `SecretString` — the compiler should refuse
 - Think about where secrets might still leak: function arguments copied on the stack, string formatting, error messages that include password values
 
-### Common Mistakes
+> [!warning] Common Mistake: Exposing the secret too early
+> Don't do `let pw: String = secret.expose_secret().clone()` — that creates an unprotected copy. Keep values inside `SecretBox` as long as possible and only call `.expose_secret()` at the point of use.
 
-**Exposing the secret too early.** Don't do `let pw: String = secret.expose_secret().clone()` — that creates an unprotected copy. Keep values inside `SecretBox` as long as possible and only call `.expose_secret()` at the point of use.
+> [!warning] Common Mistake: Deriving `Zeroize` on types with non-zeroizable fields
+> If your struct contains a `DateTime<Utc>` from chrono, `Zeroize` can't be derived automatically because `DateTime` doesn't implement `Zeroize`. Use `#[zeroize(skip)]` on those fields, or store timestamps as `String`.
 
-**Deriving `Zeroize` on types with non-zeroizable fields.** If your struct contains a `DateTime<Utc>` from chrono, `Zeroize` can't be derived automatically because `DateTime` doesn't implement `Zeroize`. Use `#[zeroize(skip)]` on those fields, or store timestamps as `String`.
-
-**Forgetting that `SecretBox::init_with` requires `Clone`.** The `init_with` method needs `S: Zeroize + Clone` because it constructs the value on the stack, copies it to the heap, then zeroizes the stack copy. If your type doesn't implement `Clone`, use `SecretBox::new(Box::new(value))` instead.
-
-### Limitations to Be Honest About
-
-`zeroize` and `secrecy` are not magic. They have real limitations:
-
-- **Allocator copies.** When Rust's allocator grows a `Vec` or `String`, it may copy the old buffer to a new location without zeroing the old one. `SecretBox` mitigates this by allocating on the heap immediately, but the initial stack value (before boxing) might leave a trace.
-- **Swap and hibernation.** If the OS swaps your process's memory to disk, secrets end up on persistent storage. The mitigation is `mlock()` to pin pages in RAM — but that requires `unsafe` and platform-specific code. Ironvault documents this as a known limitation.
-- **Core dumps.** If the process crashes, the OS may write the entire memory space to a core dump file. Disable core dumps in production (`ulimit -c 0`).
-- **Compiler optimizations.** While `write_volatile` prevents the *zeroing* from being optimized away, the compiler might still create temporary copies of secret values during normal operations.
-
-These limitations are real, and Stage 29 (Threat Model) is where you'll document them honestly.
+> [!warning] Common Mistake: Forgetting that `SecretBox::init_with` requires `Clone`
+> The `init_with` method needs `S: Zeroize + Clone` because it constructs the value on the stack, copies it to the heap, then zeroizes the stack copy. If your type doesn't implement `Clone`, use `SecretBox::new(Box::new(value))` instead.
+>
+> ### Limitations to Be Honest About
+>
+> `zeroize` and `secrecy` are not magic. They have real limitations:
+>
+> - **Allocator copies.** When Rust's allocator grows a `Vec` or `String`, it may copy the old buffer to a new location without zeroing the old one. `SecretBox` mitigates this by allocating on the heap immediately, but the initial stack value (before boxing) might leave a trace.
+> - **Swap and hibernation.** If the OS swaps your process's memory to disk, secrets end up on persistent storage. The mitigation is `mlock()` to pin pages in RAM — but that requires `unsafe` and platform-specific code. Ironvault documents this as a known limitation.
+> - **Core dumps.** If the process crashes, the OS may write the entire memory space to a core dump file. Disable core dumps in production (`ulimit -c 0`).
+> - **Compiler optimizations.** While `write_volatile` prevents the *zeroing* from being optimized away, the compiler might still create temporary copies of secret values during normal operations.
+>
+> These limitations are real, and Stage 29 (Threat Model) is where you'll document them honestly.
 
 ---
 
@@ -666,23 +664,23 @@ Search your codebase for every `unwrap()` and `expect()`. Replace each one:
 
 **Hint:** `grep -rn "unwrap\|expect" src/` will find them all.
 
-### Checkpoint
-
-1. Replace all `unwrap()`/`expect()` calls — the code should compile with zero panicking paths
-2. Run with a nonexistent vault — should print "No vault found. Run `iv init` to create one."
-3. Run with a wrong password — should print "Wrong master password."
-4. Run `iv get nonexistent-relic` — should print "Relic 'nonexistent-relic' not found."
-5. Disconnect from the internet and run `iv breach-check` — should print a network error, not a panic
-
-The code is now panic-free with clear user-facing messages. But a security tool that doesn't document its own limitations is a security tool that misleads its users. Stage 29 builds the threat model — an honest accounting of what Ironvault protects against and what it doesn't.
-
-### Common Mistakes
-
-**Using `thiserror` without understanding what it does.** The `thiserror` crate auto-generates `Display` and `From` impls from attributes. It's convenient, but for a learning project, writing them by hand teaches you what's actually happening. Consider `thiserror` for your next project.
-
-**Making error messages too technical.** "serde_json::Error: expected value at line 1 column 1" means nothing to a user. Wrap it: "Vault file is corrupted. The data format is invalid."
-
-**Forgetting `std::process::exit(1)`.** Without a non-zero exit code, shell scripts that call `iv` won't know the command failed. Always exit with 1 (or higher) on error.
+> [!check] Checkpoint
+> 1. Replace all `unwrap()`/`expect()` calls — the code should compile with zero panicking paths
+> 2. Run with a nonexistent vault — should print "No vault found. Run `iv init` to create one."
+> 3. Run with a wrong password — should print "Wrong master password."
+> 4. Run `iv get nonexistent-relic` — should print "Relic 'nonexistent-relic' not found."
+> 5. Disconnect from the internet and run `iv breach-check` — should print a network error, not a panic
+>
+> The code is now panic-free with clear user-facing messages. But a security tool that doesn't document its own limitations is a security tool that misleads its users. Stage 29 builds the threat model — an honest accounting of what Ironvault protects against and what it doesn't.
+>
+> > [!warning] Common Mistake: Using `thiserror` without understanding what it does
+> > The `thiserror` crate auto-generates `Display` and `From` impls from attributes. It's convenient, but for a learning project, writing them by hand teaches you what's actually happening. Consider `thiserror` for your next project.
+>
+> > [!warning] Common Mistake: Making error messages too technical
+> > "serde_json::Error: expected value at line 1 column 1" means nothing to a user. Wrap it: "Vault file is corrupted. The data format is invalid."
+>
+> > [!warning] Common Mistake: Forgetting `std::process::exit(1)`
+> > Without a non-zero exit code, shell scripts that call `iv` won't know the command failed. Always exit with 1 (or higher) on error.
 
 ---
 
@@ -912,20 +910,19 @@ Copy this template into your project and fill in any details specific to your im
 3. **Section 6 assumptions** — add any assumptions your implementation makes
 4. **Section 7** — add improvements you'd make if this were a production tool
 
-### Checkpoint
-
-1. Does your threat model honestly describe what Ironvault doesn't protect against?
-2. Would a security reviewer reading this document understand the tool's limitations?
-3. Does every mitigation in Section 3 correspond to code you've actually written?
-4. Are the trust boundaries accurate for your implementation?
-
-The threat model is written. The security boundaries are documented. Stage 30 adds the final polish — shell completions, version flags, color control, and the grand review of everything you've built.
-
-### Common Mistakes
-
-**Claiming more protection than you provide.** If you didn't implement `mlock()`, don't claim protection against swap leaks. If your clipboard clear has a 30-second window, say so.
-
-**Forgetting to update the threat model when you change the code.** The threat model is a living document. If you add a feature or change a security mechanism, update the corresponding section.
+> [!check] Checkpoint
+> 1. Does your threat model honestly describe what Ironvault doesn't protect against?
+> 2. Would a security reviewer reading this document understand the tool's limitations?
+> 3. Does every mitigation in Section 3 correspond to code you've actually written?
+> 4. Are the trust boundaries accurate for your implementation?
+>
+> The threat model is written. The security boundaries are documented. Stage 30 adds the final polish — shell completions, version flags, color control, and the grand review of everything you've built.
+>
+> > [!warning] Common Mistake: Claiming more protection than you provide
+> > If you didn't implement `mlock()`, don't claim protection against swap leaks. If your clipboard clear has a 30-second window, say so.
+>
+> > [!warning] Common Mistake: Forgetting to update the threat model when you change the code
+> > The threat model is a living document. If you add a feature or change a security mechanism, update the corresponding section.
 
 ---
 
@@ -1062,7 +1059,7 @@ You've implemented every major concept in applied cryptography for a password ma
 | **Key derivation** | Argon2id in `crypto.rs` | Turns a human password into a cryptographic key. Memory-hard = GPU-resistant. |
 | **Nonce management** | Random 96-bit nonces | Nonce reuse in GCM is catastrophic. Random nonces are safe for our use case. |
 | **Atomic file operations** | Write-tmp-fsync-rename in `vault.rs` | Crash safety. The vault is never in a half-written state. |
-| **Secure random generation** | `OsRng` + `rand_chacha` in `generator.rs` | Passwords must come from a CSPRNG, not `rand::thread_rng()`. |
+| **Secure random generation** | `OsRng` + `rand_chacha` in `generator.rs` | Passwords must come from a CSPRNG, not `rand::rng()`. |
 | **TOTP** | RFC 6238 in `totp.rs` | Time-based one-time passwords for 2FA. |
 | **Clipboard security** | Auto-clear in `clipboard.rs` | The clipboard is a shared resource. Limit exposure time. |
 | **k-anonymity** | HIBP prefix query in `breach.rs` | Check breaches without revealing the password. Privacy by protocol design. |
@@ -1090,17 +1087,16 @@ You've built the defenses. Now try to break them. This is how real security engi
 
 5. **Clipboard race.** Write a script that polls the clipboard every 100ms. Run `iv get --copy` and see if the script captures the password before the 30-second clear. (Expected: yes, it can. This is a documented limitation.)
 
-### Checkpoint
-
-1. `iv --version` prints the version from `Cargo.toml`
-2. `iv completions bash` produces valid bash completion script
-3. `iv audit --no-color | cat` produces output without ANSI escape codes
-4. `NO_COLOR=1 iv audit` also produces plain output
-5. `README.md` exists and covers all sections
-6. `THREAT_MODEL.md` exists and is honest about limitations
-7. `cargo clippy` produces no warnings
-8. `cargo test` passes all tests
-9. No `unwrap()` or `expect()` in non-test code
+> [!check] Checkpoint
+> 1. `iv --version` prints the version from `Cargo.toml`
+> 2. `iv completions bash` produces valid bash completion script
+> 3. `iv audit --no-color | cat` produces output without ANSI escape codes
+> 4. `NO_COLOR=1 iv audit` also produces plain output
+> 5. `README.md` exists and covers all sections
+> 6. `THREAT_MODEL.md` exists and is honest about limitations
+> 7. `cargo clippy` produces no warnings
+> 8. `cargo test` passes all tests
+> 9. No `unwrap()` or `expect()` in non-test code
 
 ---
 

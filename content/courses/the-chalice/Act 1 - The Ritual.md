@@ -64,7 +64,7 @@ cargo --version
 
 ### Creating the Project
 
-`cargo` is Rust's build tool and package manager. Think of it like `npm` for JavaScript or `pip` + `setuptools` for Python — but it also compiles your code.
+`cargo` is Rust's build tool and package manager. Think of it like `pip` + `setuptools` for Python — but it also compiles your code.
 
 ```bash
 cargo new the_chalice
@@ -75,7 +75,7 @@ This creates:
 
 ```
 the_chalice/
-├── Cargo.toml    # Project manifest (like package.json)
+├── Cargo.toml    # Project manifest (like pyproject.toml)
 └── src/
     └── main.rs   # Entry point
 ```
@@ -92,8 +92,8 @@ fn main() {
 
 Let's break this down:
 
-- `fn main()` — defines a function called `main`. Every Rust program starts here. In Python, this is like `if __name__ == "__main__":`. In TypeScript, it's the top-level code in your entry file.
-- `println!` — a **macro** (the `!` tells you it's a macro, not a regular function). It prints text to the terminal with a newline. Think `console.log()` in JS or `print()` in Python.
+- `fn main()` — defines a function called `main`. Every Rust program starts here. In Python, this is like `if __name__ == "__main__":`.
+- `println!` — a **macro** (the `!` tells you it's a macro, not a regular function). It prints text to the terminal with a newline. Think `print()` in Python.
 - `"Hello, world!"` — a string literal. Rust strings use double quotes. Single quotes are for single characters only (`'a'`).
 
 Replace the contents with something more atmospheric:
@@ -122,14 +122,14 @@ Fear the old blood.
 
 `cargo run` compiles your code and runs the resulting binary in one step. Under the hood it calls `cargo build` first, then executes `target/debug/the_chalice`.
 
-> **Common mistake:** If you see `error: expected one of...`, check for missing semicolons. Every statement in Rust ends with `;`. This is not optional like in JavaScript.
+> [!warning] Common Mistake
+> If you see `error: expected one of...`, check for missing semicolons. Every statement in Rust ends with `;`.
 
-### Checkpoint
 
-Your project compiles and prints to the terminal. The foundation is laid — and now that the toolchain obeys your hand, we can begin defining the language of the labyrinth itself: the tiles that compose every wall, floor, and door.
-
-**Files changed:** `src/main.rs`
-
+> [!check] Checkpoint
+> Your project compiles and prints to the terminal. The foundation is laid — and now that the toolchain obeys your hand, we can begin defining the language of the labyrinth itself: the tiles that compose every wall, floor, and door.
+>
+> **Files changed:** `src/main.rs`
 
 ---
 
@@ -143,17 +143,7 @@ A dungeon is nothing without a vocabulary — a finite set of symbols that descr
 
 ### Enums — Rust's Most Powerful Type
 
-An **enum** (short for enumeration) lets you define a type that can be one of several variants. If you've used TypeScript, think of a discriminated union:
-
-```typescript
-// TypeScript equivalent
-type Tile = 
-  | { kind: "Wall" }
-  | { kind: "Floor" }
-  | { kind: "Door", locked: boolean }
-```
-
-In Python, you might use `enum.Enum` or a string literal type. Rust enums are far more powerful — each variant can carry different data.
+An **enum** (short for enumeration) lets you define a type that can be one of several variants. In Python, you might use `enum.Enum` or a string literal type. Rust enums are far more powerful — each variant can carry different data.
 
 ### Defining Our Tiles
 
@@ -177,6 +167,8 @@ pub enum Tile {
     Fog,
 }
 ```
+
+We include `Fog` now even though fog of war isn't implemented until Stage 10 — defining the complete tile set upfront means we won't need to refactor the enum later.
 
 Let's unpack the new syntax:
 
@@ -204,7 +196,7 @@ pub enum TrapType {
 
 We need each tile to render as a single character in the terminal — walls as `█`, floors as `·`, doors as `+`. Rather than scattering rendering logic across the codebase, we implement the `Display` trait once on `Tile` so that `println!("{}", tile)` just works everywhere. This is Rust's way of giving a type a canonical text representation.
 
-In Python, you'd define `__str__` on a class. In TypeScript, you'd write a `toString()` method. In Rust, you implement the `Display` trait.
+In Python, you'd define `__str__` on a class. In Rust, you implement the `Display` trait.
 
 A **trait** is like an interface — it defines behavior that types can implement. `Display` is the standard trait for "how do I show this as text?"
 
@@ -289,9 +281,9 @@ fn main() {
 
 New concepts:
 
-- `mod tile;` — tells Rust "there's a module in `src/tile.rs`." This is like `import tile` in Python or `import * from './tile'` in TypeScript.
+- `mod tile;` — tells Rust "there's a module in `src/tile.rs`." This is like `import tile` in Python.
 - `use tile::Tile;` — brings `Tile` into scope so you can write `Tile::Wall` instead of `tile::Tile::Wall`.
-- `vec![...]` — creates a `Vec` (growable array). Like `list` in Python or `Array` in JavaScript.
+- `vec![...]` — creates a `Vec` (growable array). Like `list` in Python.
 - `String::from("Blood Vial")` — creates an owned `String` from a string literal. Rust has two string types: `&str` (borrowed slice, like a view) and `String` (owned, heap-allocated). We'll explain this distinction more when it matters.
 - `for t in &tiles` — iterates over references to the tiles. The `&` is important: without it, the loop would **consume** the vector and you couldn't use it again. This is Rust's ownership system at work.
 - `{t}` in the format string — uses the `Display` implementation. `{:?}` uses `Debug`.
@@ -318,14 +310,14 @@ Tile rendering: █·+⊞▼▲··♦☠
   Fog ->  
 ```
 
-> **Common mistake:** Forgetting `pub` on the enum. If you see `error[E0603]: enum 'Tile' is private`, add `pub` before `enum Tile` and `pub enum TrapType`.
+> [!warning] Common Mistake
+> Forgetting `pub` on the enum. If you see `error[E0603]: enum 'Tile' is private`, add `pub` before `enum Tile` and `pub enum TrapType`.
 
-### Checkpoint
 
-You now have a type-safe representation of every tile in the dungeon. The compiler guarantees you can never create an invalid tile — there's no "undefined" or "null" sneaking in. Every tile is exactly one of the variants you defined. With the alphabet established, we can now build the parchment it's written on — the 2D grid that holds the dungeon itself.
-
-**Files changed:** `src/tile.rs` (new), `src/main.rs` (updated)
-
+> [!check] Checkpoint
+> You now have a type-safe representation of every tile in the dungeon. The compiler guarantees you can never create an invalid tile — there's no "undefined" or "null" sneaking in. Every tile is exactly one of the variants you defined. With the alphabet established, we can now build the parchment it's written on — the 2D grid that holds the dungeon itself.
+>
+> **Files changed:** `src/tile.rs` (new), `src/main.rs` (updated)
 
 ---
 
@@ -361,7 +353,7 @@ pub struct Dungeon {
 }
 ```
 
-- `pub struct Dungeon` — a **struct** is like a class without methods (we add those separately). Think of a Python `@dataclass` or a TypeScript `interface`.
+- `pub struct Dungeon` — a **struct** is like a class without methods (we add those separately). Think of a Python `@dataclass`.
 - `usize` — an unsigned integer sized for the platform (64-bit on modern machines). Used for indexing into arrays and vectors. In Python, you'd just use `int`. In Rust, the type system distinguishes between signed (`i32`, `i64`) and unsigned (`u32`, `usize`) integers.
 - `Vec<Vec<Tile>>` — a vector of vectors. Row-major: `tiles[y][x]` gives you the tile at column `x`, row `y`.
 
@@ -407,7 +399,7 @@ Key concepts:
 - `-> Self` — returns a `Dungeon`. `Self` is an alias for the type being implemented.
 - `vec![Tile::Wall; width]` — creates a vector of `width` copies of `Tile::Wall`. This is why we needed `Clone` on our enum — Rust needs to clone the tile to fill the vector.
 - `&self` vs `&mut self` — `get` only reads the dungeon (immutable borrow), `set` modifies it (mutable borrow). Rust enforces this at compile time: you can have many readers OR one writer, never both. This prevents data races.
-- `Option<&Tile>` — Rust has no `null`. Instead, `Option` is either `Some(value)` or `None`. The `get` method on `Vec` returns `None` if the index is out of bounds, instead of crashing. In Python, you'd get an `IndexError`. In TypeScript, you'd get `undefined`.
+- `Option<&Tile>` — Rust has no `null`. Instead, `Option` is either `Some(value)` or `None`. The `get` method on `Vec` returns `None` if the index is out of bounds, instead of crashing. In Python, you'd get an `IndexError`.
 - `y1..y2` — a **range**. Like Python's `range(y1, y2)`. The end is exclusive.
 
 ### Displaying the Grid
@@ -469,12 +461,10 @@ You should see a 40x30 grid of wall characters (`█`) with a rectangular hole o
 
 > **Common mistake: index order.** `tiles[y][x]` — rows first, then columns. If your room appears rotated, you've swapped x and y. Think of it as `tiles[row][column]`.
 
-### Checkpoint
-
-You have a dungeon grid that can carve rectangular rooms. But we're placing rooms by hand — hardcoding coordinates like medieval cartographers. Next, we'll use Binary Space Partitioning to decide *where* to place rooms — the algorithm that makes roguelike dungeons feel organic.
-
-**Files changed:** `src/dungeon.rs` (new), `src/main.rs` (updated)
-
+> [!check] Checkpoint
+> You have a dungeon grid that can carve rectangular rooms. But we're placing rooms by hand — hardcoding coordinates like medieval cartographers. Next, we'll use Binary Space Partitioning to decide *where* to place rooms — the algorithm that makes roguelike dungeons feel organic.
+>
+> **Files changed:** `src/dungeon.rs` (new), `src/main.rs` (updated)
 
 ---
 
@@ -577,7 +567,7 @@ New concept — `Box<BspNode>`:
 
 In Rust, the compiler needs to know the size of every type at compile time. A `BspNode` can contain other `BspNode`s, which creates a recursive type with infinite size. `Box` solves this by putting the child on the **heap** (a pointer with a known size) instead of inline.
 
-In Python, everything is already a reference (pointer), so you never think about this. In TypeScript, objects are references too. Rust makes the indirection explicit with `Box`.
+In Python, everything is already a reference (pointer), so you never think about this. Rust makes the indirection explicit with `Box`.
 
 ### The Split Algorithm
 
@@ -746,12 +736,10 @@ You should see a list of partitions and a grid with multiple rectangular rooms c
 
 > **Common mistake: borrowing conflicts.** If you try to call `root.leaves()` twice, Rust is fine because `leaves()` takes `&self` (immutable borrow). But if you tried to modify the tree while iterating its leaves, the compiler would stop you. This is Rust protecting you from iterator invalidation bugs that plague C++ and even Python.
 
-### Checkpoint
-
-You've implemented the core BSP algorithm. The dungeon floor is partitioned into non-overlapping rectangles, each ready to become a room. The tree structure will guide corridor placement in Stage 6. But first, the rooms themselves need personality — varying sizes and padding so the dungeon doesn't look like a sterile grid.
-
-**Files changed:** `src/bsp.rs` (new), `src/main.rs` (updated)
-
+> [!check] Checkpoint
+> You've implemented the core BSP algorithm. The dungeon floor is partitioned into non-overlapping rectangles, each ready to become a room. The tree structure will guide corridor placement in Stage 6. But first, the rooms themselves need personality — varying sizes and padding so the dungeon doesn't look like a sterile grid.
+>
+> **Files changed:** `src/bsp.rs` (new), `src/main.rs` (updated)
 
 ---
 
@@ -841,8 +829,8 @@ impl BspNode {
 
 Key concepts:
 
-- `Vec::new()` — creates an empty vector. Like `[]` in Python or `new Array()` in JavaScript.
-- `continue` — skips to the next iteration of the loop. Same keyword in Python and JavaScript.
+- `Vec::new()` — creates an empty vector. Like `[]` in Python.
+- `continue` — skips to the next iteration of the loop. Same keyword in Python.
 - The padding formula `1 + (leaf.x * 7 + leaf.y * 3) % 3` gives values 1, 2, or 3 based on position. It's not truly random, but it varies the padding deterministically. We'll replace this with proper seeded RNG in Stage 7.
 
 ### Carving Rooms into the Dungeon
@@ -964,12 +952,10 @@ You should see rooms of varying sizes, no longer filling their entire partitions
 
 > **Common mistake: rooms too small or missing.** If a partition is barely larger than `MIN_ROOM_SIZE`, the padding might shrink the room to nothing. The `continue` guard handles this — but if you're seeing fewer rooms than expected, check your padding math. A room needs at least 3x3 tiles to be useful (floor surrounded by walls).
 
-### Checkpoint
-
-Rooms are placed with varying padding inside BSP partitions. The dungeon is starting to look organic. But the rooms are isolated islands — each one a sealed crypt with no way in or out. Next we carve the passages between them, and the labyrinth begins to breathe.
-
-**Files changed:** `src/bsp.rs` (updated), `src/dungeon.rs` (updated), `src/main.rs` (updated)
-
+> [!check] Checkpoint
+> Rooms are placed with varying padding inside BSP partitions. The dungeon is starting to look organic. But the rooms are isolated islands — each one a sealed crypt with no way in or out. Next we carve the passages between them, and the labyrinth begins to breathe.
+>
+> **Files changed:** `src/bsp.rs` (updated), `src/dungeon.rs` (updated), `src/main.rs` (updated)
 
 ---
 
@@ -1201,12 +1187,10 @@ You should now see rooms connected by corridors with `+` symbols at doorways. Th
 
 > **Common mistake: too many or too few doors.** The door detection heuristic looks for "pinch points" — floor tiles with walls on opposite sides. If corridors are wide (more than 1 tile), doors won't be detected. Our corridors are 1 tile wide, so this works. If you later add wider corridors, you'll need to adjust the heuristic.
 
-### Checkpoint
-
-The dungeon is now fully connected. Rooms are linked by L-shaped corridors with doors at the junctions. The BSP tree guarantees every room is reachable. But every run produces the same dungeon — because our splits are deterministic. Next, we add seeded randomness so that the same seed always produces the same labyrinth, but different seeds produce entirely different worlds.
-
-**Files changed:** `src/bsp.rs` (updated), `src/dungeon.rs` (updated), `src/main.rs` (updated)
-
+> [!check] Checkpoint
+> The dungeon is now fully connected. Rooms are linked by L-shaped corridors with doors at the junctions. The BSP tree guarantees every room is reachable. But every run produces the same dungeon — because our splits are deterministic. Next, we add seeded randomness so that the same seed always produces the same labyrinth, but different seeds produce entirely different worlds.
+>
+> **Files changed:** `src/bsp.rs` (updated), `src/dungeon.rs` (updated), `src/main.rs` (updated)
 
 ---
 
@@ -1229,7 +1213,7 @@ This enables:
 - **Fairness** — daily challenge dungeons where everyone plays the same layout
 - **Testing** — verify your generation code produces expected results
 
-In Python, you'd use `random.seed(42)`. In JavaScript, there's no built-in seeded RNG (you'd need a library). In Rust, we use `ChaCha8Rng` from the `rand_chacha` crate — a cryptographic-quality RNG that's fast and deterministic.
+In Python, you'd use `random.seed(42)`. In Rust, we use `ChaCha8Rng` from the `rand_chacha` crate — a cryptographic-quality RNG that's fast and deterministic.
 
 ### Adding Dependencies
 
@@ -1249,7 +1233,7 @@ rand_chacha = "0.10"
 - `rand = "0.10"` — the main randomness crate. Provides the `RngExt` trait with methods like `random_range()`.
 - `rand_chacha = "0.10"` — provides `ChaCha8Rng`, a deterministic RNG. The "8" means 8 rounds of the ChaCha cipher — fast enough for games, deterministic across platforms.
 
-Run `cargo build` to download and compile the dependencies. Cargo fetches them from [crates.io](https://crates.io), Rust's package registry (like npm or PyPI).
+Run `cargo build` to download and compile the dependencies. Cargo fetches them from [crates.io](https://crates.io), Rust's package registry (like PyPI).
 
 ### Converting a String Seed to a Number
 
@@ -1551,12 +1535,10 @@ Run it twice — the output should be identical. Change the seed string and the 
 
 > **Common mistake: forgetting `use rand::RngExt`.** If you see `error: no method named 'random_range' found`, you need to import the `RngExt` trait. In `rand 0.10`, the convenience methods (`random_range`, `random_bool`, etc.) live on `RngExt`, not on `Rng` directly.
 
-### Checkpoint
-
-The dungeon is now seeded. Same seed, same labyrinth. You can share seeds with other hunters. The foundation for reproducible procedural generation is complete — and with randomness under our control, we can now scatter the things that make a dungeon dangerous: enemies, traps, and loot.
-
-**Files changed:** `Cargo.toml` (updated), `src/seed.rs` (new), `src/bsp.rs` (updated), `src/main.rs` (updated)
-
+> [!check] Checkpoint
+> The dungeon is now seeded. Same seed, same labyrinth. You can share seeds with other hunters. The foundation for reproducible procedural generation is complete — and with randomness under our control, we can now scatter the things that make a dungeon dangerous: enemies, traps, and loot.
+>
+> **Files changed:** `Cargo.toml` (updated), `src/seed.rs` (new), `src/bsp.rs` (updated), `src/main.rs` (updated)
 
 ---
 
@@ -1853,12 +1835,10 @@ You should see a dungeon with stairs, a boss door, loot items, and hidden traps.
 
 > **Common mistake: not enough floor positions.** If `num_enemies + num_traps + num_loot` exceeds the available floor positions, some entities won't be placed. The `if idx >= available.len() { break; }` guard handles this gracefully. For small dungeons (floor 1), keep entity counts low.
 
-### Checkpoint
-
-The dungeon is populated. Enemies lurk in rooms, traps hide underfoot, loot glimmers in the dark, and a boss door blocks the way forward. The labyrinth is alive — but it's only one floor deep. Next, we stack five of these floors on top of each other, each more dangerous than the last.
-
-**Files changed:** `src/floor_config.rs` (new), `src/populate.rs` (new), `src/main.rs` (updated)
-
+> [!check] Checkpoint
+> The dungeon is populated. Enemies lurk in rooms, traps hide underfoot, loot glimmers in the dark, and a boss door blocks the way forward. The labyrinth is alive — but it's only one floor deep. Next, we stack five of these floors on top of each other, each more dangerous than the last.
+>
+> **Files changed:** `src/floor_config.rs` (new), `src/populate.rs` (new), `src/main.rs` (updated)
 
 ---
 
@@ -2061,12 +2041,10 @@ Each floor's `StairsUp` is in the first room (spawn). `StairsDown` is in the las
 
 > **Common mistake: RNG order dependency.** If you change how floor 1 uses the RNG (e.g., adding more random calls), it shifts the RNG state for all subsequent floors. This means floor 2's layout changes even though you only modified floor 1's code. This is inherent to sequential seeded generation. Some games solve this by using a separate RNG per floor (seeded from the master RNG), which isolates changes. We'll keep it simple for now.
 
-### Checkpoint
-
-The complete 5-floor dungeon generates from a single seed. Each floor scales in size and difficulty per the design spec. Stairs connect the floors. The full dungeon structure is in place — but the player sees everything at once, which ruins the mystery. Next, we shroud the labyrinth in fog and force the hunter to earn every inch of visibility.
-
-**Files changed:** `src/generator.rs` (new), `src/main.rs` (updated)
-
+> [!check] Checkpoint
+> The complete 5-floor dungeon generates from a single seed. Each floor scales in size and difficulty per the design spec. Stairs connect the floors. The full dungeon structure is in place — but the player sees everything at once, which ruins the mystery. Next, we shroud the labyrinth in fog and force the hunter to earn every inch of visibility.
+>
+> **Files changed:** `src/generator.rs` (new), `src/main.rs` (updated)
 
 ---
 
@@ -2412,11 +2390,10 @@ Plus a minimap showing which rooms are discovered and which are still `???`.
 
 > **Alternative approach:** You could restructure `GeneratedFloor` to separate rooms from the dungeon grid, avoiding the borrow conflict entirely. In Rust, data structure design often follows the borrow checker's constraints. This isn't a limitation — it's the compiler pushing you toward better architecture.
 
-### Checkpoint
-
-Fog of war is implemented. The dungeon starts hidden and reveals itself as the player explores. The minimap provides a high-level overview of discovered rooms. The ritual is complete — the labyrinth is carved, seeded, populated, and shrouded. In Act 2, we step inside it.
-
-**Files changed:** `src/dungeon.rs` (updated), `src/main.rs` (updated)
+> [!check] Checkpoint
+> Fog of war is implemented. The dungeon starts hidden and reveals itself as the player explores. The minimap provides a high-level overview of discovered rooms. The ritual is complete — the labyrinth is carved, seeded, populated, and shrouded. In Act 2, we step inside it.
+>
+> **Files changed:** `src/dungeon.rs` (updated), `src/main.rs` (updated)
 
 ---
 

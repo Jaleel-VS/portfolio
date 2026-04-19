@@ -107,7 +107,7 @@ Quick-reference companion — keep it open alongside the course:
 - A terminal (Ghostty, iTerm2, etc.)
 - A text editor (nvim, VS Code, etc.)
 - `curl` for testing
-- Python or TypeScript experience (comparisons throughout)
+- Python experience (comparisons throughout)
 - An AWS account (for Stage 30)
 
 ## Getting Started

@@ -32,7 +32,7 @@ Let's begin.
 
 ## Stage 1: Hello Hogwarts
 
-*Difficulty: Very Easy · Concepts: cargo, project structure, println!, main function*
+*Difficulty: Very Easy*
 
 Before you can draw a single corridor or place a single tile, you need a working Rust project — a cauldron to brew in. This stage exists because every spell in our repertoire depends on `cargo` knowing where to find your code, how to compile it, and how to run the result. Without this foundation, nothing else in the Marauder's Map is possible.
 
@@ -52,7 +52,7 @@ cd marauders-map
 
 ```
 marauders-map/
-├── Cargo.toml    # Project manifest (like package.json or pyproject.toml)
+├── Cargo.toml    # Project manifest (like pyproject.toml)
 └── src/
     └── main.rs   # Your code starts here
 ```
@@ -71,8 +71,6 @@ edition = "2024"
 The `edition = "2024"` line tells Rust which language edition to use. Rust releases a new edition every few years with quality-of-life improvements. 2024 is the latest.
 
 > **Python comparison:** `Cargo.toml` is like `pyproject.toml`. `cargo` is like `pip` + `python` combined — it manages dependencies *and* builds your code.
-
-> **TypeScript comparison:** Think of `Cargo.toml` as `package.json` and `cargo` as `npm` + `tsc` rolled into one.
 
 ### Your first spell
 
@@ -138,43 +136,44 @@ the Marauder's Map.
 
 You can also build without running: `cargo build`. Or check for errors without producing a binary: `cargo check` (faster — useful during development).
 
-> **Common mistake:** Forgetting the semicolon. If you write `println!("hello")` without `;`, Rust will complain. Every statement needs one. The exception is the last expression in a block (we'll see this later).
+> [!warning] Common Mistake
+> Forgetting the semicolon. If you write `println!("hello")` without `;`, Rust will complain. Every statement needs one. The exception is the last expression in a block (we'll see this later).
 
-### Checkpoint: Stage 1
 
-Your project compiles and runs — but all it does is print text. The Map needs more than words; it needs a way to represent what each cell of Hogwarts *is*. That's exactly what Stage 2 gives us: a `Tile` type that the compiler can reason about.
-
-Your project should look like this:
-
-```
-marauders-map/
-├── Cargo.toml
-└── src/
-    └── main.rs
-```
-
-**`src/main.rs`:**
-```rust
-fn main() {
-    println!("=================================");
-    println!("   The Marauder's Map");
-    println!("   'I solemnly swear that I");
-    println!("    am up to no good.'");
-    println!("=================================");
-    println!();
-    println!("Messrs Moony, Wormtail, Padfoot,");
-    println!("and Prongs are proud to present");
-    println!("the Marauder's Map.");
-}
-```
-
-Run `cargo run` and confirm the output. Stage 1 complete — you're a Rust wizard now. Well, a first-year.
+> [!check] Checkpoint
+> Your project compiles and runs — but all it does is print text. The Map needs more than words; it needs a way to represent what each cell of Hogwarts *is*. That's exactly what Stage 2 gives us: a `Tile` type that the compiler can reason about.
+>
+> Your project should look like this:
+>
+> ```
+> marauders-map/
+> ├── Cargo.toml
+> └── src/
+>     └── main.rs
+> ```
+>
+> **`src/main.rs`:**
+> ```rust
+> fn main() {
+>     println!("=================================");
+>     println!("   The Marauder's Map");
+>     println!("   'I solemnly swear that I");
+>     println!("    am up to no good.'");
+>     println!("=================================");
+>     println!();
+>     println!("Messrs Moony, Wormtail, Padfoot,");
+>     println!("and Prongs are proud to present");
+>     println!("the Marauder's Map.");
+> }
+> ```
+>
+> Run `cargo run` and confirm the output. Stage 1 complete — you're a Rust wizard now. Well, a first-year.
 
 ---
 
 ## Stage 2: The Tile
 
-*Difficulty: Easy · Concepts: enums, match expressions, the Display trait, impl blocks*
+*Difficulty: Easy*
 
 Hogwarts isn't just empty space — it's stone walls, open corridors, locked doors, and spiral staircases. Before we can draw a map, we need a way to tell the compiler "this cell is a wall, that cell is a floor." This stage introduces Rust's `enum` — the single most important tool for modeling distinct categories — and the `match` expression that makes working with them safe and exhaustive.
 
@@ -184,7 +183,7 @@ Hogwarts is made of stone walls, corridors, doors, and staircases. Before we can
 
 Right now we have a project that prints text, but we can't represent what a map cell *is*. We need a type where each value is one of a fixed set of possibilities — wall, floor, door, stairs — and nothing else. Strings would work, but a typo would silently break everything. We need something the compiler can check.
 
-In Python, you might represent tile types with strings: `"wall"`, `"floor"`, `"door"`. That works, but it's fragile — typo `"wal"` and your code silently breaks. In TypeScript, you might use a union type: `type Tile = "wall" | "floor" | "door"`.
+In Python, you might represent tile types with strings: `"wall"`, `"floor"`, `"door"`. That works, but it's fragile — typo `"wal"` and your code silently breaks.
 
 Rust has something better: **enums**. An enum defines a type that can be one of several **variants**:
 
@@ -203,13 +202,11 @@ Each variant is a distinct value. You can't accidentally create a `Tile::Wal` �
 
 > **Python comparison:** Python has `enum.Enum`, but it's opt-in and rarely enforced. Rust enums are the default way to model "one of these things."
 
-> **TypeScript comparison:** Like a discriminated union, but checked at compile time with zero runtime cost.
-
 The `///` above the enum is a **doc comment**. It generates documentation when you run `cargo doc`.
 
 ### Displaying tiles as characters
 
-Each tile needs a visual representation for our map. We'll use the `Display` trait — Rust's equivalent of Python's `__str__` or TypeScript's `toString()`.
+Each tile needs a visual representation for our map. We'll use the `Display` trait — Rust's equivalent of Python's `__str__`.
 
 A **trait** is like an interface: it defines behavior that types can implement. `Display` says "this type can be formatted as a string." Here's how we implement it:
 
@@ -242,7 +239,7 @@ impl fmt::Display for Tile {
 
 Let's unpack this piece by piece.
 
-**`use std::fmt;`** — imports the `fmt` module from Rust's standard library. Like `from std import fmt` in Python or `import { fmt } from 'std'` in TS (conceptually).
+**`use std::fmt;`** — imports the `fmt` module from Rust's standard library. Like `from std import fmt` in Python (conceptually).
 
 **`#[derive(Clone, Copy)]`** — this is an **attribute** that auto-generates code. `Clone` means "this type can be duplicated" and `Copy` means "duplicating is cheap — just copy the bits." Simple enums like ours are always `Copy`. Without this, Rust's ownership system would prevent us from using a tile value after passing it somewhere (we'll explore ownership deeply in later acts).
 
@@ -255,9 +252,11 @@ Let's unpack this piece by piece.
 
 **`match self { ... }`** — this is Rust's **pattern matching**, and it's incredible. It's like a `switch` statement that the compiler *guarantees* covers every case. If you add a new variant to `Tile` and forget to handle it in a `match`, the code won't compile.
 
-> **Common mistake:** Forgetting a variant in `match`. Try commenting out the `Tile::Empty` arm — you'll get: `error[E0004]: non-exhaustive patterns: Tile::Empty not covered`. The compiler has your back.
+> [!warning] Common Mistake
+> Forgetting a variant in `match`. Try commenting out the `Tile::Empty` arm — you'll get: `error[E0004]: non-exhaustive patterns: Tile::Empty not covered`. The compiler has your back.
 
-**`write!(f, "{}", ch)`** — writes the character to the formatter. The `{}` is a placeholder, like Python's `f"{ch}"` or JavaScript's template literals.
+
+**`write!(f, "{}", ch)`** — writes the character to the formatter. The `{}` is a placeholder, like Python's `f"{ch}"`.
 
 ### Testing it
 
@@ -338,60 +337,58 @@ cargo run
 - **`derive`** auto-generates common trait implementations
 - **`impl`** blocks attach methods and trait implementations to types
 
-### Checkpoint: Stage 2
-
-We can represent a single tile and print it — but a single tile is just one brick. Hogwarts is built from *thousands* of them arranged in a grid. Next, we'll assemble tiles into a 2D structure and render an entire room.
-
-**`src/main.rs`:**
-```rust
-use std::fmt;
-
-#[derive(Clone, Copy, Debug)]
-enum Tile {
-    Wall,
-    Floor,
-    Door,
-    Stairs,
-    Empty,
-}
-
-impl fmt::Display for Tile {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ch = match self {
-            Tile::Wall => '#',
-            Tile::Floor => '.',
-            Tile::Door => 'D',
-            Tile::Stairs => 'S',
-            Tile::Empty => ' ',
-        };
-        write!(f, "{}", ch)
-    }
-}
-
-fn main() {
-    let tiles = [
-        Tile::Wall,
-        Tile::Floor,
-        Tile::Door,
-        Tile::Stairs,
-        Tile::Empty,
-    ];
-
-    println!("=== Tile Legend ===");
-    for tile in &tiles {
-        println!("  {} = {:?}", tile, tile);
-    }
-}
-```
-
-Run `cargo run` and confirm the legend prints correctly. On to the grid!
-
+> [!check] Checkpoint
+> We can represent a single tile and print it — but a single tile is just one brick. Hogwarts is built from *thousands* of them arranged in a grid. Next, we'll assemble tiles into a 2D structure and render an entire room.
+>
+> **`src/main.rs`:**
+> ```rust
+> use std::fmt;
+>
+> #[derive(Clone, Copy, Debug)]
+> enum Tile {
+>     Wall,
+>     Floor,
+>     Door,
+>     Stairs,
+>     Empty,
+> }
+>
+> impl fmt::Display for Tile {
+>     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+>         let ch = match self {
+>             Tile::Wall => '#',
+>             Tile::Floor => '.',
+>             Tile::Door => 'D',
+>             Tile::Stairs => 'S',
+>             Tile::Empty => ' ',
+>         };
+>         write!(f, "{}", ch)
+>     }
+> }
+>
+> fn main() {
+>     let tiles = [
+>         Tile::Wall,
+>         Tile::Floor,
+>         Tile::Door,
+>         Tile::Stairs,
+>         Tile::Empty,
+>     ];
+>
+>     println!("=== Tile Legend ===");
+>     for tile in &tiles {
+>         println!("  {} = {:?}", tile, tile);
+>     }
+> }
+> ```
+>
+> Run `cargo run` and confirm the legend prints correctly. On to the grid!
 
 ---
 
 ## Stage 3: The Grid
 
-*Difficulty: Easy · Concepts: Vec, nested vectors, indexing, for loops, closures*
+*Difficulty: Easy*
 
 A single tile is a single brick — useless on its own. Hogwarts is a *grid* of tiles: rows and columns forming corridors, rooms, and walls. This stage teaches you `Vec<Vec<T>>`, Rust's way of building 2D structures, and introduces the critical concept of *borrowing* — the first whisper of Rust's ownership system that will become your constant companion.
 
@@ -401,7 +398,7 @@ A single tile is useless. We need a *grid* of tiles — a 2D array that represen
 
 Right now we have individual `Tile` values but no way to arrange them into a map. We need a 2D collection — rows of tiles stacked into a grid — so we can index into any position and ask "what's at row 5, column 12?"
 
-In Python you have `list`. In TypeScript, `Array`. In Rust, it's `Vec<T>` (pronounced "vec of T"), where `T` is the type of element it holds.
+In Python you have `list`. In Rust, it's `Vec<T>` (pronounced "vec of T"), where `T` is the type of element it holds.
 
 ```rust
 let corridor: Vec<Tile> = vec![Tile::Floor; 10];
@@ -410,7 +407,6 @@ let corridor: Vec<Tile> = vec![Tile::Floor; 10];
 This creates a vector of 10 floor tiles. The `vec!` macro is shorthand for creating vectors. `[Tile::Floor; 10]` means "repeat `Tile::Floor` ten times." This only works because `Tile` implements `Copy` (from our `derive` in Stage 2).
 
 > **Python comparison:** `corridor = [Tile.Floor] * 10`
-> **TypeScript comparison:** `const corridor = Array(10).fill(Tile.Floor)`
 
 ### Building a 2D grid
 
@@ -450,7 +446,7 @@ Let's break down the new concepts:
 
 **`fn build_great_hall() -> Vec<Vec<Tile>>`** — a function that *returns* a 2D grid. The `->` specifies the return type. In Python, return types are optional hints. In Rust, they're mandatory and enforced.
 
-**`let mut grid`** — the `mut` keyword makes the variable **mutable**. By default, all variables in Rust are immutable (like `const` in JavaScript or `final` in Java). You must explicitly opt into mutability. This prevents accidental changes — a common source of bugs.
+**`let mut grid`** — the `mut` keyword makes the variable **mutable**. By default, all variables in Rust are immutable. You must explicitly opt into mutability. This prevents accidental changes — a common source of bugs.
 
 > **Python comparison:** Python variables are always mutable. Rust makes you think about it.
 
@@ -462,7 +458,9 @@ Let's break down the new concepts:
 
 **`grid`** on the last line — this is the return value. In Rust, the last expression in a function (without a semicolon) is the return value. No `return` keyword needed. Adding a semicolon would make it a statement instead of an expression, and the function would return `()` (Rust's "nothing" type, like Python's `None`).
 
-> **Common mistake:** Adding a semicolon to the last line: `grid;` — this changes the return type to `()` and you'll get a type mismatch error. If you want to be explicit, write `return grid;` with the semicolon.
+> [!warning] Common Mistake
+> Adding a semicolon to the last line: `grid;` — this changes the return type to `()` and you'll get a type mismatch error. If you want to be explicit, write `return grid;` with the semicolon.
+
 
 ### Printing the grid
 
@@ -534,83 +532,82 @@ Legend: # = Wall, . = Floor, D = Door, S = Stairs
 
 You've got a room! It's not Hogwarts yet, but it's a start.
 
-### Checkpoint: Stage 3
-
-We have a grid of tiles rendered to the terminal — a room with walls, a door, and stairs. But a bare grid is just data. A *floor* of Hogwarts has a name, rooms with labels, and metadata. Next, we'll wrap the grid in a `Floor` struct and learn how Rust bundles data with behavior.
-
-**`src/main.rs`:**
-```rust
-use std::fmt;
-
-#[derive(Clone, Copy, Debug)]
-enum Tile {
-    Wall,
-    Floor,
-    Door,
-    Stairs,
-    Empty,
-}
-
-impl fmt::Display for Tile {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ch = match self {
-            Tile::Wall => '#',
-            Tile::Floor => '.',
-            Tile::Door => 'D',
-            Tile::Stairs => 'S',
-            Tile::Empty => ' ',
-        };
-        write!(f, "{}", ch)
-    }
-}
-
-fn build_great_hall() -> Vec<Vec<Tile>> {
-    let width = 20;
-    let height = 10;
-
-    let mut grid: Vec<Vec<Tile>> = vec![vec![Tile::Floor; width]; height];
-
-    for x in 0..width {
-        grid[0][x] = Tile::Wall;
-        grid[height - 1][x] = Tile::Wall;
-    }
-    for y in 0..height {
-        grid[y][0] = Tile::Wall;
-        grid[y][width - 1] = Tile::Wall;
-    }
-
-    grid[5][width - 1] = Tile::Door;
-    grid[8][17] = Tile::Stairs;
-
-    grid
-}
-
-fn print_grid(grid: &Vec<Vec<Tile>>) {
-    for row in grid {
-        for tile in row {
-            print!("{}", tile);
-        }
-        println!();
-    }
-}
-
-fn main() {
-    println!("=== The Great Hall ===");
-    println!();
-
-    let grid = build_great_hall();
-    print_grid(&grid);
-
-    println!();
-    println!("Legend: # = Wall, . = Floor, D = Door, S = Stairs");
-}
-```
+> [!check] Checkpoint
+> We have a grid of tiles rendered to the terminal — a room with walls, a door, and stairs. But a bare grid is just data. A *floor* of Hogwarts has a name, rooms with labels, and metadata. Next, we'll wrap the grid in a `Floor` struct and learn how Rust bundles data with behavior.
+>
+> **`src/main.rs`:**
+> ```rust
+> use std::fmt;
+>
+> #[derive(Clone, Copy, Debug)]
+> enum Tile {
+>     Wall,
+>     Floor,
+>     Door,
+>     Stairs,
+>     Empty,
+> }
+>
+> impl fmt::Display for Tile {
+>     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+>         let ch = match self {
+>             Tile::Wall => '#',
+>             Tile::Floor => '.',
+>             Tile::Door => 'D',
+>             Tile::Stairs => 'S',
+>             Tile::Empty => ' ',
+>         };
+>         write!(f, "{}", ch)
+>     }
+> }
+>
+> fn build_great_hall() -> Vec<Vec<Tile>> {
+>     let width = 20;
+>     let height = 10;
+>
+>     let mut grid: Vec<Vec<Tile>> = vec![vec![Tile::Floor; width]; height];
+>
+>     for x in 0..width {
+>         grid[0][x] = Tile::Wall;
+>         grid[height - 1][x] = Tile::Wall;
+>     }
+>     for y in 0..height {
+>         grid[y][0] = Tile::Wall;
+>         grid[y][width - 1] = Tile::Wall;
+>     }
+>
+>     grid[5][width - 1] = Tile::Door;
+>     grid[8][17] = Tile::Stairs;
+>
+>     grid
+> }
+>
+> fn print_grid(grid: &Vec<Vec<Tile>>) {
+>     for row in grid {
+>         for tile in row {
+>             print!("{}", tile);
+>         }
+>         println!();
+>     }
+> }
+>
+> fn main() {
+>     println!("=== The Great Hall ===");
+>     println!();
+>
+>     let grid = build_great_hall();
+>     print_grid(&grid);
+>
+>     println!();
+>     println!("Legend: # = Wall, . = Floor, D = Door, S = Stairs");
+> }
+> ```
 
 ---
 
 ## Stage 4: The Floor
 
-*Difficulty: Easy · Concepts: structs, methods, String vs &str, associated functions*
+*Difficulty: Easy*
 
 A grid of tiles is raw data — it has no name, no rooms, no identity. But the Ground Floor of Hogwarts is more than pixels; it's the Great Hall, Filch's Office, the Courtyard. This stage introduces **structs** — Rust's way of bundling related data together — and **methods** that give that data behavior. You'll also meet the `String` vs `&str` distinction, one of Rust's most important (and initially confusing) concepts.
 
@@ -620,7 +617,7 @@ A grid of tiles is fine, but a floor of Hogwarts is more than just tiles. It has
 
 Right now we have a `Vec<Vec<Tile>>` floating in a function, but we can't attach a name to it, track which rooms it contains, or pass it around as a meaningful unit. We need a way to bundle the grid with its metadata into a single, named type.
 
-In Python, you'd use a class or a dataclass. In TypeScript, an interface or class. In Rust, we use **structs**:
+In Python, you'd use a class or a dataclass. In Rust, we use **structs**:
 
 ```rust
 struct Room {
@@ -642,13 +639,11 @@ struct Floor {
 
 Let's unpack the types:
 
-- **`String`** — an owned, heap-allocated string. Like Python's `str` or JavaScript's `string`. You can modify it, grow it, pass it around.
+- **`String`** — an owned, heap-allocated string. Like Python's `str`. You can modify it, grow it, pass it around.
 - **`u8`** — an unsigned 8-bit integer (0–255). Rust has specific integer types: `u8`, `u16`, `u32`, `u64` (unsigned) and `i8`, `i16`, `i32`, `i64` (signed). Hogwarts has fewer than 255 floors, so `u8` is plenty.
 - **`usize`** — an unsigned integer sized for your platform (64-bit on modern machines). Used for indexing into collections. Like Python's `int` but guaranteed non-negative.
 
 > **Python comparison:** `usize` is what you'd use for list indices. Python lets you use any `int`, but negative indices mean something different. Rust's `usize` can't be negative — no accidental `list[-1]`.
-
-> **TypeScript comparison:** TypeScript's `number` covers all of these. Rust's specific types prevent overflow bugs and make memory layout explicit.
 
 ### Adding methods with impl
 
@@ -740,7 +735,7 @@ We accept `&str` in function parameters (flexible — accepts both `String` and 
 
 **`self.grid[y][x]`** — note the order: row first (`y`), then column (`x`). This is because our grid is `Vec<Vec<Tile>>` — a vector of rows.
 
-**`Vec::new()`** — creates an empty vector. Like `[]` in Python or `[]` in TypeScript.
+**`Vec::new()`** — creates an empty vector. Like `[]` in Python.
 
 **Field shorthand:** `id: id.to_string()` can be shortened to just `id` when the field name matches the variable name. We use this for `x`, `y`, etc.
 
@@ -810,160 +805,161 @@ cargo run
 
 You should see a 40×20 map with rooms carved out, connected by corridors, with doors and stairs marked. The room list prints below.
 
-### Checkpoint: Stage 4
-
-We have a proper `Floor` struct with rooms, methods, and a name. But we're still printing to stdout with `println!` — scrolling text, no interactivity, no color. The Marauder's Map deserves a *real* terminal UI. Next, we bring in ratatui and crossterm to take over the entire terminal.
-
-**`src/main.rs`:**
-```rust
-use std::fmt;
-
-#[derive(Clone, Copy, Debug)]
-enum Tile {
-    Wall,
-    Floor,
-    Door,
-    Stairs,
-    Empty,
-}
-
-impl fmt::Display for Tile {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let ch = match self {
-            Tile::Wall => '#',
-            Tile::Floor => '.',
-            Tile::Door => 'D',
-            Tile::Stairs => 'S',
-            Tile::Empty => ' ',
-        };
-        write!(f, "{}", ch)
-    }
-}
-
-struct Room {
-    id: String,
-    name: String,
-    x: usize,
-    y: usize,
-    width: usize,
-    height: usize,
-}
-
-struct Floor {
-    id: u8,
-    name: String,
-    grid: Vec<Vec<Tile>>,
-    rooms: Vec<Room>,
-}
-
-impl Floor {
-    fn new(id: u8, name: &str, width: usize, height: usize) -> Self {
-        Floor {
-            id,
-            name: name.to_string(),
-            grid: vec![vec![Tile::Empty; width]; height],
-            rooms: Vec::new(),
-        }
-    }
-
-    fn width(&self) -> usize {
-        if self.grid.is_empty() { 0 } else { self.grid[0].len() }
-    }
-
-    fn height(&self) -> usize {
-        self.grid.len()
-    }
-
-    fn set_tile(&mut self, x: usize, y: usize, tile: Tile) {
-        if y < self.height() && x < self.width() {
-            self.grid[y][x] = tile;
-        }
-    }
-
-    fn add_room(&mut self, id: &str, name: &str, x: usize, y: usize, w: usize, h: usize) {
-        for rx in x..x + w {
-            self.set_tile(rx, y, Tile::Wall);
-            self.set_tile(rx, y + h - 1, Tile::Wall);
-        }
-        for ry in y..y + h {
-            self.set_tile(x, ry, Tile::Wall);
-            self.set_tile(x + w - 1, ry, Tile::Wall);
-        }
-        for ry in (y + 1)..(y + h - 1) {
-            for rx in (x + 1)..(x + w - 1) {
-                self.set_tile(rx, ry, Tile::Floor);
-            }
-        }
-        self.rooms.push(Room {
-            id: id.to_string(),
-            name: name.to_string(),
-            x, y, width: w, height: h,
-        });
-    }
-
-    fn print(&self) {
-        println!("=== {} (Floor {}) ===", self.name, self.id);
-        println!();
-        for row in &self.grid {
-            for tile in row {
-                print!("{}", tile);
-            }
-            println!();
-        }
-    }
-}
-
-fn build_ground_floor() -> Floor {
-    let mut floor = Floor::new(0, "Ground Floor", 40, 20);
-
-    for x in 0..40 {
-        floor.set_tile(x, 0, Tile::Wall);
-        floor.set_tile(x, 19, Tile::Wall);
-    }
-    for y in 0..20 {
-        floor.set_tile(0, y, Tile::Wall);
-        floor.set_tile(39, y, Tile::Wall);
-    }
-
-    for x in 1..39 {
-        floor.set_tile(x, 9, Tile::Floor);
-    }
-    for y in 1..19 {
-        floor.set_tile(19, y, Tile::Floor);
-    }
-
-    floor.add_room("great_hall", "Great Hall", 2, 2, 16, 6);
-    floor.add_room("entrance_hall", "Entrance Hall", 21, 2, 17, 6);
-    floor.add_room("filch_office", "Filch's Office", 2, 11, 16, 4);
-    floor.add_room("courtyard", "Courtyard", 2, 16, 16, 3);
-    floor.add_room("kitchen", "Kitchen", 21, 16, 17, 3);
-
-    floor.set_tile(17, 5, Tile::Door);
-    floor.set_tile(21, 5, Tile::Door);
-    floor.set_tile(17, 12, Tile::Door);
-    floor.set_tile(30, 13, Tile::Stairs);
-
-    floor
-}
-
-fn main() {
-    let floor = build_ground_floor();
-    floor.print();
-
-    println!();
-    println!("Rooms on this floor:");
-    for room in &floor.rooms {
-        println!("  - {} ({})", room.name, room.id);
-    }
-}
-```
-
+> [!check] Checkpoint
+> We have a proper `Floor` struct with rooms, methods, and a name. But we're still printing to stdout with `println!` — scrolling text, no interactivity, no color. The Marauder's Map deserves a *real* terminal UI. Next, we bring in ratatui and crossterm to take over the entire terminal.
+>
+> **`src/main.rs`:**
+> ```rust
+> use std::fmt;
+>
+> #[derive(Clone, Copy, Debug)]
+> enum Tile {
+>     Wall,
+>     Floor,
+>     Door,
+>     Stairs,
+>     Empty,
+> }
+>
+> impl fmt::Display for Tile {
+>     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+>         let ch = match self {
+>             Tile::Wall => '#',
+>             Tile::Floor => '.',
+>             Tile::Door => 'D',
+>             Tile::Stairs => 'S',
+>             Tile::Empty => ' ',
+>         };
+>         write!(f, "{}", ch)
+>     }
+> }
+>
+> struct Room {
+>     id: String,
+>     name: String,
+>     x: usize,
+>     y: usize,
+>     width: usize,
+>     height: usize,
+> }
+>
+> struct Floor {
+>     id: u8,
+>     name: String,
+>     grid: Vec<Vec<Tile>>,
+>     rooms: Vec<Room>,
+> }
+>
+> impl Floor {
+>     fn new(id: u8, name: &str, width: usize, height: usize) -> Self {
+>         Floor {
+>             id,
+>             name: name.to_string(),
+>             grid: vec![vec![Tile::Empty; width]; height],
+>             rooms: Vec::new(),
+>         }
+>     }
+>
+>     fn width(&self) -> usize {
+>         if self.grid.is_empty() { 0 } else { self.grid[0].len() }
+>     }
+>
+>     fn height(&self) -> usize {
+>         self.grid.len()
+>     }
+>
+>     fn set_tile(&mut self, x: usize, y: usize, tile: Tile) {
+>         if y < self.height() && x < self.width() {
+>             self.grid[y][x] = tile;
+>         }
+>     }
+>
+>     fn add_room(&mut self, id: &str, name: &str, x: usize, y: usize, w: usize, h: usize) {
+>         for rx in x..x + w {
+>             self.set_tile(rx, y, Tile::Wall);
+>             self.set_tile(rx, y + h - 1, Tile::Wall);
+>         }
+>         for ry in y..y + h {
+>             self.set_tile(x, ry, Tile::Wall);
+>             self.set_tile(x + w - 1, ry, Tile::Wall);
+>         }
+>         for ry in (y + 1)..(y + h - 1) {
+>             for rx in (x + 1)..(x + w - 1) {
+>                 self.set_tile(rx, ry, Tile::Floor);
+>             }
+>         }
+>         self.rooms.push(Room {
+>             id: id.to_string(),
+>             name: name.to_string(),
+>             x, y, width: w, height: h,
+>         });
+>     }
+>
+>     fn print(&self) {
+>         println!("=== {} (Floor {}) ===", self.name, self.id);
+>         println!();
+>         for row in &self.grid {
+>             for tile in row {
+>                 print!("{}", tile);
+>             }
+>             println!();
+>         }
+>     }
+> }
+>
+> fn build_ground_floor() -> Floor {
+>     let mut floor = Floor::new(0, "Ground Floor", 40, 20);
+>
+>     for x in 0..40 {
+>         floor.set_tile(x, 0, Tile::Wall);
+>         floor.set_tile(x, 19, Tile::Wall);
+>     }
+>     for y in 0..20 {
+>         floor.set_tile(0, y, Tile::Wall);
+>         floor.set_tile(39, y, Tile::Wall);
+>     }
+>
+>     for x in 1..39 {
+>         floor.set_tile(x, 9, Tile::Floor);
+>     }
+>     for y in 1..19 {
+>         floor.set_tile(19, y, Tile::Floor);
+>     }
+>
+>     floor.add_room("great_hall", "Great Hall", 2, 2, 16, 6);
+>     floor.add_room("entrance_hall", "Entrance Hall", 21, 2, 17, 6);
+>     floor.add_room("filch_office", "Filch's Office", 2, 11, 16, 4);
+>     floor.add_room("courtyard", "Courtyard", 2, 16, 16, 3);
+>     floor.add_room("kitchen", "Kitchen", 21, 16, 17, 3);
+>
+>     floor.set_tile(17, 5, Tile::Door);
+>     floor.set_tile(21, 5, Tile::Door);
+>     floor.set_tile(17, 12, Tile::Door);
+>     floor.set_tile(30, 13, Tile::Stairs);
+>
+>     floor
+> }
+>
+> fn main() {
+>     let floor = build_ground_floor();
+>     floor.print();
+>
+>     println!();
+>     println!("Rooms on this floor:");
+>     for room in &floor.rooms {
+>         println!("  - {} ({})", room.name, room.id);
+>     }
+> }
+> ```
 
 ---
 
 ## Stage 5: Enter ratatui
 
-*Difficulty: Medium · Concepts: external crates, terminal UI, event loops, closures, the Widget trait*
+*Difficulty: Medium*
+
+> [!warning] Difficulty Spike
+> This stage introduces several new concepts at once — raw mode, alternate screen, closures, event polling, and direct buffer access. Take it slow. If you get lost, focus on the **game loop structure** first (`loop { draw; input; }`) and come back to understand each piece. The pattern you learn here is the same one used by every TUI and game application — it's worth the effort.
 
 Until now, our map has been `println!` output — text that scrolls off the screen, with no color, no interactivity, no sense of *place*. The Marauder's Map isn't a printout; it's a living parchment. This stage is the leap from "Rust exercise" to "real application." You'll learn how external crates work, how terminal UIs take over the screen, and how closures let you pass behavior as data.
 
@@ -987,7 +983,6 @@ crossterm = "0.29"
 Run `cargo build` to download and compile them. This takes a minute the first time — ratatui and crossterm bring in several sub-crates. Subsequent builds are fast.
 
 > **Python comparison:** This is like adding `ratatui = "^0.30"` to `pyproject.toml` and running `pip install`.
-> **TypeScript comparison:** Like `npm install ratatui@0.30`.
 
 ### How terminal UIs work
 
@@ -1324,7 +1319,6 @@ terminal.draw(|frame| render(frame, &game))?;
 `terminal.draw()` takes a **closure** — an anonymous function. The `|frame|` part declares the closure's parameter. ratatui calls your closure with a `Frame`, you render widgets into it, and ratatui figures out what changed and updates only the diff.
 
 > **Python comparison:** `terminal.draw(lambda frame: render(frame, game))`
-> **TypeScript comparison:** `terminal.draw((frame) => render(frame, game))`
 
 ### Direct buffer access
 
@@ -1358,25 +1352,25 @@ cargo run
 
 You should see the map rendered in your terminal with a border, a green `@` for the player, and colored tiles. Use arrow keys or WASD to move. Press `q` to quit.
 
-> **Common mistake:** If the terminal looks garbled after a crash, run `reset` in your terminal. This happens when the program exits without calling `ratatui::restore()`. In production code, you'd set up a panic hook — we'll do that in a later act.
+> [!warning] Common Mistake
+> If the terminal looks garbled after a crash, run `reset` in your terminal. This happens when the program exits without calling `ratatui::restore()`. In production code, you'd set up a panic hook — we'll do that in a later act.
 
-### Checkpoint: Stage 5
 
-The map is alive in the terminal — colored tiles, a green `@`, and arrow-key movement. But our map is only 40×20. Hogwarts is vast. Try resizing your terminal smaller than the map and watch things break. We need a *viewport* — a camera that follows the player and only shows what fits on screen.
-
-The full code is above. Key additions:
-- `Cargo.toml` now has `ratatui = "0.30"` and `crossterm = "0.29"`
-- `Game` struct holds player position and running state
-- `render()` draws tiles directly to the frame buffer
-- `handle_input()` processes keyboard events
-- `main()` runs the game loop with `ratatui::init()` / `ratatui::restore()`
-
+> [!check] Checkpoint
+> The map is alive in the terminal — colored tiles, a green `@`, and arrow-key movement. But our map is only 40×20. Hogwarts is vast. Try resizing your terminal smaller than the map and watch things break. We need a *viewport* — a camera that follows the player and only shows what fits on screen.
+>
+> The full code is above. Key additions:
+> - `Cargo.toml` now has `ratatui = "0.30"` and `crossterm = "0.29"`
+> - `Game` struct holds player position and running state
+> - `render()` draws tiles directly to the frame buffer
+> - `handle_input()` processes keyboard events
+> - `main()` runs the game loop with `ratatui::init()` / `ratatui::restore()`
 
 ---
 
 ## Stage 6: The Viewport
 
-*Difficulty: Medium · Concepts: camera systems, clamping, usize arithmetic, saturating operations*
+*Difficulty: Medium*
 
 Hogwarts doesn't fit on one screen. A real floor might be 200×100 tiles, but your terminal is maybe 80×24. Without a viewport, the map either gets clipped or you're stuck with tiny rooms. This stage solves the fundamental problem of *seeing* a world larger than your window — and introduces `saturating_sub`, a Rust pattern you'll use every time unsigned integers meet subtraction.
 
@@ -1438,7 +1432,9 @@ impl Camera {
 
 > **Python comparison:** Python integers can be negative, so you'd just use `max(0, player_x - half_w)`. In Rust with `usize`, subtraction can panic, so we use `saturating_sub`.
 
-> **Common mistake:** Writing `player_x - half_w` with `usize` values. If `player_x < half_w`, this panics in debug mode and wraps in release mode. Always use `saturating_sub` for unsigned subtraction that might go negative.
+> [!warning] Common Mistake
+> Writing `player_x - half_w` with `usize` values. If `player_x < half_w`, this panics in debug mode and wraps in release mode. Always use `saturating_sub` for unsigned subtraction that might go negative.
+
 
 **`.min(max_x)`** — returns the smaller of the two values. This clamps the camera so it doesn't scroll past the right/bottom edge of the map.
 
@@ -1569,24 +1565,22 @@ while game.running {
 
 To see the viewport in action, make the map bigger than your terminal. Change `build_ground_floor` to create a larger map (or just resize your terminal to be smaller than 40 columns). The camera will follow the player and scroll at the edges.
 
-### Checkpoint: Stage 6
-
-The camera follows the player smoothly, and the map can now be any size. But we're still hardcoding the map in Rust — every wall, every door, every room is a line of `set_tile()`. Real games load maps from files. Next, we'll use serde to load our Hogwarts from JSON, making the map editable without recompiling.
-
-The changes from Stage 5:
-- Added `Camera` struct with `update()` method using `saturating_sub` and `min`
-- Added `camera` field to `Game`
-- `render()` now iterates screen coordinates and maps them to world coordinates via the camera
-- `render()` takes `&mut Game` to update the camera each frame
-
-The full code is the Stage 5 checkpoint with the `Camera` struct added and the `Game`/`render` functions updated as shown above.
-
+> [!check] Checkpoint
+> The camera follows the player smoothly, and the map can now be any size. But we're still hardcoding the map in Rust — every wall, every door, every room is a line of `set_tile()`. Real games load maps from files. Next, we'll use serde to load our Hogwarts from JSON, making the map editable without recompiling.
+>
+> The changes from Stage 5:
+> - Added `Camera` struct with `update()` method using `saturating_sub` and `min`
+> - Added `camera` field to `Game`
+> - `render()` now iterates screen coordinates and maps them to world coordinates via the camera
+> - `render()` takes `&mut Game` to update the camera each frame
+>
+> The full code is the Stage 5 checkpoint with the `Camera` struct added and the `Game`/`render` functions updated as shown above.
 
 ---
 
 ## Stage 7: Map from JSON
 
-*Difficulty: Medium · Concepts: serde, Deserialize, file I/O, Result, error handling, the ? operator*
+*Difficulty: Medium*
 
 Every time you want to change a room's shape or add a door, you have to edit Rust code and recompile. That's fine for learning, but terrible for building a real map. This stage separates *data* from *code* — the map lives in a JSON file that anyone can edit, and serde (Rust's serialization framework) bridges the gap. You'll also learn Rust's `Result` type and the `?` operator, which make error handling elegant instead of painful.
 
@@ -1609,7 +1603,6 @@ serde_json = "1"
 `serde` is the core serialization library. The `derive` feature lets us auto-generate serialization code with `#[derive(Deserialize)]`. `serde_json` adds JSON support specifically.
 
 > **Python comparison:** serde is like `json` + `dataclasses` combined. You define your struct, derive `Deserialize`, and serde figures out how to parse JSON into it.
-> **TypeScript comparison:** Like `JSON.parse()` but with compile-time type checking. No `as MyType` casting needed.
 
 ### The JSON format
 
@@ -1727,9 +1720,9 @@ struct StairData {
 
 **`#[derive(Deserialize)]`** — this is the magic. serde generates all the JSON parsing code at compile time. Field names must match the JSON keys (or you can use `#[serde(rename = "...")]` to customize).
 
-**`HashMap<String, String>`** — Rust's hash map (like Python's `dict` or JavaScript's `Map`). We use it for the legend that maps characters to tile type names.
+**`HashMap<String, String>`** — Rust's hash map (like Python's `dict`). We use it for the legend that maps characters to tile type names.
 
-**`(usize, usize)`** — a **tuple**. Like Python's `tuple` or TypeScript's `[number, number]`. Fixed-size, can hold different types (though here both are `usize`). serde maps JSON arrays like `[28, 7]` to tuples.
+**`(usize, usize)`** — a **tuple**. Like Python's `tuple`. Fixed-size, can hold different types (though here both are `usize`). serde maps JSON arrays like `[28, 7]` to tuples.
 
 **`#[allow(dead_code)]`** — suppresses the compiler warning about unused fields. We deserialize `width` and `height` from JSON but don't use them directly (we infer dimensions from the grid).
 
@@ -1882,30 +1875,30 @@ cargo run
 
 The map now loads from JSON! Edit the JSON file, re-run, and see your changes. Try adding a new room or moving the player spawn.
 
-> **Common mistake:** File path is relative to where you run `cargo run`, which is the project root. If you get "Failed to read maps/ground_floor.json", make sure you're running from `~/juk/marauders-map/`.
+> [!warning] Common Mistake
+> File path is relative to where you run `cargo run`, which is the project root. If you get "Failed to read maps/ground_floor.json", make sure you're running from `~/juk/marauders-map/`.
 
-### Checkpoint: Stage 7
 
-The map now lives in JSON — editable, shareable, and separate from your code. But we're only loading one floor. Hogwarts has seven floors plus dungeons, connected by staircases. Next, we'll load multiple floors and let the player climb between them.
-
-Key additions to `Cargo.toml`:
-```toml
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-```
-
-Key additions to code:
-- `MapFile`, `FloorData`, `RoomData`, `BoundsData`, `StairData` structs with `#[derive(Deserialize)]`
-- `load_floor()` converts JSON data to our `Floor` type
-- `load_map()` reads and parses the JSON file
-- `main()` loads from `maps/ground_floor.json` instead of calling `build_ground_floor()`
-
+> [!check] Checkpoint
+> The map now lives in JSON — editable, shareable, and separate from your code. But we're only loading one floor. Hogwarts has seven floors plus dungeons, connected by staircases. Next, we'll load multiple floors and let the player climb between them.
+>
+> Key additions to `Cargo.toml`:
+> ```toml
+> serde = { version = "1", features = ["derive"] }
+> serde_json = "1"
+> ```
+>
+> Key additions to code:
+> - `MapFile`, `FloorData`, `RoomData`, `BoundsData`, `StairData` structs with `#[derive(Deserialize)]`
+> - `load_floor()` converts JSON data to our `Floor` type
+> - `load_map()` reads and parses the JSON file
+> - `main()` loads from `maps/ground_floor.json` instead of calling `build_ground_floor()`
 
 ---
 
 ## Stage 8: Multiple Floors
 
-*Difficulty: Medium · Concepts: Vec of structs, state machines, keyboard shortcuts, index management*
+*Difficulty: Medium*
 
 Hogwarts isn't flat — it's a vertical labyrinth of seven floors, dungeons, and towers connected by staircases that like to move. A single-floor map is a corridor; a multi-floor map is a *castle*. This stage teaches you to manage a collection of complex structs, track which one is "active," and handle state transitions when the player steps on stairs. It's also your first taste of `Option` — Rust's elegant replacement for null.
 
@@ -2211,443 +2204,443 @@ cargo run
 
 Navigate to the stairs tile (`S`) on the Ground Floor and press `<` or `>`. You'll teleport to the First Floor! The title bar updates to show the new floor name and index. Navigate to the stairs on the First Floor to go back.
 
-> **Common mistake:** Forgetting to add stair connections in both directions. If floor A has stairs to floor B, floor B needs stairs back to floor A — otherwise you're stuck!
-
-
-### Checkpoint: Stage 8 — Full Code
-
-The parchment is drawn — multiple floors, stairs connecting them, a viewport that follows you through the castle. But the corridors are empty. In Act 2, we'll place a proper player on the map, add wall collision so Hogwarts feels solid, and build the status bar that makes the Map feel like a living artifact.
-
-**`Cargo.toml`:**
-```toml
-[package]
-name = "marauders-map"
-version = "0.1.0"
-edition = "2024"
-
-[dependencies]
-ratatui = "0.30"
-crossterm = "0.29"
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-```
-
-**`src/main.rs`:**
-```rust
-use std::collections::HashMap;
-use std::fmt;
-use std::fs;
-use std::time::Duration;
-
-use crossterm::event::{self, Event, KeyCode, KeyEventKind};
-use ratatui::Frame;
-use ratatui::style::{Color, Style};
-use ratatui::widgets::Block;
-use serde::Deserialize;
-
-// ── Tile ──────────────────────────────────────────────
-
-#[derive(Clone, Copy, Debug)]
-enum Tile {
-    Wall,
-    Floor,
-    Door,
-    Stairs,
-    Empty,
-}
-
-impl Tile {
-    fn to_char(self) -> char {
-        match self {
-            Tile::Wall => '#',
-            Tile::Floor => '.',
-            Tile::Door => 'D',
-            Tile::Stairs => 'S',
-            Tile::Empty => ' ',
-        }
-    }
-
-    fn style(self) -> Style {
-        match self {
-            Tile::Wall => Style::default().fg(Color::DarkGray),
-            Tile::Floor => Style::default().fg(Color::Gray),
-            Tile::Door => Style::default().fg(Color::Yellow),
-            Tile::Stairs => Style::default().fg(Color::Cyan),
-            Tile::Empty => Style::default(),
-        }
-    }
-}
-
-impl fmt::Display for Tile {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        write!(f, "{}", self.to_char())
-    }
-}
-
-// ── Room & Floor ──────────────────────────────────────
-
-struct Room {
-    id: String,
-    name: String,
-    x: usize,
-    y: usize,
-    width: usize,
-    height: usize,
-}
-
-struct StairConnection {
-    from_pos: (usize, usize),
-    destination_floor: u8,
-    destination_pos: (usize, usize),
-}
-
-struct Floor {
-    id: u8,
-    name: String,
-    grid: Vec<Vec<Tile>>,
-    rooms: Vec<Room>,
-    stairs: Vec<StairConnection>,
-}
-
-impl Floor {
-    fn new(id: u8, name: &str, width: usize, height: usize) -> Self {
-        Floor {
-            id,
-            name: name.to_string(),
-            grid: vec![vec![Tile::Empty; width]; height],
-            rooms: Vec::new(),
-            stairs: Vec::new(),
-        }
-    }
-
-    fn width(&self) -> usize {
-        if self.grid.is_empty() { 0 } else { self.grid[0].len() }
-    }
-
-    fn height(&self) -> usize {
-        self.grid.len()
-    }
-
-    fn set_tile(&mut self, x: usize, y: usize, tile: Tile) {
-        if y < self.height() && x < self.width() {
-            self.grid[y][x] = tile;
-        }
-    }
-}
-
-// ── Camera ────────────────────────────────────────────
-
-struct Camera {
-    x: usize,
-    y: usize,
-}
-
-impl Camera {
-    fn update(&mut self, player_x: usize, player_y: usize,
-              map_width: usize, map_height: usize,
-              view_width: usize, view_height: usize) {
-        let half_w = view_width / 2;
-        let half_h = view_height / 2;
-
-        let ideal_x = player_x.saturating_sub(half_w);
-        let ideal_y = player_y.saturating_sub(half_h);
-
-        let max_x = map_width.saturating_sub(view_width);
-        let max_y = map_height.saturating_sub(view_height);
-
-        self.x = ideal_x.min(max_x);
-        self.y = ideal_y.min(max_y);
-    }
-}
-
-// ── Game State ────────────────────────────────────────
-
-struct Game {
-    floors: Vec<Floor>,
-    current_floor: usize,
-    player_x: usize,
-    player_y: usize,
-    camera: Camera,
-    running: bool,
-}
-
-impl Game {
-    fn new(floors: Vec<Floor>, start_x: usize, start_y: usize) -> Self {
-        Game {
-            floors,
-            current_floor: 0,
-            player_x: start_x,
-            player_y: start_y,
-            camera: Camera { x: 0, y: 0 },
-            running: true,
-        }
-    }
-
-    fn move_player(&mut self, dx: i32, dy: i32) {
-        let new_x = self.player_x as i32 + dx;
-        let new_y = self.player_y as i32 + dy;
-
-        if new_x < 0 || new_y < 0 {
-            return;
-        }
-        let new_x = new_x as usize;
-        let new_y = new_y as usize;
-
-        let floor = &self.floors[self.current_floor];
-        if new_y >= floor.height() || new_x >= floor.width() {
-            return;
-        }
-
-        match floor.grid[new_y][new_x] {
-            Tile::Floor | Tile::Door | Tile::Stairs => {
-                self.player_x = new_x;
-                self.player_y = new_y;
-            }
-            _ => {}
-        }
-    }
-
-    fn use_stairs(&mut self) {
-        let floor = &self.floors[self.current_floor];
-        for stair in &floor.stairs {
-            if stair.from_pos == (self.player_x, self.player_y) {
-                let dest_floor_id = stair.destination_floor;
-                if let Some(idx) = self.floors.iter()
-                    .position(|f| f.id == dest_floor_id)
-                {
-                    self.current_floor = idx;
-                    self.player_x = stair.destination_pos.0;
-                    self.player_y = stair.destination_pos.1;
-                    return;
-                }
-            }
-        }
-    }
-}
-```
-
-```rust
-// ── JSON Data Structures ──────────────────────────────
-
-#[derive(Deserialize)]
-struct MapFile {
-    floors: Vec<FloorData>,
-}
-
-#[derive(Deserialize)]
-struct FloorData {
-    id: u8,
-    name: String,
-    #[allow(dead_code)]
-    width: usize,
-    #[allow(dead_code)]
-    height: usize,
-    grid: Vec<String>,
-    legend: HashMap<String, String>,
-    rooms: Vec<RoomData>,
-    stairs: Vec<StairDataJson>,
-    player_spawn: (usize, usize),
-}
-
-#[derive(Deserialize)]
-struct RoomData {
-    id: String,
-    name: String,
-    bounds: BoundsData,
-}
-
-#[derive(Deserialize)]
-struct BoundsData {
-    x: usize,
-    y: usize,
-    w: usize,
-    h: usize,
-}
-
-#[derive(Deserialize)]
-struct StairDataJson {
-    pos: (usize, usize),
-    destination_floor: u8,
-    destination_pos: (usize, usize),
-}
-
-// ── Map Loading ───────────────────────────────────────
-
-fn load_floor(data: &FloorData) -> (Floor, usize, usize) {
-    let height = data.grid.len();
-    let width = if height > 0 { data.grid[0].len() } else { 0 };
-
-    let mut floor = Floor::new(data.id, &data.name, width, height);
-    let mut spawn_x = data.player_spawn.0;
-    let mut spawn_y = data.player_spawn.1;
-
-    for (y, row_str) in data.grid.iter().enumerate() {
-        for (x, ch) in row_str.chars().enumerate() {
-            let ch_str = ch.to_string();
-            let tile_name = data.legend.get(&ch_str)
-                .map(|s| s.as_str())
-                .unwrap_or("Floor");
-
-            let tile = match tile_name {
-                "Wall" => Tile::Wall,
-                "Floor" => Tile::Floor,
-                "Door" => Tile::Door,
-                "Stairs" => Tile::Stairs,
-                "PlayerSpawn" => {
-                    spawn_x = x;
-                    spawn_y = y;
-                    Tile::Floor
-                }
-                _ => Tile::Empty,
-            };
-            floor.set_tile(x, y, tile);
-        }
-    }
-
-    for room_data in &data.rooms {
-        floor.rooms.push(Room {
-            id: room_data.id.clone(),
-            name: room_data.name.clone(),
-            x: room_data.bounds.x,
-            y: room_data.bounds.y,
-            width: room_data.bounds.w,
-            height: room_data.bounds.h,
-        });
-    }
-
-    for stair in &data.stairs {
-        floor.set_tile(stair.pos.0, stair.pos.1, Tile::Stairs);
-        floor.stairs.push(StairConnection {
-            from_pos: stair.pos,
-            destination_floor: stair.destination_floor,
-            destination_pos: stair.destination_pos,
-        });
-    }
-
-    (floor, spawn_x, spawn_y)
-}
-
-fn load_map(path: &str) -> Result<(Vec<Floor>, usize, usize), String> {
-    let contents = fs::read_to_string(path)
-        .map_err(|e| format!("Failed to read {}: {}", path, e))?;
-
-    let map_file: MapFile = serde_json::from_str(&contents)
-        .map_err(|e| format!("Failed to parse JSON: {}", e))?;
-
-    if map_file.floors.is_empty() {
-        return Err("No floors in map file".to_string());
-    }
-
-    let mut floors = Vec::new();
-    let mut spawn_x = 0;
-    let mut spawn_y = 0;
-
-    for (i, floor_data) in map_file.floors.iter().enumerate() {
-        let (floor, sx, sy) = load_floor(floor_data);
-        if i == 0 {
-            spawn_x = sx;
-            spawn_y = sy;
-        }
-        floors.push(floor);
-    }
-
-    Ok((floors, spawn_x, spawn_y))
-}
-
-// ── Rendering ─────────────────────────────────────────
-
-fn render(frame: &mut Frame, game: &mut Game) {
-    let area = frame.area();
-
-    let floor = &game.floors[game.current_floor];
-    let title = format!(
-        " The Marauder's Map — {} [{}/{}] — [q]uit [arrows] move [</>] stairs ",
-        floor.name,
-        game.current_floor + 1,
-        game.floors.len(),
-    );
-    let block = Block::bordered().title(title);
-    let inner = block.inner(area);
-    frame.render_widget(block, area);
-
-    game.camera.update(
-        game.player_x, game.player_y,
-        floor.width(), floor.height(),
-        inner.width as usize, inner.height as usize,
-    );
-
-    let buf = frame.buffer_mut();
-
-    for screen_y in 0..inner.height {
-        for screen_x in 0..inner.width {
-            let map_x = game.camera.x + screen_x as usize;
-            let map_y = game.camera.y + screen_y as usize;
-
-            let draw_x = inner.x + screen_x;
-            let draw_y = inner.y + screen_y;
-
-            if map_y >= floor.height() || map_x >= floor.width() {
-                buf.set_string(draw_x, draw_y, " ", Style::default());
-                continue;
-            }
-
-            if map_x == game.player_x && map_y == game.player_y {
-                buf.set_string(
-                    draw_x, draw_y, "@",
-                    Style::default().fg(Color::Green),
-                );
-            } else {
-                let tile = floor.grid[map_y][map_x];
-                buf.set_string(
-                    draw_x, draw_y,
-                    tile.to_char().to_string(),
-                    tile.style(),
-                );
-            }
-        }
-    }
-}
-
-fn handle_input(game: &mut Game) -> std::io::Result<()> {
-    if event::poll(Duration::from_millis(50))? {
-        if let Event::Key(key) = event::read()? {
-            if key.kind == KeyEventKind::Press {
-                match key.code {
-                    KeyCode::Char('q') | KeyCode::Esc => game.running = false,
-                    KeyCode::Up | KeyCode::Char('w') => game.move_player(0, -1),
-                    KeyCode::Down | KeyCode::Char('s') => game.move_player(0, 1),
-                    KeyCode::Left | KeyCode::Char('a') => game.move_player(-1, 0),
-                    KeyCode::Right | KeyCode::Char('d') => game.move_player(1, 0),
-                    KeyCode::Char('<') | KeyCode::Char('>') => game.use_stairs(),
-                    _ => {}
-                }
-            }
-        }
-    }
-    Ok(())
-}
-
-// ── Main ──────────────────────────────────────────────
-
-fn main() -> std::io::Result<()> {
-    let map_path = "maps/ground_floor.json";
-    let (floors, spawn_x, spawn_y) = load_map(map_path)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
-
-    let mut game = Game::new(floors, spawn_x, spawn_y);
-
-    let mut terminal = ratatui::init();
-
-    while game.running {
-        terminal.draw(|frame| render(frame, &mut game))?;
-        handle_input(&mut game)?;
-    }
-
-    ratatui::restore();
-    Ok(())
-}
-```
-
+> [!warning] Common Mistake
+> Forgetting to add stair connections in both directions. If floor A has stairs to floor B, floor B needs stairs back to floor A — otherwise you're stuck!
+
+
+
+> [!check] Checkpoint
+> The parchment is drawn — multiple floors, stairs connecting them, a viewport that follows you through the castle. But the corridors are empty. In Act 2, we'll place a proper player on the map, add wall collision so Hogwarts feels solid, and build the status bar that makes the Map feel like a living artifact.
+>
+> **`Cargo.toml`:**
+> ```toml
+> [package]
+> name = "marauders-map"
+> version = "0.1.0"
+> edition = "2024"
+>
+> [dependencies]
+> ratatui = "0.30"
+> crossterm = "0.29"
+> serde = { version = "1", features = ["derive"] }
+> serde_json = "1"
+> ```
+>
+> **`src/main.rs`:**
+> ```rust
+> use std::collections::HashMap;
+> use std::fmt;
+> use std::fs;
+> use std::time::Duration;
+>
+> use crossterm::event::{self, Event, KeyCode, KeyEventKind};
+> use ratatui::Frame;
+> use ratatui::style::{Color, Style};
+> use ratatui::widgets::Block;
+> use serde::Deserialize;
+>
+> // ── Tile ──────────────────────────────────────────────
+>
+> #[derive(Clone, Copy, Debug)]
+> enum Tile {
+>     Wall,
+>     Floor,
+>     Door,
+>     Stairs,
+>     Empty,
+> }
+>
+> impl Tile {
+>     fn to_char(self) -> char {
+>         match self {
+>             Tile::Wall => '#',
+>             Tile::Floor => '.',
+>             Tile::Door => 'D',
+>             Tile::Stairs => 'S',
+>             Tile::Empty => ' ',
+>         }
+>     }
+>
+>     fn style(self) -> Style {
+>         match self {
+>             Tile::Wall => Style::default().fg(Color::DarkGray),
+>             Tile::Floor => Style::default().fg(Color::Gray),
+>             Tile::Door => Style::default().fg(Color::Yellow),
+>             Tile::Stairs => Style::default().fg(Color::Cyan),
+>             Tile::Empty => Style::default(),
+>         }
+>     }
+> }
+>
+> impl fmt::Display for Tile {
+>     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+>         write!(f, "{}", self.to_char())
+>     }
+> }
+>
+> // ── Room & Floor ──────────────────────────────────────
+>
+> struct Room {
+>     id: String,
+>     name: String,
+>     x: usize,
+>     y: usize,
+>     width: usize,
+>     height: usize,
+> }
+>
+> struct StairConnection {
+>     from_pos: (usize, usize),
+>     destination_floor: u8,
+>     destination_pos: (usize, usize),
+> }
+>
+> struct Floor {
+>     id: u8,
+>     name: String,
+>     grid: Vec<Vec<Tile>>,
+>     rooms: Vec<Room>,
+>     stairs: Vec<StairConnection>,
+> }
+>
+> impl Floor {
+>     fn new(id: u8, name: &str, width: usize, height: usize) -> Self {
+>         Floor {
+>             id,
+>             name: name.to_string(),
+>             grid: vec![vec![Tile::Empty; width]; height],
+>             rooms: Vec::new(),
+>             stairs: Vec::new(),
+>         }
+>     }
+>
+>     fn width(&self) -> usize {
+>         if self.grid.is_empty() { 0 } else { self.grid[0].len() }
+>     }
+>
+>     fn height(&self) -> usize {
+>         self.grid.len()
+>     }
+>
+>     fn set_tile(&mut self, x: usize, y: usize, tile: Tile) {
+>         if y < self.height() && x < self.width() {
+>             self.grid[y][x] = tile;
+>         }
+>     }
+> }
+>
+> // ── Camera ────────────────────────────────────────────
+>
+> struct Camera {
+>     x: usize,
+>     y: usize,
+> }
+>
+> impl Camera {
+>     fn update(&mut self, player_x: usize, player_y: usize,
+>               map_width: usize, map_height: usize,
+>               view_width: usize, view_height: usize) {
+>         let half_w = view_width / 2;
+>         let half_h = view_height / 2;
+>
+>         let ideal_x = player_x.saturating_sub(half_w);
+>         let ideal_y = player_y.saturating_sub(half_h);
+>
+>         let max_x = map_width.saturating_sub(view_width);
+>         let max_y = map_height.saturating_sub(view_height);
+>
+>         self.x = ideal_x.min(max_x);
+>         self.y = ideal_y.min(max_y);
+>     }
+> }
+>
+> // ── Game State ────────────────────────────────────────
+>
+> struct Game {
+>     floors: Vec<Floor>,
+>     current_floor: usize,
+>     player_x: usize,
+>     player_y: usize,
+>     camera: Camera,
+>     running: bool,
+> }
+>
+> impl Game {
+>     fn new(floors: Vec<Floor>, start_x: usize, start_y: usize) -> Self {
+>         Game {
+>             floors,
+>             current_floor: 0,
+>             player_x: start_x,
+>             player_y: start_y,
+>             camera: Camera { x: 0, y: 0 },
+>             running: true,
+>         }
+>     }
+>
+>     fn move_player(&mut self, dx: i32, dy: i32) {
+>         let new_x = self.player_x as i32 + dx;
+>         let new_y = self.player_y as i32 + dy;
+>
+>         if new_x < 0 || new_y < 0 {
+>             return;
+>         }
+>         let new_x = new_x as usize;
+>         let new_y = new_y as usize;
+>
+>         let floor = &self.floors[self.current_floor];
+>         if new_y >= floor.height() || new_x >= floor.width() {
+>             return;
+>         }
+>
+>         match floor.grid[new_y][new_x] {
+>             Tile::Floor | Tile::Door | Tile::Stairs => {
+>                 self.player_x = new_x;
+>                 self.player_y = new_y;
+>             }
+>             _ => {}
+>         }
+>     }
+>
+>     fn use_stairs(&mut self) {
+>         let floor = &self.floors[self.current_floor];
+>         for stair in &floor.stairs {
+>             if stair.from_pos == (self.player_x, self.player_y) {
+>                 let dest_floor_id = stair.destination_floor;
+>                 if let Some(idx) = self.floors.iter()
+>                     .position(|f| f.id == dest_floor_id)
+>                 {
+>                     self.current_floor = idx;
+>                     self.player_x = stair.destination_pos.0;
+>                     self.player_y = stair.destination_pos.1;
+>                     return;
+>                 }
+>             }
+>         }
+>     }
+> }
+> ```
+>
+> ```rust
+> // ── JSON Data Structures ──────────────────────────────
+>
+> #[derive(Deserialize)]
+> struct MapFile {
+>     floors: Vec<FloorData>,
+> }
+>
+> #[derive(Deserialize)]
+> struct FloorData {
+>     id: u8,
+>     name: String,
+>     #[allow(dead_code)]
+>     width: usize,
+>     #[allow(dead_code)]
+>     height: usize,
+>     grid: Vec<String>,
+>     legend: HashMap<String, String>,
+>     rooms: Vec<RoomData>,
+>     stairs: Vec<StairDataJson>,
+>     player_spawn: (usize, usize),
+> }
+>
+> #[derive(Deserialize)]
+> struct RoomData {
+>     id: String,
+>     name: String,
+>     bounds: BoundsData,
+> }
+>
+> #[derive(Deserialize)]
+> struct BoundsData {
+>     x: usize,
+>     y: usize,
+>     w: usize,
+>     h: usize,
+> }
+>
+> #[derive(Deserialize)]
+> struct StairDataJson {
+>     pos: (usize, usize),
+>     destination_floor: u8,
+>     destination_pos: (usize, usize),
+> }
+>
+> // ── Map Loading ───────────────────────────────────────
+>
+> fn load_floor(data: &FloorData) -> (Floor, usize, usize) {
+>     let height = data.grid.len();
+>     let width = if height > 0 { data.grid[0].len() } else { 0 };
+>
+>     let mut floor = Floor::new(data.id, &data.name, width, height);
+>     let mut spawn_x = data.player_spawn.0;
+>     let mut spawn_y = data.player_spawn.1;
+>
+>     for (y, row_str) in data.grid.iter().enumerate() {
+>         for (x, ch) in row_str.chars().enumerate() {
+>             let ch_str = ch.to_string();
+>             let tile_name = data.legend.get(&ch_str)
+>                 .map(|s| s.as_str())
+>                 .unwrap_or("Floor");
+>
+>             let tile = match tile_name {
+>                 "Wall" => Tile::Wall,
+>                 "Floor" => Tile::Floor,
+>                 "Door" => Tile::Door,
+>                 "Stairs" => Tile::Stairs,
+>                 "PlayerSpawn" => {
+>                     spawn_x = x;
+>                     spawn_y = y;
+>                     Tile::Floor
+>                 }
+>                 _ => Tile::Empty,
+>             };
+>             floor.set_tile(x, y, tile);
+>         }
+>     }
+>
+>     for room_data in &data.rooms {
+>         floor.rooms.push(Room {
+>             id: room_data.id.clone(),
+>             name: room_data.name.clone(),
+>             x: room_data.bounds.x,
+>             y: room_data.bounds.y,
+>             width: room_data.bounds.w,
+>             height: room_data.bounds.h,
+>         });
+>     }
+>
+>     for stair in &data.stairs {
+>         floor.set_tile(stair.pos.0, stair.pos.1, Tile::Stairs);
+>         floor.stairs.push(StairConnection {
+>             from_pos: stair.pos,
+>             destination_floor: stair.destination_floor,
+>             destination_pos: stair.destination_pos,
+>         });
+>     }
+>
+>     (floor, spawn_x, spawn_y)
+> }
+>
+> fn load_map(path: &str) -> Result<(Vec<Floor>, usize, usize), String> {
+>     let contents = fs::read_to_string(path)
+>         .map_err(|e| format!("Failed to read {}: {}", path, e))?;
+>
+>     let map_file: MapFile = serde_json::from_str(&contents)
+>         .map_err(|e| format!("Failed to parse JSON: {}", e))?;
+>
+>     if map_file.floors.is_empty() {
+>         return Err("No floors in map file".to_string());
+>     }
+>
+>     let mut floors = Vec::new();
+>     let mut spawn_x = 0;
+>     let mut spawn_y = 0;
+>
+>     for (i, floor_data) in map_file.floors.iter().enumerate() {
+>         let (floor, sx, sy) = load_floor(floor_data);
+>         if i == 0 {
+>             spawn_x = sx;
+>             spawn_y = sy;
+>         }
+>         floors.push(floor);
+>     }
+>
+>     Ok((floors, spawn_x, spawn_y))
+> }
+>
+> // ── Rendering ─────────────────────────────────────────
+>
+> fn render(frame: &mut Frame, game: &mut Game) {
+>     let area = frame.area();
+>
+>     let floor = &game.floors[game.current_floor];
+>     let title = format!(
+>         " The Marauder's Map — {} [{}/{}] — [q]uit [arrows] move [</>] stairs ",
+>         floor.name,
+>         game.current_floor + 1,
+>         game.floors.len(),
+>     );
+>     let block = Block::bordered().title(title);
+>     let inner = block.inner(area);
+>     frame.render_widget(block, area);
+>
+>     game.camera.update(
+>         game.player_x, game.player_y,
+>         floor.width(), floor.height(),
+>         inner.width as usize, inner.height as usize,
+>     );
+>
+>     let buf = frame.buffer_mut();
+>
+>     for screen_y in 0..inner.height {
+>         for screen_x in 0..inner.width {
+>             let map_x = game.camera.x + screen_x as usize;
+>             let map_y = game.camera.y + screen_y as usize;
+>
+>             let draw_x = inner.x + screen_x;
+>             let draw_y = inner.y + screen_y;
+>
+>             if map_y >= floor.height() || map_x >= floor.width() {
+>                 buf.set_string(draw_x, draw_y, " ", Style::default());
+>                 continue;
+>             }
+>
+>             if map_x == game.player_x && map_y == game.player_y {
+>                 buf.set_string(
+>                     draw_x, draw_y, "@",
+>                     Style::default().fg(Color::Green),
+>                 );
+>             } else {
+>                 let tile = floor.grid[map_y][map_x];
+>                 buf.set_string(
+>                     draw_x, draw_y,
+>                     tile.to_char().to_string(),
+>                     tile.style(),
+>                 );
+>             }
+>         }
+>     }
+> }
+>
+> fn handle_input(game: &mut Game) -> std::io::Result<()> {
+>     if event::poll(Duration::from_millis(50))? {
+>         if let Event::Key(key) = event::read()? {
+>             if key.kind == KeyEventKind::Press {
+>                 match key.code {
+>                     KeyCode::Char('q') | KeyCode::Esc => game.running = false,
+>                     KeyCode::Up | KeyCode::Char('w') => game.move_player(0, -1),
+>                     KeyCode::Down | KeyCode::Char('s') => game.move_player(0, 1),
+>                     KeyCode::Left | KeyCode::Char('a') => game.move_player(-1, 0),
+>                     KeyCode::Right | KeyCode::Char('d') => game.move_player(1, 0),
+>                     KeyCode::Char('<') | KeyCode::Char('>') => game.use_stairs(),
+>                     _ => {}
+>                 }
+>             }
+>         }
+>     }
+>     Ok(())
+> }
+>
+> // ── Main ──────────────────────────────────────────────
+>
+> fn main() -> std::io::Result<()> {
+>     let map_path = "maps/ground_floor.json";
+>     let (floors, spawn_x, spawn_y) = load_map(map_path)
+>         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e))?;
+>
+>     let mut game = Game::new(floors, spawn_x, spawn_y);
+>
+>     let mut terminal = ratatui::init();
+>
+>     while game.running {
+>         terminal.draw(|frame| render(frame, &mut game))?;
+>         handle_input(&mut game)?;
+>     }
+>
+>     ratatui::restore();
+>     Ok(())
+> }
+> ```
 
 ---
 

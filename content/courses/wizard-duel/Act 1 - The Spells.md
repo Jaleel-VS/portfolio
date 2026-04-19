@@ -5,7 +5,7 @@
 
 Welcome to Act 1. By the end of these 8 stages you will have a fully working **Wizard Duel Engine** running in your terminal — two wizards, eighteen spells, status effects, type advantages, and a turn-based combat loop. No GUI, no frameworks — just pure Rust, `cargo test`, and `cargo run`.
 
-Every line of code is explained. If you have written Python or TypeScript before, you will feel at home — I will point out the differences as we go.
+Every line of code is explained. If you have written Python before, you will feel at home — I will point out the differences as we go.
 
 ```mermaid
 graph LR
@@ -31,7 +31,8 @@ graph LR
 
 ## Stage 1 — Hello Wizard
 
-**Difficulty: Very Easy** | **Concepts: Cargo, project structure, main.rs, println!**
+*Difficulty: Very Easy*
+
 
 Before you can duel, you need a wand — and before you can write Rust, you need a project. This stage exists because every spell you cast later depends on a properly structured workspace. Think of it as your first visit to Ollivanders: nothing flashy, but without it, nothing else works.
 
@@ -50,7 +51,7 @@ This creates a directory with two files:
 
 ```
 wizard_duel/
-├── Cargo.toml    ← project manifest (like package.json or pyproject.toml)
+├── Cargo.toml    ← project manifest (like pyproject.toml)
 └── src/
     └── main.rs   ← your code starts here
 ```
@@ -70,10 +71,10 @@ edition = "2021"
 
 | Field | What it does | Equivalent |
 |-------|-------------|------------|
-| `name` | Project name | `"name"` in package.json |
+| `name` | Project name | `name` in pyproject.toml |
 | `version` | Semantic version | Same everywhere |
 | `edition` | Rust language edition (2021 is current) | No direct equivalent — Rust evolves in editions |
-| `[dependencies]` | External crates (libraries) | `"dependencies"` in package.json |
+| `[dependencies]` | External crates (libraries) | `[project.dependencies]` in pyproject.toml |
 
 We will add our first dependency (`rand`) in Stage 6. For now this is all we need.
 
@@ -88,7 +89,7 @@ Replace the contents of `src/main.rs` with:
 // In Python you'd write `if __name__ == "__main__":`. In Rust, `fn main()` IS that.
 fn main() {
     // `println!` is a macro (note the `!`). It prints to stdout with a newline.
-    // The `{}` is a placeholder, like f-string `{}` in Python or `${}` in JS template literals.
+    // The `{}` is a placeholder, like f-string `{}` in Python.
     let wizard_name = "Harry Potter";  // `let` declares a variable. Immutable by default!
     let house = "Gryffindor";
 
@@ -106,7 +107,7 @@ fn main() {
 
 - **`let`** — declares a variable. Immutable by default. In Python everything is mutable; in Rust you must opt in with `let mut`.
 - **`&str`** — the type of `"Hello"`. It is a *string slice* — a reference to text stored somewhere. Think of it as a read-only view. (We will meet `String`, the owned version, in Stage 4.)
-- **`;`** — every statement ends with a semicolon. Unlike JavaScript, this is not optional.
+- **`;`** — every statement ends with a semicolon.
 - **`println!`** — the `!` means it is a macro, not a function. Macros can do things functions cannot (like accept variable numbers of arguments). For now, just remember: `println!` prints, `!` means macro.
 
 ### 1.4 — Run it
@@ -142,23 +143,25 @@ running 0 tests
 test result: ok. 0 passed; 0 filtered out; finished in 0.00s
 ```
 
-> **Common mistake:** Forgetting the semicolon. Rust will give you a helpful error — read it! Rust's compiler errors are famously good.
+> [!warning] Common Mistake
+> Forgetting the semicolon. Rust will give you a helpful error — read it! Rust's compiler errors are famously good.
 
-### Checkpoint 1
 
-You have a working wand — now you need spells to cast with it. Stage 2 introduces the data structures that define every spell in the game.
-
-You have a Rust project that compiles and runs. You understand `Cargo.toml`, `fn main()`, `let`, `println!`, and `cargo run`. Time to define some spells.
+> [!check] Checkpoint: 1
+> You have a working wand — now you need spells to cast with it. Stage 2 introduces the data structures that define every spell in the game.
+>
+> You have a Rust project that compiles and runs. You understand `Cargo.toml`, `fn main()`, `let`, `println!`, and `cargo run`. Time to define some spells.
 
 ---
 
 ## Stage 2 — The Spell
 
-**Difficulty: Easy** | **Concepts: enums, structs, derive macros, Vec, Option**
+*Difficulty: Easy*
+
 
 A duel engine without spells is just two wizards staring at each other. This stage builds the data backbone of the entire game — every combat calculation, every AI decision, and every UI display will read from the types you define here. Getting the data model right now saves you from painful refactors later.
 
-In Python you might model a spell as a dictionary or a dataclass. In TypeScript, an interface. In Rust, we use **structs** (data) and **enums** (variants).
+In Python you might model a spell as a dictionary or a dataclass. In Rust, we use **structs** (data) and **enums** (variants).
 
 ### 2.1 — Spell types: your first enum
 
@@ -258,15 +261,18 @@ struct Spell {
 
 **Key concepts:**
 
-| Rust | Python | TypeScript | Notes |
-|------|--------|-----------|-------|
-| `String` | `str` | `string` | Owned, heap-allocated, growable |
-| `&str` | — | — | Borrowed string slice (read-only view) |
-| `u8` | `int` | `number` | Unsigned 8-bit integer (0–255) |
-| `Option<T>` | `Optional[T]` | `T \| null` | Either `Some(value)` or `None` |
-| `Vec<T>` | `list[T]` | `T[]` | Growable array |
+| Rust | Python | Notes |
+|------|--------|-------|
+| `String` | `str` | Owned, heap-allocated, growable |
+| `&str` | — | Borrowed string slice (read-only view) |
+| `u8` | `int` | Unsigned 8-bit integer (0–255) |
+| `Option<T>` | `Optional[T]` | Either `Some(value)` or `None` |
+| `Vec<T>` | `list[T]` | Growable array |
 
 **`Option<StatusEffect>`** is Rust's way of saying "this might or might not have a value." There is no `null` in Rust. Instead, you explicitly wrap values in `Some(...)` or use `None`. The compiler forces you to handle both cases — no more `NullPointerException` or `undefined is not a function`.
+
+> [!note] Why `shield` appears twice on Protego
+> You might notice that `shield` appears both as a direct field and inside `StatusEffect::Shield`. The `shield` field is what the combat engine reads to *apply* shield points to the caster immediately. The `StatusEffect::Shield` in the `effect` field is used for *display* — it shows up in the status effect ticker so the player sees "has a shield with X HP remaining" each turn. The direct field does the mechanical work; the status effect provides the visual feedback. They're intentionally kept in sync (both `15` for Protego, both `30` for Protego Maxima).
 
 ### 2.4 — Create the spell book
 
@@ -580,19 +586,21 @@ cargo run
 
 You should see all 18 spells printed with their stats.
 
-> **Common mistake:** Forgetting `#[derive(PartialEq)]` on `SpellType` and then trying to use `==`. The compiler will tell you: *"binary operation `==` cannot be applied to type `SpellType`"*. The fix is always in the error message — Rust's compiler is your best teacher.
+> [!warning] Common Mistake
+> Forgetting `#[derive(PartialEq)]` on `SpellType` and then trying to use `==`. The compiler will tell you: *"binary operation `==` cannot be applied to type `SpellType`"*. The fix is always in the error message — Rust's compiler is your best teacher.
 
-### Checkpoint 2
 
-We have a full arsenal of spells, but no rules for how they interact. Stage 3 introduces the type triangle — the rock-paper-scissors mechanic that makes spell choice strategic instead of random.
-
-You have 18 spells organized into three schools. You understand enums, structs, `Option`, `Vec`, `String` vs `&str`, and `derive` macros. Your tests pass. Time to make these types fight.
+> [!check] Checkpoint: 2
+> We have a full arsenal of spells, but no rules for how they interact. Stage 3 introduces the type triangle — the rock-paper-scissors mechanic that makes spell choice strategic instead of random.
+>
+> You have 18 spells organized into three schools. You understand enums, structs, `Option`, `Vec`, `String` vs `&str`, and `derive` macros. Your tests pass. Time to make these types fight.
 
 ---
 
 ## Stage 3 — The Type Triangle
 
-**Difficulty: Easy** | **Concepts: match expressions, impl blocks, methods, unit tests**
+*Difficulty: Easy*
+
 
 Without type advantages, every duel devolves into "cast your highest-damage spell repeatedly." The type triangle forces players to *think* — to read their opponent and counter-pick. It's also your first encounter with `match`, Rust's most powerful control flow tool, and `impl` blocks, which let you attach behavior to your types.
 
@@ -815,19 +823,21 @@ cargo run
   Cunning    vs Cunning    → ~ DRAW
 ```
 
-> **Common mistake:** Using `_` too early in a match. If you write `_ => Advantage::Clash` before the specific cases, it will match everything and the specific arms become unreachable. Rust warns you about this — always put the wildcard last.
+> [!warning] Common Mistake
+> Using `_` too early in a match. If you write `_ => Advantage::Clash` before the specific cases, it will match everything and the specific arms become unreachable. Rust warns you about this — always put the wildcard last.
 
-### Checkpoint 3
 
-Spells now have strategic weight — but there's nobody to wield them. Stage 4 creates the Wizard struct, complete with HP, mana, house bonuses, and a spell loadout.
-
-The type triangle works and is fully tested. You understand `match`, `impl` blocks, methods with `&self`, and exhaustive pattern matching. Now let's create the wizards who will wield these spells.
+> [!check] Checkpoint: 3
+> Spells now have strategic weight — but there's nobody to wield them. Stage 4 creates the Wizard struct, complete with HP, mana, house bonuses, and a spell loadout.
+>
+> The type triangle works and is fully tested. You understand `match`, `impl` blocks, methods with `&self`, and exhaustive pattern matching. Now let's create the wizards who will wield these spells.
 
 ---
 
 ## Stage 4 — The Wizard
 
-**Difficulty: Easy** | **Concepts: structs with methods, Display trait, String formatting, House bonuses**
+*Difficulty: Easy*
+
 
 Spells are just data until someone casts them. A wizard bundles together everything the duel engine needs to track a combatant: health, mana, equipped spells, active effects, and win/loss history. This is also where you learn how Rust attaches behavior to data through `impl` blocks and traits — the foundation for every method you'll write from here on.
 
@@ -952,11 +962,6 @@ This is like a Python generator pipeline:
 list(itertools.islice(filter(lambda s: s.unlock_level <= level, spell_book), spell_slots))
 ```
 
-Or in TS:
-```typescript
-spellBook.filter(s => s.unlockLevel <= level).slice(0, spellSlots)
-```
-
 Rust iterators are *lazy* — nothing happens until `.collect()` consumes them. This is efficient: no intermediate arrays are created.
 
 ### 4.4 — Implement Display
@@ -1068,23 +1073,25 @@ cargo test
 
 All 17 tests should pass. `cargo run` should show both wizards with their stats and spell loadouts.
 
-> **Common mistake:** Trying to modify a wizard without `let mut`. If you write `let harry = Wizard::new(...)` and then try `harry.hp -= 10`, the compiler says *"cannot assign to `harry.hp`, as `harry` is not declared as mutable."* Fix: `let mut harry = ...`.
+> [!warning] Common Mistake
+> Trying to modify a wizard without `let mut`. If you write `let harry = Wizard::new(...)` and then try `harry.hp -= 10`, the compiler says *"cannot assign to `harry.hp`, as `harry` is not declared as mutable."* Fix: `let mut harry = ...`.
 
-### Checkpoint 4
 
-Your wizards are ready for battle — but they can't actually cast anything yet. Stage 5 introduces the `cast` method and your first real encounter with Rust's borrow checker.
-
-You have wizards with house bonuses, spell loadouts, and a Display trait. You understand structs, `impl` blocks, constructors, iterator chains, and the `Display` trait. Time to cast some spells.
+> [!check] Checkpoint: 4
+> Your wizards are ready for battle — but they can't actually cast anything yet. Stage 5 introduces the `cast` method and your first real encounter with Rust's borrow checker.
+>
+> You have wizards with house bonuses, spell loadouts, and a Display trait. You understand structs, `impl` blocks, constructors, iterator chains, and the `Display` trait. Time to cast some spells.
 
 ---
 
 ## Stage 5 — Cast a Spell
 
-**Difficulty: Medium** | **Concepts: Result type, error handling, &self vs &mut self, borrowing**
+*Difficulty: Medium*
+
 
 Casting a spell is the first action that *changes* game state — it deducts mana and can fail if you're tapped out. This is where Rust's ownership model stops being theoretical and starts being practical. You'll learn how Rust replaces exceptions with `Result`, and you'll meet the borrow checker for real when you try to read a spell and mutate a wizard at the same time.
 
-In Python, if something goes wrong you raise an exception. In JavaScript, you throw an Error. Rust does not have exceptions. Instead, it uses the `Result` type — a value that is either `Ok(success)` or `Err(failure)`. The compiler forces you to handle both cases.
+In Python, if something goes wrong you raise an exception. Rust does not have exceptions. Instead, it uses the `Result` type — a value that is either `Ok(success)` or `Err(failure)`. The compiler forces you to handle both cases.
 
 ### 5.1 — The cast method
 
@@ -1248,7 +1255,7 @@ wizard.cast(spell);                 // mutable borrow of wizard — CONFLICT!
 
 The fix: `.clone()` creates an independent copy, so `spell` no longer borrows from `wizard`. This is your first real encounter with the **borrow checker** — Rust's signature feature that prevents data races and use-after-free bugs at compile time.
 
-> **Python/TS comparison:** In Python, you can freely read and write the same object from multiple references. This is convenient but leads to subtle bugs (modifying a list while iterating over it, for example). Rust prevents this entire class of bugs at compile time.
+> **Python comparison:** In Python, you can freely read and write the same object from multiple references. This is convenient but leads to subtle bugs (modifying a list while iterating over it, for example). Rust prevents this entire class of bugs at compile time.
 
 ### 5.4 — Verify
 
@@ -1258,19 +1265,21 @@ cargo test
 
 All 21 tests should pass.
 
-> **Common mistake:** Trying to borrow `wizard.spells[0]` and then call `wizard.cast()`. The compiler error will say something like *"cannot borrow `wizard` as mutable because it is also borrowed as immutable."* The fix is always to `.clone()` the spell first, or restructure so the borrows don't overlap.
+> [!warning] Common Mistake
+> Trying to borrow `wizard.spells[0]` and then call `wizard.cast()`. The compiler error will say something like *"cannot borrow `wizard` as mutable because it is also borrowed as immutable."* The fix is always to `.clone()` the spell first, or restructure so the borrows don't overlap.
 
-### Checkpoint 5
 
-Spells can be cast and mana is tracked — but what happens when the spell actually *hits*? Stage 6 builds the damage resolution engine that turns a cast into concrete HP changes, shield absorption, and status effects.
-
-Wizards can cast spells, mana is deducted, and errors are handled with `Result`. You have met the borrow checker and survived. Now let's resolve what happens when a spell hits.
+> [!check] Checkpoint: 5
+> Spells can be cast and mana is tracked — but what happens when the spell actually *hits*? Stage 6 builds the damage resolution engine that turns a cast into concrete HP changes, shield absorption, and status effects.
+>
+> Wizards can cast spells, mana is deducted, and errors are handled with `Result`. You have met the borrow checker and survived. Now let's resolve what happens when a spell hits.
 
 ---
 
 ## Stage 6 — Damage Resolution
 
-**Difficulty: Medium** | **Concepts: external crates, Cargo.toml dependencies, rand, f32 math, complex game logic**
+*Difficulty: Medium*
+
 
 This is the heart of the combat engine — the function that turns "wizard casts spell" into actual game consequences. Without resolution, casting a spell is just subtracting mana. Here you wire together type advantages, damage variance, shields, healing, and status effects into a single coherent pipeline. You'll also pull in your first external crate (`rand`), learning how Rust's ecosystem works.
 
@@ -1287,10 +1296,10 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-rand = "0.8"
+rand = "0.9"
 ```
 
-This is like `npm install rand` or `pip install rand`. Cargo downloads it automatically on the next build.
+This is like `pip install rand`. Cargo downloads it automatically on the next build.
 
 Add the import at the top of `main.rs`:
 
@@ -1332,7 +1341,7 @@ fn resolve_spell(
     spell: &Spell,
     target_spell_type: &SpellType, // What the target cast (for type comparison)
 ) -> CastResult {
-    let mut rng = rand::thread_rng();
+    let mut rng = rand::rng();
 
     // --- Step 1: Type advantage ---
     let advantage = spell.spell_type.advantage_against(target_spell_type);
@@ -1485,7 +1494,7 @@ fn resolve_spell(
 
 **That is a lot of code.** Let's break down the key Rust concepts:
 
-- **`rand::thread_rng()`** — creates a random number generator. `.gen_range(0.9..=1.1)` generates a float between 0.9 and 1.1 inclusive.
+- **`rand::rng()`** — creates a random number generator. `.gen_range(0.9..=1.1)` generates a float between 0.9 and 1.1 inclusive.
 - **`as f32` / `as u8`** — type casting. Rust never implicitly converts between numeric types. You must be explicit. In Python, `int * float` just works. In Rust, you must cast.
 - **`.saturating_add()`** — adds without overflowing. If the result would exceed `u8::MAX` (255), it clamps to 255 instead of panicking.
 - **`if let Some(ref effect) = spell.effect`** — destructures the Option. `ref` borrows the inner value instead of moving it.
@@ -1630,19 +1639,21 @@ cargo test
 
 All 26 tests should pass. The `rand` crate will be downloaded and compiled on the first run.
 
-> **Common mistake:** Forgetting `use rand::Rng;` at the top. Without it, `.gen_range()` is not available and the compiler says *"no method named `gen_range` found."* Traits must be in scope to use their methods — this is different from Python where methods are always available.
+> [!warning] Common Mistake
+> Forgetting `use rand::Rng;` at the top. Without it, `.gen_range()` is not available and the compiler says *"no method named `gen_range` found."* Traits must be in scope to use their methods — this is different from Python where methods are always available.
 
-### Checkpoint 6
 
-Spells now deal real damage with all the modifiers applied — but status effects are fire-and-forget. Stage 7 makes them *tick* each turn, adding the persistent pressure that separates a good duelist from a great one.
-
-The combat engine resolves spells with type advantages, damage variance, shields, healing, and mana steal. You understand external crates, `Cargo.toml` dependencies, type casting, and complex game logic. Now let's make status effects tick.
+> [!check] Checkpoint: 6
+> Spells now deal real damage with all the modifiers applied — but status effects are fire-and-forget. Stage 7 makes them *tick* each turn, adding the persistent pressure that separates a good duelist from a great one.
+>
+> The combat engine resolves spells with type advantages, damage variance, shields, healing, and mana steal. You understand external crates, `Cargo.toml` dependencies, type casting, and complex game logic. Now let's make status effects tick.
 
 ---
 
 ## Stage 7 — Status Effects
 
-**Difficulty: Medium** | **Concepts: iterating with mutation, retain(), enum matching with data, turn-based tick logic**
+*Difficulty: Medium*
+
 
 Status effects are what make duels feel like chess instead of coin flips. A well-timed Burn forces your opponent to heal instead of attack; a Stun can swing an entire match. This stage teaches you how Rust handles the tricky problem of modifying a collection while processing it — a pattern that causes bugs in most languages but is made safe by Rust's ownership rules.
 
@@ -1662,7 +1673,7 @@ impl Wizard {
     // Returns a Vec of messages describing what happened.
     fn tick_effects(&mut self) -> Vec<String> {
         let mut messages: Vec<String> = Vec::new();
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
 
         // Process each effect
         for (effect, _turns) in &self.active_effects {
@@ -1740,7 +1751,7 @@ impl Wizard {
     // Check if a spell fizzles due to Confuse.
     fn spell_fizzles(&self) -> bool {
         if self.active_effects.iter().any(|(e, _)| *e == StatusEffect::Confuse) {
-            let mut rng = rand::thread_rng();
+            let mut rng = rand::rng();
             rng.gen_range(0..100) < 30
         } else {
             false
@@ -1855,19 +1866,21 @@ cargo test
 
 All 31 tests should pass.
 
-> **Common mistake:** Off-by-one in duration tracking. If Burn has duration 2, it should tick twice (dealing 5 damage each time = 10 total). Our logic: tick the effect, then decrement. When duration reaches 0, remove it. So duration 2 means: tick at 2 → becomes 1, tick at 1 → becomes 0 → removed. Two ticks total. Correct!
+> [!warning] Common Mistake
+> Off-by-one in duration tracking. If Burn has duration 2, it should tick twice (dealing 5 damage each time = 10 total). Our logic: tick the effect, then decrement. When duration reaches 0, remove it. So duration 2 means: tick at 2 → becomes 1, tick at 1 → becomes 0 → removed. Two ticks total. Correct!
 
-### Checkpoint 7
 
-Every combat system is in place — spells, types, damage, effects. All that's left is the loop that ties them together. Stage 8 builds the interactive duel: stdin input, turn alternation, and a winner.
-
-Status effects tick each turn, expire after their duration, and stack. You understand functional iteration patterns, `retain`/`filter`, and how Rust handles mutation during iteration. One stage left — the duel itself.
+> [!check] Checkpoint: 7
+> Every combat system is in place — spells, types, damage, effects. All that's left is the loop that ties them together. Stage 8 builds the interactive duel: stdin input, turn alternation, and a winner.
+>
+> Status effects tick each turn, expire after their duration, and stack. You understand functional iteration patterns, `retain`/`filter`, and how Rust handles mutation during iteration. One stage left — the duel itself.
 
 ---
 
 ## Stage 8 — The Duel Loop
 
-**Difficulty: Medium** | **Concepts: stdin, loop, game loop pattern, String parsing, putting it all together**
+*Difficulty: Medium*
+
 
 Every system you've built — spells, types, wizards, casting, resolution, effects — has been tested in isolation. This stage wires them into a playable game. The duel loop is the classic game programming pattern: read input → update state → check win condition → repeat. It's also where you learn Rust's approach to user input, which is more explicit than Python's `input()` but gives you full control.
 
@@ -2017,7 +2030,7 @@ fn process_turn(attacker: &mut Wizard, defender: &mut Wizard) -> bool {
 
     // Step 3: Check for stun
     if attacker.is_stunned() {
-        let mut rng = rand::thread_rng();
+        let mut rng = rand::rng();
         if rng.gen_range(0..100) < 50 {
             println!("  {} is stunned and loses their turn!", attacker.name);
             return true; // Turn skipped but game continues
@@ -2275,13 +2288,14 @@ cargo run
 
 Play a full duel! Try different house combinations. Notice how Slytherin's Cunning discount and Hufflepuff's regen change the feel of combat.
 
-> **Common mistake:** The `duel` function takes `&mut Wizard` for both parameters. You might try `duel(&mut wizard1, &mut wizard1)` to duel yourself — the compiler will refuse: *"cannot borrow `wizard1` as mutable more than once at a time."* This is the borrow checker protecting you from aliased mutation. Each mutable reference must be unique.
+> [!warning] Common Mistake
+> The `duel` function takes `&mut Wizard` for both parameters. You might try `duel(&mut wizard1, &mut wizard1)` to duel yourself — the compiler will refuse: *"cannot borrow `wizard1` as mutable more than once at a time."* This is the borrow checker protecting you from aliased mutation. Each mutable reference must be unique.
 
-### Checkpoint 8
 
-Act 1 is complete — you've built a working game from scratch. In Act 2, you'll give your wizard a worthy opponent by building AI strategies of increasing intelligence, culminating in Rust's most powerful abstraction: trait objects.
-
-You have a fully playable Wizard Duel Engine in the terminal. Two players, 18 spells, type advantages, status effects, house bonuses, and a turn-based combat loop.
+> [!check] Checkpoint: 8
+> Act 1 is complete — you've built a working game from scratch. In Act 2, you'll give your wizard a worthy opponent by building AI strategies of increasing intelligence, culminating in Rust's most powerful abstraction: trait objects.
+>
+> You have a fully playable Wizard Duel Engine in the terminal. Two players, 18 spells, type advantages, status effects, house bonuses, and a turn-based combat loop.
 
 ---
 
@@ -2300,22 +2314,22 @@ A terminal-based Wizard Duel Engine with:
 
 ### Rust concepts mastered
 
-| Concept | Stage | Python/TS equivalent |
-|---------|-------|---------------------|
-| `cargo new`, `Cargo.toml` | 1 | `npm init`, `package.json` |
-| `enum` | 2 | `enum.Enum`, union types |
-| `struct` | 2 | `dataclass`, `interface` |
+| Concept | Stage | Python equivalent |
+|---------|-------|-------------------|
+| `cargo new`, `Cargo.toml` | 1 | `pip init`, `setup.py` |
+| `enum` | 2 | `enum.Enum` |
+| `struct` | 2 | `dataclass` |
 | `derive` macros | 2 | Decorators |
-| `Option<T>` | 2 | `Optional[T]`, `T \| null` |
-| `Vec<T>` | 2 | `list[T]`, `T[]` |
+| `Option<T>` | 2 | `Optional[T]` |
+| `Vec<T>` | 2 | `list[T]` |
 | `String` vs `&str` | 2 | Owned vs borrowed strings |
-| `match` (exhaustive) | 3 | `match`/`switch` (non-exhaustive) |
+| `match` (exhaustive) | 3 | `match` (non-exhaustive) |
 | `impl` blocks | 3 | Class methods |
-| `Display` trait | 4 | `__str__`, `toString()` |
+| `Display` trait | 4 | `__str__` |
 | Iterator chains | 4 | List comprehensions, `.map().filter()` |
-| `Result<T, E>` | 5 | Exceptions, `throw` |
+| `Result<T, E>` | 5 | Exceptions |
 | Borrow checker (`&` vs `&mut`) | 5 | No equivalent — Rust-only |
-| External crates (`rand`) | 6 | `pip install`, `npm install` |
+| External crates (`rand`) | 6 | `pip install` |
 | Type casting (`as`) | 6 | Implicit coercion |
 | `loop` with `break value` | 8 | `while True` + assignment |
 | `stdin` / `io::Write` | 8 | `input()`, `readline` |

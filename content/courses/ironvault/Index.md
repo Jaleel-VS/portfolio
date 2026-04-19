@@ -2,7 +2,7 @@
 
 A progressive, project-based Rust course. You build ONE project from scratch — a CLI password manager with real cryptography, RPG theming, and AWS security parallels.
 
-**Prerequisites:** Python or TypeScript experience. No Rust knowledge required.
+**Prerequisites:** Python experience. No Rust knowledge required.
 **Project:** `~/juk/ironvault/` (cargo project ready to go)
 **Time estimate:** 40-60 hours across 30 stages
 

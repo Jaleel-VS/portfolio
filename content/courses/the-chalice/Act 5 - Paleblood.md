@@ -10,7 +10,8 @@
 
 ## Stage 29: The Hunter's Eye — *ratatui Layout*
 
-**Difficulty:** Medium · **New concepts:** `Layout::vertical`, `Layout::horizontal`, `Constraint`, nested splits, `Paragraph`, `Block`
+*Difficulty: Medium*
+
 
 ### The Idea
 
@@ -56,7 +57,7 @@ graph TD
     style D fill:#1e3a2f,stroke:#4ade80
 ```
 
-**Python/TS comparison:** Think of this like CSS flexbox. `Constraint::Length(3)` is `flex: 0 0 3`, `Constraint::Fill(1)` is `flex: 1`, and `Constraint::Min(10)` is `min-height: 10`. The layout solver distributes space automatically.
+**Python comparison:** Think of this like CSS flexbox. `Constraint::Length(3)` is `flex: 0 0 3`, `Constraint::Fill(1)` is `flex: 1`, and `Constraint::Min(10)` is `min-height: 10`. The layout solver distributes space automatically.
 
 ### Step 1: Add ratatui and crossterm
 
@@ -67,6 +68,9 @@ In your `Cargo.toml`:
 ratatui = "0.30"
 crossterm = "0.29"
 ```
+
+> [!warning] ratatui Version
+> This code uses ratatui 0.30. If you're using a newer version, the API may differ slightly — check the [ratatui migration guide](https://ratatui.rs/migration/).
 
 ### Step 2: Terminal Init and Restore
 
@@ -97,7 +101,9 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> io::Result<()> {
 }
 ```
 
-> **Common mistake:** Forgetting `ratatui::restore()`. If your program panics without restoring, your terminal will be stuck in raw mode. Use a separate function for the main loop so `restore()` always runs, even on early `?` returns.
+> [!warning] Common Mistake
+> Forgetting `ratatui::restore()`. If your program panics without restoring, your terminal will be stuck in raw mode. Use a separate function for the main loop so `restore()` always runs, even on early `?` returns.
+
 
 ### Step 3: Build the Layout Skeleton
 
@@ -302,23 +308,22 @@ fn render_actions(frame: &mut Frame, area: ratatui::layout::Rect) {
 }
 ```
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> 1. **Layout constraint count mismatch:** `Layout::vertical([...]).areas(rect)` returns a fixed-size array. If you have 3 constraints but destructure into 4 variables, the compiler errors with a cryptic array size mismatch. Count your constraints.
+>
+> 2. **Forgetting `Block::bordered()`:** Without a block, widgets render edge-to-edge with no visual separation. Always wrap viewport and log in bordered blocks.
+>
+> 3. **Viewport overflow:** If your dungeon is larger than the viewport, you need the camera offset logic from Step 5. Without it, you'll try to render tiles outside the grid and panic on out-of-bounds access.
 
-1. **Layout constraint count mismatch:** `Layout::vertical([...]).areas(rect)` returns a fixed-size array. If you have 3 constraints but destructure into 4 variables, the compiler errors with a cryptic array size mismatch. Count your constraints.
-
-2. **Forgetting `Block::bordered()`:** Without a block, widgets render edge-to-edge with no visual separation. Always wrap viewport and log in bordered blocks.
-
-3. **Viewport overflow:** If your dungeon is larger than the viewport, you need the camera offset logic from Step 5. Without it, you'll try to render tiles outside the grid and panic on out-of-bounds access.
-
-### Checkpoint: What You Should Have
-
-Run `cargo run` and you should see a bordered dungeon viewport on the left, a message log on the right, and a status/action bar at the bottom. The dungeon renders with colored tiles, the player is a cyan `@`, and enemies are colored letters. It's not pretty yet — we'll add gauges and animations next. The skeleton is in place; now we give it flesh with HP bars, stamina gauges, and the visual feedback that makes combat feel visceral.
+> [!check] Checkpoint: What You Should Have
+> Run `cargo run` and you should see a bordered dungeon viewport on the left, a message log on the right, and a status/action bar at the bottom. The dungeon renders with colored tiles, the player is a cyan `@`, and enemies are colored letters. It's not pretty yet — we'll add gauges and animations next. The skeleton is in place; now we give it flesh with HP bars, stamina gauges, and the visual feedback that makes combat feel visceral.
 
 ---
 
 ## Stage 30: Blood Gauges — *HP & Stamina Bars*
 
-**Difficulty:** Easy · **New concepts:** `Gauge` widget, `Span` composition, conditional styling, `Color::Rgb`
+*Difficulty: Easy*
+
 
 ### The Idea
 
@@ -488,7 +493,7 @@ if game.damage_flash > 0 {
 }
 ```
 
-**Python/TS comparison:** In a web app, you'd use CSS animations or `setTimeout` for flash effects. In a terminal, we use a frame counter. Each `terminal.draw()` call is one frame — we check `tick % 2` for alternating colors and count down `damage_flash` for temporary effects.
+**Python comparison:** In a web app, you'd use CSS animations or `setTimeout` for flash effects. In a terminal, we use a frame counter. Each `terminal.draw()` call is one frame — we check `tick % 2` for alternating colors and count down `damage_flash` for temporary effects.
 
 ### Using Gauge for Simpler Cases
 
@@ -506,17 +511,18 @@ let stamina_gauge = Gauge::default()
 frame.render_widget(stamina_gauge, stamina_area);
 ```
 
-> **Common mistake:** `Gauge::ratio()` panics if the value is outside 0.0..=1.0. Always clamp: `.ratio((hp as f64 / max_hp as f64).clamp(0.0, 1.0))`. Division by zero when `max_hp` is 0 will also panic — guard against it.
+> [!warning] Common Mistake
+> `Gauge::ratio()` panics if the value is outside 0.0..=1.0. Always clamp: `.ratio((hp as f64 / max_hp as f64).clamp(0.0, 1.0))`. Division by zero when `max_hp` is 0 will also panic — guard against it.
 
-### Checkpoint
 
-Your status bar now shows colored HP (with orange rally segment), green stamina, vial count, weapon info, insight, echoes, dodge status, and equipped runes. HP flashes red when you take damage and pulses when low. The dungeon is starting to feel alive. But combat still resolves instantly — one frame you're at full HP, the next you're at 60. Next, we add the temporal dimension: animations that let the player *see* the blow land, the damage number flash, and the enemy stagger.
+> [!check] Checkpoint
+> Your status bar now shows colored HP (with orange rally segment), green stamina, vial count, weapon info, insight, echoes, dodge status, and equipped runes. HP flashes red when you take damage and pulses when low. The dungeon is starting to feel alive. But combat still resolves instantly — one frame you're at full HP, the next you're at 60. Next, we add the temporal dimension: animations that let the player *see* the blow land, the damage number flash, and the enemy stagger.
 
 ---
 
 ## Stage 31: The Art of the Hunt — *Combat Animations*
 
-**Difficulty:** Medium · **New concepts:** Frame-based animation state machine, `std::time::Instant`, interleaved rendering, `Span` styling for emphasis
+*Difficulty: Medium*
 
 ### The Idea
 
@@ -726,7 +732,9 @@ fn run(terminal: &mut ratatui::DefaultTerminal) -> io::Result<()> {
 }
 ```
 
-> **Common mistake:** Using `event::read()` (blocking) during animations freezes the display. Use `event::poll(duration)` to check for input with a timeout, then `event::read()` only if an event is available.
+> [!warning] Common Mistake
+> Using `event::read()` (blocking) during animations freezes the display. Use `event::poll(duration)` to check for input with a timeout, then `event::read()` only if an event is available.
+
 
 ### Adding Messages to the Persistent Log
 
@@ -751,15 +759,15 @@ if !game.animation_queue.is_playing() && !game.animation_queue.events.is_empty()
 }
 ```
 
-### Checkpoint
-
-Combat now has visual rhythm. Attacks display sequentially with pauses between each step. Death messages linger. Rally heals flash orange. The message log accumulates a history of the fight. The dungeon feels dangerous. With animations in place, we can now build the most dramatic UI moment in the game: the boss fight screen, where a massive HP gauge dominates the viewport and telegraphs flash in red.
+> [!check] Checkpoint
+> Combat now has visual rhythm. Attacks display sequentially with pauses between each step. Death messages linger. Rally heals flash orange. The message log accumulates a history of the fight. The dungeon feels dangerous. With animations in place, we can now build the most dramatic UI moment in the game: the boss fight screen, where a massive HP gauge dominates the viewport and telegraphs flash in red.
 
 ---
 
 ## Stage 32: Nightmare Made Flesh — *Boss Fight UI*
 
-**Difficulty:** Medium · **New concepts:** Conditional layout regions, `LineGauge`, phase-driven styling, telegraph rendering
+*Difficulty: Medium*
+
 
 ### The Idea
 
@@ -928,23 +936,22 @@ fn render_message_log(frame: &mut Frame, area: ratatui::layout::Rect, game: &Gam
 }
 ```
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> 1. **Gauge ratio panic:** `Gauge::ratio()` panics if the value is outside 0.0..=1.0. Boss HP can go negative from overkill damage. Always `.clamp(0.0, 1.0)`.
+>
+> 2. **Phase transition firing repeatedly:** Without the `new_phase != boss.phase` guard, the phase change animation queues every frame while HP is in the threshold range.
+>
+> 3. **Conditional layout nesting:** When the boss bar appears/disappears, the viewport area changes size. Make sure your viewport camera offset recalculates based on the actual `viewport_area` dimensions, not hardcoded values.
 
-1. **Gauge ratio panic:** `Gauge::ratio()` panics if the value is outside 0.0..=1.0. Boss HP can go negative from overkill damage. Always `.clamp(0.0, 1.0)`.
-
-2. **Phase transition firing repeatedly:** Without the `new_phase != boss.phase` guard, the phase change animation queues every frame while HP is in the threshold range.
-
-3. **Conditional layout nesting:** When the boss bar appears/disappears, the viewport area changes size. Make sure your viewport camera offset recalculates based on the actual `viewport_area` dimensions, not hardcoded values.
-
-### Checkpoint
-
-Enter a boss room and the UI transforms: a large HP gauge appears at the top with the boss's name and title, phase indicators color-shift as the boss weakens, telegraph warnings flash in red before attacks, and the message log border turns crimson. The boss fight *feels* different from regular combat. The UI is complete — but the game has no consequences yet. Die, and you just... stop. Next, we build the roguelike death loop that gives death meaning: lost echoes, bloodstains, and the desperate run to recover what you dropped.
+> [!check] Checkpoint
+> Enter a boss room and the UI transforms: a large HP gauge appears at the top with the boss's name and title, phase indicators color-shift as the boss weakens, telegraph warnings flash in red before attacks, and the message log border turns crimson. The boss fight *feels* different from regular combat. The UI is complete — but the game has no consequences yet. Die, and you just... stop. Next, we build the roguelike death loop that gives death meaning: lost echoes, bloodstains, and the desperate run to recover what you dropped.
 
 ---
 
 ## Stage 33: A Hunter Is Never Alone — *Death & Echoes*
 
-**Difficulty:** Medium · **New concepts:** Roguelike death loop, state reset vs. persistence, `Option<(u8, usize, usize)>` for echo recovery, seed reuse
+*Difficulty: Medium*
+
 
 ### The Idea
 
@@ -1119,23 +1126,22 @@ This system creates a beautiful risk/reward dynamic:
 
 The bloodstain is always visible on the minimap (if you've discovered that room), so you know exactly where to go.
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> 1. **Forgetting to clear the bloodstain on recovery:** Without `game.bloodstain = None`, the player picks up echoes every time they step on the spot.
+>
+> 2. **Bloodstain persisting across seeds:** If the player changes seeds, the bloodstain from the old dungeon makes no sense. Clear it on seed change.
+>
+> 3. **Double death before recovery:** If the player dies again before recovering, the *old* bloodstain is replaced by the new one (with 0 echoes, since they had none). The old echoes are gone forever. This is intentional — it's the Souls design.
 
-1. **Forgetting to clear the bloodstain on recovery:** Without `game.bloodstain = None`, the player picks up echoes every time they step on the spot.
-
-2. **Bloodstain persisting across seeds:** If the player changes seeds, the bloodstain from the old dungeon makes no sense. Clear it on seed change.
-
-3. **Double death before recovery:** If the player dies again before recovering, the *old* bloodstain is replaced by the new one (with 0 echoes, since they had none). The old echoes are gone forever. This is intentional — it's the Souls design.
-
-### Checkpoint
-
-Die in the dungeon and watch: "YOU DIED" fills the screen in red, your echoes drop as a golden `$` at your death spot, you restart on floor 1 with a fresh hunter (but the same dungeon layout), and a yellow marker on the minimap shows where your echoes wait. Reach the spot and they're yours again. Die first and they vanish. The hunt continues. But right now, death resets everything — there's no sense of progress between runs. Next, we add persistence: saved stats, permanent upgrades, and the Hunter's Dream that makes each death a step forward rather than a step back.
+> [!check] Checkpoint
+> Die in the dungeon and watch: "YOU DIED" fills the screen in red, your echoes drop as a golden `$` at your death spot, you restart on floor 1 with a fresh hunter (but the same dungeon layout), and a yellow marker on the minimap shows where your echoes wait. Reach the spot and they're yours again. Die first and they vanish. The hunt continues. But right now, death resets everything — there's no sense of progress between runs. Next, we add persistence: saved stats, permanent upgrades, and the Hunter's Dream that makes each death a step forward rather than a step back.
 
 ---
 
 ## Stage 34: The Hunter's Dream — *Save & Stats*
 
-**Difficulty:** Medium · **New concepts:** `serde::Serialize`/`Deserialize` derive, `serde_json::to_writer_pretty`/`from_reader`, `#[serde(default)]`, file I/O with `std::fs`, meta-progression
+*Difficulty: Medium*
+
 
 ### The Idea
 
@@ -1161,14 +1167,14 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 ```
 
-**Python/TS comparison:**
+**Python comparison:**
 
-| Concept | Python | TypeScript | Rust (serde) |
-|---------|--------|------------|--------------|
-| Serialize | `json.dumps(obj.__dict__)` | `JSON.stringify(obj)` | `serde_json::to_string(&obj)?` |
-| Deserialize | `MyClass(**json.loads(s))` | `JSON.parse(s) as MyType` | `serde_json::from_str::<MyType>(s)?` |
-| Schema | None (runtime) | None (compile-erased) | Derived at compile time |
-| Missing field | `KeyError` at runtime | `undefined` silently | Compile error (or `#[serde(default)]`) |
+| Concept | Python | Rust (serde) |
+|---------|--------|--------------|
+| Serialize | `json.dumps(obj.__dict__)` | `serde_json::to_string(&obj)?` |
+| Deserialize | `MyClass(**json.loads(s))` | `serde_json::from_str::<MyType>(s)?` |
+| Schema | None (runtime) | Derived at compile time |
+| Missing field | `KeyError` at runtime | Compile error (or `#[serde(default)]`) |
 
 The key difference: serde catches schema mismatches at compile time. If your JSON doesn't match your struct, you get a clear error — not a silent `undefined`.
 
@@ -1282,7 +1288,9 @@ pub fn load_game() -> SaveData {
 - `serde_json::from_reader(reader)` — deserialize from any `io::Read`
 - Both return `serde_json::Result<T>`
 
-> **Common mistake:** Using `serde_json::to_string` and then `fs::write`. This works but loads the entire JSON into memory as a `String` first. `to_writer_pretty` streams directly to the file — more efficient for large save files.
+> [!warning] Common Mistake
+> Using `serde_json::to_string` and then `fs::write`. This works but loads the entire JSON into memory as a `String` first. `to_writer_pretty` streams directly to the file — more efficient for large save files.
+
 
 ### Step 3: Update Stats on Death
 
@@ -1452,15 +1460,15 @@ impl Hunter {
 
 4. **`Option<T>` fields:** serde handles `Option` gracefully — missing JSON fields become `None`. But if the field is *present* with a wrong type, deserialization fails entirely. Use `.unwrap_or_default()` on the `from_reader` call as a safety net.
 
-### Checkpoint
-
-Die and your stats persist. Start a new run and your upgrades apply. Open the Hunter's Dream between runs to spend echoes on permanent power. The save file at `~/.local/share/chalice/save.json` is human-readable JSON — you can inspect (or edit) it directly. The game now has a reason to keep playing — but every run uses the same weapon. Next, we give the Hunter an arsenal: six trick weapons with unique playstyles, blood gems that modify them, and runes that define a build.
+> [!check] Checkpoint
+> Die and your stats persist. Start a new run and your upgrades apply. Open the Hunter's Dream between runs to spend echoes on permanent power. The save file at `~/.local/share/chalice/save.json` is human-readable JSON — you can inspect (or edit) it directly. The game now has a reason to keep playing — but every run uses the same weapon. Next, we give the Hunter an arsenal: six trick weapons with unique playstyles, blood gems that modify them, and runes that define a build.
 
 ---
 
 ## Stage 35: Trick Weapons — *Weapon Variety, Blood Gems & Runes*
 
-**Difficulty:** Medium · **New concepts:** Enum-driven polymorphism, trait-like behavior via match, modifier stacking, `Vec` with capacity limits
+*Difficulty: Medium*
+
 
 ### The Idea
 
@@ -1792,15 +1800,14 @@ The beauty of this system is emergent builds:
 - **Poke Master:** Threaded Cane + Stamina gem + Formless Oedon rune. 2-tile range, cheap attacks, huge stamina pool. Never gets hit.
 - **Boss Killer:** Kirkhammer + Cursed Nourishing gem + Heir rune. Interrupts boss patterns, +20% damage, +50% boss echoes. Built for the big fights.
 
-### Checkpoint
-
-Your dungeon now drops weapons, blood gems, and runes as loot. Each weapon plays differently — the Blade of Mercy's double-hit feels frantic, the Kirkhammer's stun feels powerful. Blood gems create permanent tradeoffs. Runes stack with weapons and gems for emergent builds. The Chalice has depth. One final feature remains: the Daily Chalice, where every hunter in the world faces the same dungeon on the same day.
+> [!check] Checkpoint
+> Your dungeon now drops weapons, blood gems, and runes as loot. Each weapon plays differently — the Blade of Mercy's double-hit feels frantic, the Kirkhammer's stun feels powerful. Blood gems create permanent tradeoffs. Runes stack with weapons and gems for emergent builds. The Chalice has depth. One final feature remains: the Daily Chalice, where every hunter in the world faces the same dungeon on the same day.
 
 ---
 
 ## Stage 36: The Daily Chalice — *One Seed to Rule Them All*
 
-**Difficulty:** Easy · **New concepts:** Date-based seed generation, `chrono::Local`, display formatting, leaderboard persistence
+*Difficulty: Easy*
 
 ### The Idea
 
@@ -1829,7 +1836,7 @@ fn daily_seed() -> String {
 
 That's it. `daily-chalice-2026-04-18` is today's seed. Tomorrow it changes. The `ChaCha8Rng` seeded from this string produces the same dungeon for everyone.
 
-**Python/TS comparison:**
+**Python comparison:**
 
 ```python
 # Python
@@ -1837,12 +1844,7 @@ from datetime import date
 seed = f"daily-chalice-{date.today()}"
 ```
 
-```typescript
-// TypeScript
-const seed = `daily-chalice-${new Date().toISOString().slice(0, 10)}`;
-```
-
-Same idea in every language — the date string *is* the seed.
+Same idea — the date string *is* the seed.
 
 ### Step 2: Seed String to RNG
 
@@ -2037,9 +2039,8 @@ fn render_main_menu(frame: &mut Frame, selected: usize) {
 }
 ```
 
-### Checkpoint
-
-Select "Daily Chalice" from the menu and a golden banner marks the run. The seed is today's date — every player gets the same dungeon. Your best daily run is saved and displayed in a 7-day history. Share your seed with friends: *"Today's Chalice is brutal — floor 3 boss is a Loran Darkbeast."*
+> [!check] Checkpoint
+> Select "Daily Chalice" from the menu and a golden banner marks the run. The seed is today's date — every player gets the same dungeon. Your best daily run is saved and displayed in a 7-day history. Share your seed with friends: *"Today's Chalice is brutal — floor 3 boss is a Loran Darkbeast."*
 
 ---
 

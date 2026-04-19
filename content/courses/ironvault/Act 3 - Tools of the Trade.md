@@ -34,11 +34,10 @@ Human-chosen passwords are predictable — pet names, birthdays, keyboard patter
 
 > *Every great vault needs a forge — a place where new relics are born, not from memory or habit, but from pure, unpredictable entropy. The Forge doesn't care about your pet's name or your birthday. It draws from the deepest well of randomness your operating system can provide, and hammers that chaos into passwords that would take civilizations to crack.*
 
-### What You'll Learn
-
-- **Rust concepts:** the `rand` ecosystem (`Rng` trait, `IndexedRandom`, `SeedableRng`), iterator chains with `filter` and `map`, `char` handling, the builder pattern
-- **Security concepts:** CSPRNG vs PRNG, entropy, why `OsRng` seeds ChaCha
-- **AWS parallel:** Secrets Manager `GetRandomPassword` API, KMS hardware entropy from HSMs
+> [!tip] What You'll Learn
+> - **Rust concepts:** the `rand` ecosystem (`Rng` trait, `IndexedRandom`, `SeedableRng`), iterator chains with `filter` and `map`, `char` handling, the builder pattern
+> - **Security concepts:** CSPRNG vs PRNG, entropy, why `OsRng` seeds ChaCha
+> - **AWS parallel:** Secrets Manager `GetRandomPassword` API, KMS hardware entropy from HSMs
 
 ### The Security Foundation: Why Random Matters
 
@@ -164,7 +163,7 @@ impl GeneratorConfig {
 - `"!@#$%^&*()-_=+[]{}<>?/~".chars()` — `.chars()` turns a string slice into an iterator of `char` values. We can't use a range here because symbols aren't contiguous in Unicode.
 - `pool.retain(|c| !AMBIGUOUS_CHARS.contains(c))` — `retain` keeps only elements where the closure returns `true`. It's like Python's `pool = [c for c in pool if c not in AMBIGUOUS]`. The `|c|` is Rust's closure syntax (Python's `lambda c:`).
 
-> **TypeScript comparison:** `retain` is like `Array.filter()`, but it modifies the array in place instead of creating a new one. Rust prefers in-place mutation when you own the data — no allocation overhead.
+> **Python comparison:** `retain` is like a list comprehension filter (`[x for x in items if condition(x)]`), but it modifies the list in place instead of creating a new one. Rust prefers in-place mutation when you own the data — no allocation overhead.
 
 ### Step 3: The Generate Function
 
@@ -282,85 +281,84 @@ Commands::Generate { length, no_symbols, no_digits, allow_ambiguous, copy } => {
 
 **New Rust concept — `..Default::default()`:** This is *struct update syntax*. It says "for any fields I didn't explicitly set, use the values from `Default::default()`." It's like Python's `{**defaults, 'length': length, 'symbols': not no_symbols}` dict merge pattern.
 
-### Checkpoint: Full `src/generator.rs`
-
-```rust
-use rand::seq::IndexedRandom;
-use rand::rngs::SysRng;
-use rand::SeedableRng;
-use rand_chacha::ChaCha12Rng;
-
-const AMBIGUOUS_CHARS: &[char] = &['0', 'O', '1', 'l', 'I', '|'];
-
-pub struct GeneratorConfig {
-    pub length: usize,
-    pub uppercase: bool,
-    pub lowercase: bool,
-    pub digits: bool,
-    pub symbols: bool,
-    pub exclude_ambiguous: bool,
-}
-
-impl Default for GeneratorConfig {
-    fn default() -> Self {
-        Self {
-            length: 20,
-            uppercase: true,
-            lowercase: true,
-            digits: true,
-            symbols: true,
-            exclude_ambiguous: true,
-        }
-    }
-}
-
-impl GeneratorConfig {
-    fn build_pool(&self) -> Vec<char> {
-        let mut pool: Vec<char> = Vec::new();
-
-        if self.uppercase {
-            pool.extend('A'..='Z');
-        }
-        if self.lowercase {
-            pool.extend('a'..='z');
-        }
-        if self.digits {
-            pool.extend('0'..='9');
-        }
-        if self.symbols {
-            pool.extend("!@#$%^&*()-_=+[]{}<>?/~".chars());
-        }
-
-        if self.exclude_ambiguous {
-            pool.retain(|c| !AMBIGUOUS_CHARS.contains(c));
-        }
-
-        pool
-    }
-
-    pub fn generate(&self) -> Result<String, String> {
-        let pool = self.build_pool();
-
-        if pool.is_empty() {
-            return Err("No character classes selected — nothing to generate from.".into());
-        }
-        if self.length == 0 {
-            return Err("Password length must be at least 1.".into());
-        }
-
-        let mut rng = ChaCha12Rng::try_from_rng(&mut SysRng)
-            .expect("OS random source unavailable");
-
-        let password: String = (0..self.length)
-            .map(|_| *pool.choose(&mut rng).unwrap())
-            .collect();
-
-        Ok(password)
-    }
-}
-```
-
-The Forge produces strong passwords, but displaying them on screen is a security risk. Stage 15 builds the Courier — clipboard copy with automatic clearing — so passwords can travel from vault to login form without ever appearing on screen.
+> [!check] Checkpoint
+> ```rust
+> use rand::seq::IndexedRandom;
+> use rand::rngs::SysRng;
+> use rand::SeedableRng;
+> use rand_chacha::ChaCha12Rng;
+>
+> const AMBIGUOUS_CHARS: &[char] = &['0', 'O', '1', 'l', 'I', '|'];
+>
+> pub struct GeneratorConfig {
+>     pub length: usize,
+>     pub uppercase: bool,
+>     pub lowercase: bool,
+>     pub digits: bool,
+>     pub symbols: bool,
+>     pub exclude_ambiguous: bool,
+> }
+>
+> impl Default for GeneratorConfig {
+>     fn default() -> Self {
+>         Self {
+>             length: 20,
+>             uppercase: true,
+>             lowercase: true,
+>             digits: true,
+>             symbols: true,
+>             exclude_ambiguous: true,
+>         }
+>     }
+> }
+>
+> impl GeneratorConfig {
+>     fn build_pool(&self) -> Vec<char> {
+>         let mut pool: Vec<char> = Vec::new();
+>
+>         if self.uppercase {
+>             pool.extend('A'..='Z');
+>         }
+>         if self.lowercase {
+>             pool.extend('a'..='z');
+>         }
+>         if self.digits {
+>             pool.extend('0'..='9');
+>         }
+>         if self.symbols {
+>             pool.extend("!@#$%^&*()-_=+[]{}<>?/~".chars());
+>         }
+>
+>         if self.exclude_ambiguous {
+>             pool.retain(|c| !AMBIGUOUS_CHARS.contains(c));
+>         }
+>
+>         pool
+>     }
+>
+>     pub fn generate(&self) -> Result<String, String> {
+>         let pool = self.build_pool();
+>
+>         if pool.is_empty() {
+>             return Err("No character classes selected — nothing to generate from.".into());
+>         }
+>         if self.length == 0 {
+>             return Err("Password length must be at least 1.".into());
+>         }
+>
+>         let mut rng = ChaCha12Rng::try_from_rng(&mut SysRng)
+>             .expect("OS random source unavailable");
+>
+>         let password: String = (0..self.length)
+>             .map(|_| *pool.choose(&mut rng).unwrap())
+>             .collect();
+>
+>         Ok(password)
+>     }
+> }
+> ```
+>
+> The Forge produces strong passwords, but displaying them on screen is a security risk. Stage 15 builds the Courier — clipboard copy with automatic clearing — so passwords can travel from vault to login form without ever appearing on screen.
 
 ### What to Try
 2. `cargo run -- generate --length 32` — longer password
@@ -368,14 +366,13 @@ The Forge produces strong passwords, but displaying them on screen is a security
 4. `cargo run -- generate --allow-ambiguous` — includes 0/O/1/l/I
 5. Run it 5 times — every output should be different (if they're the same, your RNG is broken!)
 
-### Common Mistakes
-
-| Mistake | Why It's Wrong | Fix |
-|---------|---------------|-----|
-| Using `rand::rng()` instead of `ChaCha12Rng` | `rand::rng()` returns `ThreadRng` which is fine for security but not portable/reproducible for testing | Use `ChaCha12Rng` seeded from `SysRng` for explicit control |
-| Forgetting `use rand::seq::IndexedRandom` | `.choose()` won't be available — you'll get "method not found" | Import the trait — Rust requires explicit trait imports |
-| Using `pool.choose(&mut rng)` without `*` | You get `&char` instead of `char`, and `collect()` builds the wrong type | Dereference with `*` to get the owned value |
-| Using `rand::random::<usize>() % pool.len()` | Modulo bias! If pool has 70 chars and usize max is not divisible by 70, some chars are slightly more likely | `.choose()` handles uniform distribution correctly |
+> [!warning] Common Mistakes
+> | Mistake | Why It's Wrong | Fix |
+> |---------|---------------|-----|
+> | Using `rand::rng()` instead of `ChaCha12Rng` | `rand::rng()` returns `ThreadRng` which is fine for security but not portable/reproducible for testing | Use `ChaCha12Rng` seeded from `SysRng` for explicit control |
+> | Forgetting `use rand::seq::IndexedRandom` | `.choose()` won't be available — you'll get "method not found" | Import the trait — Rust requires explicit trait imports |
+> | Using `pool.choose(&mut rng)` without `*` | You get `&char` instead of `char`, and `collect()` builds the wrong type | Dereference with `*` to get the owned value |
+> | Using `rand::random::<usize>() % pool.len()` | Modulo bias! If pool has 70 chars and usize max is not divisible by 70, some chars are slightly more likely | `.choose()` handles uniform distribution correctly |
 
 ---
 
@@ -385,10 +382,9 @@ Printing a password to the terminal is a liability — it's visible to shoulder 
 
 > *A password that sits on screen is a password exposed. The Courier carries your secrets swiftly to the clipboard and then — after a brief window — burns the message. Thirty seconds. That's all you get. Copy it, paste it, and the Courier erases all trace. No clipboard manager will archive it. No shoulder-surfer will catch a second glance.*
 
-### What You'll Learn
-
-- **Rust concepts:** `std::thread::spawn`, `Arc` (atomic reference counting), `thread::sleep`, move closures, the `move` keyword
-- **Security concepts:** clipboard as a shared attack surface, clipboard managers, timed exposure windows
+> [!tip] What You'll Learn
+> - **Rust concepts:** `std::thread::spawn`, `Arc` (atomic reference counting), `thread::sleep`, move closures, the `move` keyword
+> - **Security concepts:** clipboard as a shared attack surface, clipboard managers, timed exposure windows
 
 ### Why Clipboard Security Matters
 
@@ -470,7 +466,7 @@ Arc::clone(&password)        →  increments the count (cheap, no data copy)
 
 When both the main thread and background thread are done with it, the count drops to zero and the string is freed. It's like Python's reference counting, but explicit and thread-safe.
 
-> **TypeScript comparison:** `Arc` is conceptually similar to having a `const` reference that multiple async functions close over. The difference is Rust makes you opt in to sharing explicitly.
+> **Python comparison:** `Arc` is conceptually similar to Python's default reference counting — every object in Python is reference-counted. The difference is Rust makes you opt in to sharing explicitly.
 
 **`thread::spawn(move || { ... })`:**
 
@@ -560,56 +556,55 @@ Commands::Get { name, copy, show_password } => {
 }
 ```
 
-### Checkpoint: Full `src/clipboard.rs`
-
-```rust
-use arboard::Clipboard;
-use std::sync::Arc;
-use std::thread;
-use std::time::Duration;
-
-const CLEAR_DELAY_SECS: u64 = 30;
-
-pub fn copy_and_clear(text: &str) -> Result<(), String> {
-    let mut clipboard = Clipboard::new()
-        .map_err(|e| format!("Failed to access clipboard: {}", e))?;
-
-    clipboard.set_text(text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
-
-    let password = Arc::new(text.to_string());
-    let password_clone = Arc::clone(&password);
-
-    thread::spawn(move || {
-        thread::sleep(Duration::from_secs(CLEAR_DELAY_SECS));
-
-        let mut cb = match Clipboard::new() {
-            Ok(cb) => cb,
-            Err(_) => return,
-        };
-
-        if let Ok(current) = cb.get_text() {
-            if current == *password_clone {
-                let _ = cb.clear();
-            }
-        }
-    });
-
-    Ok(())
-}
-
-pub fn copy_only(text: &str) -> Result<(), String> {
-    let mut clipboard = Clipboard::new()
-        .map_err(|e| format!("Failed to access clipboard: {}", e))?;
-
-    clipboard.set_text(text)
-        .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
-
-    Ok(())
-}
-```
-
-Passwords can now travel securely from vault to login form. But some doors require more than a password — they require proof that you're present *right now*. Stage 16 adds TOTP two-factor authentication, the same protocol behind every authenticator app and AWS IAM MFA device.
+> [!check] Checkpoint
+> ```rust
+> use arboard::Clipboard;
+> use std::sync::Arc;
+> use std::thread;
+> use std::time::Duration;
+>
+> const CLEAR_DELAY_SECS: u64 = 30;
+>
+> pub fn copy_and_clear(text: &str) -> Result<(), String> {
+>     let mut clipboard = Clipboard::new()
+>         .map_err(|e| format!("Failed to access clipboard: {}", e))?;
+>
+>     clipboard.set_text(text)
+>         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+>
+>     let password = Arc::new(text.to_string());
+>     let password_clone = Arc::clone(&password);
+>
+>     thread::spawn(move || {
+>         thread::sleep(Duration::from_secs(CLEAR_DELAY_SECS));
+>
+>         let mut cb = match Clipboard::new() {
+>             Ok(cb) => cb,
+>             Err(_) => return,
+>         };
+>
+>         if let Ok(current) = cb.get_text() {
+>             if current == *password_clone {
+>                 let _ = cb.clear();
+>             }
+>         }
+>     });
+>
+>     Ok(())
+> }
+>
+> pub fn copy_only(text: &str) -> Result<(), String> {
+>     let mut clipboard = Clipboard::new()
+>         .map_err(|e| format!("Failed to access clipboard: {}", e))?;
+>
+>     clipboard.set_text(text)
+>         .map_err(|e| format!("Failed to write to clipboard: {}", e))?;
+>
+>     Ok(())
+> }
+> ```
+>
+> Passwords can now travel securely from vault to login form. But some doors require more than a password — they require proof that you're present *right now*. Stage 16 adds TOTP two-factor authentication, the same protocol behind every authenticator app and AWS IAM MFA device.
 
 ### What to Try
 
@@ -618,14 +613,13 @@ Passwords can now travel securely from vault to login form. But some doors requi
 3. `cargo run -- generate --copy`, then quickly copy something else (Cmd+C on any text), wait 30 seconds — your new clipboard content should survive (the cleaner only clears if it's still the password)
 4. Try on a headless server (SSH without X forwarding) — you should get a clean error message, not a panic
 
-### Common Mistakes
-
-| Mistake | Why It's Wrong | Fix |
-|---------|---------------|-----|
-| Forgetting `move` on the closure | Compiler error: closure may outlive the current function | Add `move` — the thread needs to own its data |
-| Using `password` directly in the thread instead of `Arc` | The `String` would be moved into the thread, and you couldn't use it in the main thread anymore | `Arc` lets both threads share it |
-| Calling `clipboard.clear()` unconditionally | Clobbers whatever the user copied after the password | Check `get_text() == password` first |
-| Not handling `Clipboard::new()` errors | Panics on headless Linux or Wayland without proper setup | Use `map_err` to return a friendly error |
+> [!warning] Common Mistakes
+> | Mistake | Why It's Wrong | Fix |
+> |---------|---------------|-----|
+> | Forgetting `move` on the closure | Compiler error: closure may outlive the current function | Add `move` — the thread needs to own its data |
+> | Using `password` directly in the thread instead of `Arc` | The `String` would be moved into the thread, and you couldn't use it in the main thread anymore | `Arc` lets both threads share it |
+> | Calling `clipboard.clear()` unconditionally | Clobbers whatever the user copied after the password | Check `get_text() == password` first |
+> | Not handling `Clipboard::new()` errors | Panics on headless Linux or Wayland without proper setup | Use `map_err` to return a friendly error |
 
 ---
 
@@ -635,11 +629,10 @@ A stolen password grants permanent access — unless the account requires a seco
 
 > *Some doors require more than a key. They require proof that you stand before them at this very moment — not yesterday, not tomorrow, but now. The Time Rune is a glyph that changes every thirty seconds, synchronized with a distant oracle. Even if a thief steals your password, without the Time Rune, the door remains sealed.*
 
-### What You'll Learn
-
-- **Rust concepts:** integrating an external crate (`totp-rs`), working with `SystemTime`, URI string parsing, the `Option` type in practice
-- **Security concepts:** TOTP (Time-based One-Time Password), shared secrets, why base32, TOTP vs HOTP
-- **AWS parallel:** IAM MFA virtual devices use the exact same RFC 6238 TOTP standard
+> [!tip] What You'll Learn
+> - **Rust concepts:** integrating an external crate (`totp-rs`), working with `SystemTime`, URI string parsing, the `Option` type in practice
+> - **Security concepts:** TOTP (Time-based One-Time Password), shared secrets, why base32, TOTP vs HOTP
+> - **AWS parallel:** IAM MFA virtual devices use the exact same RFC 6238 TOTP standard
 
 ### How TOTP Works
 
@@ -842,52 +835,51 @@ Commands::Totp { name, copy } => {
 
 > **Python comparison:** This is like `secret = relic.totp_secret or raise ValueError("no TOTP")`. Rust makes the "might be None" case explicit in the type system — you can't accidentally use a `None` value without checking first.
 
-### Checkpoint: Full `src/totp.rs`
-
-```rust
-use totp_rs::{Algorithm, Secret, TOTP};
-
-pub fn totp_from_base32(
-    secret_base32: &str,
-    issuer: Option<&str>,
-    account: &str,
-) -> Result<TOTP, String> {
-    let secret = Secret::Encoded(secret_base32.to_string());
-    let secret_bytes = secret
-        .to_bytes()
-        .map_err(|e| format!("Invalid base32 secret: {}", e))?;
-
-    TOTP::new(
-        Algorithm::SHA1,
-        6,
-        1,
-        30,
-        secret_bytes,
-        issuer.map(|s| s.to_string()),
-        account.to_string(),
-    )
-    .map_err(|e| format!("Failed to create TOTP: {}", e))
-}
-
-pub fn totp_from_uri(uri: &str) -> Result<TOTP, String> {
-    TOTP::from_url(uri)
-        .map_err(|e| format!("Invalid otpauth URI: {}", e))
-}
-
-pub fn generate_code(totp: &TOTP) -> Result<(String, u64), String> {
-    let code = totp
-        .generate_current()
-        .map_err(|e| format!("Failed to generate TOTP code: {}", e))?;
-
-    let ttl = totp
-        .ttl()
-        .map_err(|e| format!("Failed to get TTL: {}", e))?;
-
-    Ok((code, ttl))
-}
-```
-
-With passwords generated, copied, and TOTP codes available, the vault is feature-rich — but finding a specific relic in a vault with dozens of entries requires scrolling through `iv list`. Stage 17 builds the Seeker — search and filter across all relic fields.
+> [!check] Checkpoint
+> ```rust
+> use totp_rs::{Algorithm, Secret, TOTP};
+>
+> pub fn totp_from_base32(
+>     secret_base32: &str,
+>     issuer: Option<&str>,
+>     account: &str,
+> ) -> Result<TOTP, String> {
+>     let secret = Secret::Encoded(secret_base32.to_string());
+>     let secret_bytes = secret
+>         .to_bytes()
+>         .map_err(|e| format!("Invalid base32 secret: {}", e))?;
+>
+>     TOTP::new(
+>         Algorithm::SHA1,
+>         6,
+>         1,
+>         30,
+>         secret_bytes,
+>         issuer.map(|s| s.to_string()),
+>         account.to_string(),
+>     )
+>     .map_err(|e| format!("Failed to create TOTP: {}", e))
+> }
+>
+> pub fn totp_from_uri(uri: &str) -> Result<TOTP, String> {
+>     TOTP::from_url(uri)
+>         .map_err(|e| format!("Invalid otpauth URI: {}", e))
+> }
+>
+> pub fn generate_code(totp: &TOTP) -> Result<(String, u64), String> {
+>     let code = totp
+>         .generate_current()
+>         .map_err(|e| format!("Failed to generate TOTP code: {}", e))?;
+>
+>     let ttl = totp
+>         .ttl()
+>         .map_err(|e| format!("Failed to get TTL: {}", e))?;
+>
+>     Ok((code, ttl))
+> }
+> ```
+>
+> With passwords generated, copied, and TOTP codes available, the vault is feature-rich — but finding a specific relic in a vault with dozens of entries requires scrolling through `iv list`. Stage 17 builds the Seeker — search and filter across all relic fields.
 
 ### What to Try
 
@@ -897,14 +889,13 @@ With passwords generated, copied, and TOTP codes available, the vault is feature
 4. Verify against an authenticator app: add the same secret to Google Authenticator or Authy — the codes should match!
 5. Try an `otpauth://` URI: `cargo run -- add-totp TestRelic --uri "otpauth://totp/Test:user@test.com?secret=JBSWY3DPEHPK3PXP&issuer=Test"`
 
-### Common Mistakes
-
-| Mistake | Why It's Wrong | Fix |
-|---------|---------------|-----|
-| Using `Algorithm::SHA256` | Many authenticator apps silently fall back to SHA1, causing code mismatch | Stick with `Algorithm::SHA1` for compatibility |
-| Storing the raw bytes instead of base32 | Can't display the secret back to the user, harder to debug | Store the base32 string, decode when needed |
-| Not validating the secret on input | Invalid base32 strings cause panics later when generating codes | Validate by creating a `TOTP` instance immediately |
-| Forgetting the `otpauth` feature in Cargo.toml | `TOTP::from_url` and `TOTP::new` with issuer/account won't exist | `totp-rs = { version = "5.7", features = ["otpauth"] }` |
+> [!warning] Common Mistakes
+> | Mistake | Why It's Wrong | Fix |
+> |---------|---------------|-----|
+> | Using `Algorithm::SHA256` | Many authenticator apps silently fall back to SHA1, causing code mismatch | Stick with `Algorithm::SHA1` for compatibility |
+> | Storing the raw bytes instead of base32 | Can't display the secret back to the user, harder to debug | Store the base32 string, decode when needed |
+> | Not validating the secret on input | Invalid base32 strings cause panics later when generating codes | Validate by creating a `TOTP` instance immediately |
+> | Forgetting the `otpauth` feature in Cargo.toml | `TOTP::from_url` and `TOTP::new` with issuer/account won't exist | `totp-rs = { version = "5.7", features = ["otpauth"] }` |
 
 ---
 
@@ -914,10 +905,9 @@ A vault with a hundred relics is useless if finding the right one takes longer t
 
 > *A vault with a hundred relics is useless if you can't find the one you need. The Seeker peers into every corner — names, usernames, URLs, notes, tags — and surfaces what matches. It also knows how to filter by chamber or tag, presenting results in clean, aligned columns worthy of a royal inventory.*
 
-### What You'll Learn
-
-- **Rust concepts:** iterator chains (`filter`, `any`, `map`), closures that capture variables, `String` methods (`to_lowercase`, `contains`), formatted table output with `format!` and padding
-- **No new crates** — this is pure Rust standard library
+> [!tip] What You'll Learn
+> - **Rust concepts:** iterator chains (`filter`, `any`, `map`), closures that capture variables, `String` methods (`to_lowercase`, `contains`), formatted table output with `format!` and padding
+> - **No new crates** — this is pure Rust standard library
 
 ### Step 1: Substring Search Across All Fields
 
@@ -1108,85 +1098,84 @@ Commands::List { chamber, tag } => {
 
 **`if let Some(ref ch) = chamber`:** The `ref` keyword borrows the inner value instead of moving it out of the `Option`. Without `ref`, the `String` inside `Some` would be moved, and `chamber` would be consumed. With `ref`, we get `&String` — a reference we can pass to our filter function.
 
-### Checkpoint: Full `src/search.rs`
-
-```rust
-use crate::model::Relic;
-
-pub fn search_relics<'a>(relics: &'a [Relic], query: &str) -> Vec<&'a Relic> {
-    let query_lower = query.to_lowercase();
-    relics
-        .iter()
-        .filter(|relic| relic_matches(relic, &query_lower))
-        .collect()
-}
-
-fn relic_matches(relic: &Relic, query_lower: &str) -> bool {
-    relic.name.to_lowercase().contains(query_lower)
-        || relic.username.to_lowercase().contains(query_lower)
-        || relic.url.as_deref().unwrap_or("").to_lowercase().contains(query_lower)
-        || relic.notes.as_deref().unwrap_or("").to_lowercase().contains(query_lower)
-        || relic.chamber.to_lowercase().contains(query_lower)
-        || relic.tags.iter().any(|tag| tag.to_lowercase().contains(query_lower))
-}
-
-pub fn filter_by_chamber<'a>(relics: &'a [Relic], chamber: &str) -> Vec<&'a Relic> {
-    let chamber_lower = chamber.to_lowercase();
-    relics
-        .iter()
-        .filter(|r| r.chamber.to_lowercase() == chamber_lower)
-        .collect()
-}
-
-pub fn filter_by_tag<'a>(relics: &'a [Relic], tag: &str) -> Vec<&'a Relic> {
-    let tag_lower = tag.to_lowercase();
-    relics
-        .iter()
-        .filter(|r| r.tags.iter().any(|t| t.to_lowercase() == tag_lower))
-        .collect()
-}
-
-pub fn print_relic_table(relics: &[&Relic]) {
-    if relics.is_empty() {
-        println!("No relics found.");
-        return;
-    }
-
-    let name_width = relics.iter().map(|r| r.name.len()).max().unwrap_or(4).max(4);
-    let user_width = relics.iter().map(|r| r.username.len()).max().unwrap_or(8).max(8);
-    let chamber_width = relics.iter().map(|r| r.chamber.len()).max().unwrap_or(7).max(7);
-
-    println!(
-        "{:<name_w$}  {:<user_w$}  {:<cham_w$}  Tags",
-        "Name", "Username", "Chamber",
-        name_w = name_width,
-        user_w = user_width,
-        cham_w = chamber_width,
-    );
-    println!(
-        "{:-<name_w$}  {:-<user_w$}  {:-<cham_w$}  ----",
-        "", "", "",
-        name_w = name_width,
-        user_w = user_width,
-        cham_w = chamber_width,
-    );
-
-    for relic in relics {
-        let tags = relic.tags.join(", ");
-        println!(
-            "{:<name_w$}  {:<user_w$}  {:<cham_w$}  {}",
-            relic.name, relic.username, relic.chamber, tags,
-            name_w = name_width,
-            user_w = user_width,
-            cham_w = chamber_width,
-        );
-    }
-
-    println!("\n{} relic(s) found.", relics.len());
-}
-```
-
-You can find any relic instantly. But credentials aren't static — passwords rotate, accounts move between teams, URLs change. Stage 18 builds the Scribe, an interactive editor that lets you reshape any relic field by field.
+> [!check] Checkpoint
+> ```rust
+> use crate::model::Relic;
+>
+> pub fn search_relics<'a>(relics: &'a [Relic], query: &str) -> Vec<&'a Relic> {
+>     let query_lower = query.to_lowercase();
+>     relics
+>         .iter()
+>         .filter(|relic| relic_matches(relic, &query_lower))
+>         .collect()
+> }
+>
+> fn relic_matches(relic: &Relic, query_lower: &str) -> bool {
+>     relic.name.to_lowercase().contains(query_lower)
+>         || relic.username.to_lowercase().contains(query_lower)
+>         || relic.url.as_deref().unwrap_or("").to_lowercase().contains(query_lower)
+>         || relic.notes.as_deref().unwrap_or("").to_lowercase().contains(query_lower)
+>         || relic.chamber.to_lowercase().contains(query_lower)
+>         || relic.tags.iter().any(|tag| tag.to_lowercase().contains(query_lower))
+> }
+>
+> pub fn filter_by_chamber<'a>(relics: &'a [Relic], chamber: &str) -> Vec<&'a Relic> {
+>     let chamber_lower = chamber.to_lowercase();
+>     relics
+>         .iter()
+>         .filter(|r| r.chamber.to_lowercase() == chamber_lower)
+>         .collect()
+> }
+>
+> pub fn filter_by_tag<'a>(relics: &'a [Relic], tag: &str) -> Vec<&'a Relic> {
+>     let tag_lower = tag.to_lowercase();
+>     relics
+>         .iter()
+>         .filter(|r| r.tags.iter().any(|t| t.to_lowercase() == tag_lower))
+>         .collect()
+> }
+>
+> pub fn print_relic_table(relics: &[&Relic]) {
+>     if relics.is_empty() {
+>         println!("No relics found.");
+>         return;
+>     }
+>
+>     let name_width = relics.iter().map(|r| r.name.len()).max().unwrap_or(4).max(4);
+>     let user_width = relics.iter().map(|r| r.username.len()).max().unwrap_or(8).max(8);
+>     let chamber_width = relics.iter().map(|r| r.chamber.len()).max().unwrap_or(7).max(7);
+>
+>     println!(
+>         "{:<name_w$}  {:<user_w$}  {:<cham_w$}  Tags",
+>         "Name", "Username", "Chamber",
+>         name_w = name_width,
+>         user_w = user_width,
+>         cham_w = chamber_width,
+>     );
+>     println!(
+>         "{:-<name_w$}  {:-<user_w$}  {:-<cham_w$}  ----",
+>         "", "", "",
+>         name_w = name_width,
+>         user_w = user_width,
+>         cham_w = chamber_width,
+>     );
+>
+>     for relic in relics {
+>         let tags = relic.tags.join(", ");
+>         println!(
+>             "{:<name_w$}  {:<user_w$}  {:<cham_w$}  {}",
+>             relic.name, relic.username, relic.chamber, tags,
+>             name_w = name_width,
+>             user_w = user_width,
+>             cham_w = chamber_width,
+>         );
+>     }
+>
+>     println!("\n{} relic(s) found.", relics.len());
+> }
+> ```
+>
+> You can find any relic instantly. But credentials aren't static — passwords rotate, accounts move between teams, URLs change. Stage 18 builds the Scribe, an interactive editor that lets you reshape any relic field by field.
 
 ### What to Try
 2. `cargo run -- search github` — should find relics with "github" in any field
@@ -1195,14 +1184,13 @@ You can find any relic instantly. But credentials aren't static — passwords ro
 5. `cargo run -- list --tag work` — only relics tagged "work"
 6. `cargo run -- list` — all relics, nicely formatted
 
-### Common Mistakes
-
-| Mistake | Why It's Wrong | Fix |
-|---------|---------------|-----|
-| Forgetting `to_lowercase()` on both sides | Search becomes case-sensitive — "GitHub" won't match "github" | Always lowercase both the query and the field |
-| Using `==` instead of `contains` for search | Only exact matches work — searching "git" won't find "GitHub" | Use `contains` for substring matching |
-| Returning `Vec<Relic>` instead of `Vec<&Relic>` | Clones every matching relic — wasteful for large vaults | Return references with lifetime annotations |
-| Hardcoding column widths | Table looks bad when names are longer than expected | Calculate widths from actual data with `.map().max()` |
+> [!warning] Common Mistakes
+> | Mistake | Why It's Wrong | Fix |
+> |---------|---------------|-----|
+> | Forgetting `to_lowercase()` on both sides | Search becomes case-sensitive — "GitHub" won't match "github" | Always lowercase both the query and the field |
+> | Using `==` instead of `contains` for search | Only exact matches work — searching "git" won't find "GitHub" | Use `contains` for substring matching |
+> | Returning `Vec<Relic>` instead of `Vec<&Relic>` | Clones every matching relic — wasteful for large vaults | Return references with lifetime annotations |
+> | Hardcoding column widths | Table looks bad when names are longer than expected | Calculate widths from actual data with `.map().max()` |
 
 ---
 
@@ -1212,10 +1200,9 @@ Credentials are living things — passwords get rotated, usernames change when c
 
 > *Relics are not carved in stone. Names change, passwords rotate, accounts move between chambers. The Scribe lets you reshape any relic — field by field — showing you what exists and letting you overwrite or keep each value with a single keystroke. Press Enter to keep, type to replace.*
 
-### What You'll Learn
-
-- **Rust concepts:** mutable references (`&mut`), `Option::unwrap_or`, conditional mutation, reading user input with `stdin`, the `trim()` and `is_empty()` pattern
-- **No new crates** — standard library I/O only
+> [!tip] What You'll Learn
+> - **Rust concepts:** mutable references (`&mut`), `Option::unwrap_or`, conditional mutation, reading user input with `stdin`, the `trim()` and `is_empty()` pattern
+> - **No new crates** — standard library I/O only
 
 ### Step 1: The Interactive Edit Prompt
 
@@ -1432,112 +1419,111 @@ Commands::Edit { name, generate } => {
 
 **`iter_mut()` vs `iter()`:** `iter()` gives `&Relic` (read-only references). `iter_mut()` gives `&mut Relic` (mutable references). Since we need to modify the relic, we use `iter_mut()`. The `.find()` method returns `Option<&mut Relic>`.
 
-### Checkpoint: Full `src/edit.rs`
-
-```rust
-use std::io::{self, Write};
-use crate::model::Relic;
-use crate::generator::GeneratorConfig;
-
-fn prompt_field(field_name: &str, current: &str) -> String {
-    print!("{} [{}]: ", field_name, current);
-    io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    let trimmed = input.trim();
-
-    if trimmed.is_empty() {
-        current.to_string()
-    } else {
-        trimmed.to_string()
-    }
-}
-
-fn prompt_optional_field(field_name: &str, current: &Option<String>) -> Option<String> {
-    let display = current.as_deref().unwrap_or("(none)");
-    print!("{} [{}]: ", field_name, display);
-    io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    let trimmed = input.trim();
-
-    if trimmed.is_empty() {
-        current.clone()
-    } else if trimmed.eq_ignore_ascii_case("none") || trimmed.eq_ignore_ascii_case("clear") {
-        None
-    } else {
-        Some(trimmed.to_string())
-    }
-}
-
-fn prompt_tags(current: &[String]) -> Vec<String> {
-    let display = if current.is_empty() {
-        "(none)".to_string()
-    } else {
-        current.join(", ")
-    };
-
-    print!("Tags [{}]: ", display);
-    io::stdout().flush().unwrap();
-
-    let mut input = String::new();
-    io::stdin().read_line(&mut input).unwrap();
-    let trimmed = input.trim();
-
-    if trimmed.is_empty() {
-        current.to_vec()
-    } else if trimmed.eq_ignore_ascii_case("none") || trimmed.eq_ignore_ascii_case("clear") {
-        Vec::new()
-    } else {
-        trimmed
-            .split(',')
-            .map(|t| t.trim().to_string())
-            .filter(|t| !t.is_empty())
-            .collect()
-    }
-}
-
-pub fn edit_relic(relic: &mut Relic, regenerate_password: bool) {
-    println!("Editing relic '{}'. Press Enter to keep current value.\n", relic.name);
-
-    relic.name = prompt_field("Name", &relic.name);
-    relic.username = prompt_field("Username", &relic.username);
-
-    if regenerate_password {
-        match GeneratorConfig::default().generate() {
-            Ok(new_password) => {
-                println!("Password: (regenerated)");
-                relic.password = new_password;
-            }
-            Err(e) => eprintln!("Failed to generate password: {}", e),
-        }
-    } else {
-        print!("Password [********] (press Enter to keep, or type new): ");
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-        let trimmed = input.trim();
-
-        if !trimmed.is_empty() {
-            relic.password = trimmed.to_string();
-        }
-    }
-
-    relic.url = prompt_optional_field("URL", &relic.url);
-    relic.chamber = prompt_field("Chamber", &relic.chamber);
-    relic.tags = prompt_tags(&relic.tags);
-    relic.notes = prompt_optional_field("Notes", &relic.notes);
-
-    relic.updated_at = chrono::Utc::now();
-
-    println!("\nRelic '{}' updated.", relic.name);
-}
-```
-
-Individual relics can be reshaped, but the chambers themselves — the organizational structure of the vault — are still fixed at creation time. Stage 19 builds the Chamber Architect, letting you create, rename, and safely delete the categories that organize your credentials.
+> [!check] Checkpoint
+> ```rust
+> use std::io::{self, Write};
+> use crate::model::Relic;
+> use crate::generator::GeneratorConfig;
+>
+> fn prompt_field(field_name: &str, current: &str) -> String {
+>     print!("{} [{}]: ", field_name, current);
+>     io::stdout().flush().unwrap();
+>
+>     let mut input = String::new();
+>     io::stdin().read_line(&mut input).unwrap();
+>     let trimmed = input.trim();
+>
+>     if trimmed.is_empty() {
+>         current.to_string()
+>     } else {
+>         trimmed.to_string()
+>     }
+> }
+>
+> fn prompt_optional_field(field_name: &str, current: &Option<String>) -> Option<String> {
+>     let display = current.as_deref().unwrap_or("(none)");
+>     print!("{} [{}]: ", field_name, display);
+>     io::stdout().flush().unwrap();
+>
+>     let mut input = String::new();
+>     io::stdin().read_line(&mut input).unwrap();
+>     let trimmed = input.trim();
+>
+>     if trimmed.is_empty() {
+>         current.clone()
+>     } else if trimmed.eq_ignore_ascii_case("none") || trimmed.eq_ignore_ascii_case("clear") {
+>         None
+>     } else {
+>         Some(trimmed.to_string())
+>     }
+> }
+>
+> fn prompt_tags(current: &[String]) -> Vec<String> {
+>     let display = if current.is_empty() {
+>         "(none)".to_string()
+>     } else {
+>         current.join(", ")
+>     };
+>
+>     print!("Tags [{}]: ", display);
+>     io::stdout().flush().unwrap();
+>
+>     let mut input = String::new();
+>     io::stdin().read_line(&mut input).unwrap();
+>     let trimmed = input.trim();
+>
+>     if trimmed.is_empty() {
+>         current.to_vec()
+>     } else if trimmed.eq_ignore_ascii_case("none") || trimmed.eq_ignore_ascii_case("clear") {
+>         Vec::new()
+>     } else {
+>         trimmed
+>             .split(',')
+>             .map(|t| t.trim().to_string())
+>             .filter(|t| !t.is_empty())
+>             .collect()
+>     }
+> }
+>
+> pub fn edit_relic(relic: &mut Relic, regenerate_password: bool) {
+>     println!("Editing relic '{}'. Press Enter to keep current value.\n", relic.name);
+>
+>     relic.name = prompt_field("Name", &relic.name);
+>     relic.username = prompt_field("Username", &relic.username);
+>
+>     if regenerate_password {
+>         match GeneratorConfig::default().generate() {
+>             Ok(new_password) => {
+>                 println!("Password: (regenerated)");
+>                 relic.password = new_password;
+>             }
+>             Err(e) => eprintln!("Failed to generate password: {}", e),
+>         }
+>     } else {
+>         print!("Password [********] (press Enter to keep, or type new): ");
+>         io::stdout().flush().unwrap();
+>
+>         let mut input = String::new();
+>         io::stdin().read_line(&mut input).unwrap();
+>         let trimmed = input.trim();
+>
+>         if !trimmed.is_empty() {
+>             relic.password = trimmed.to_string();
+>         }
+>     }
+>
+>     relic.url = prompt_optional_field("URL", &relic.url);
+>     relic.chamber = prompt_field("Chamber", &relic.chamber);
+>     relic.tags = prompt_tags(&relic.tags);
+>     relic.notes = prompt_optional_field("Notes", &relic.notes);
+>
+>     relic.updated_at = chrono::Utc::now();
+>
+>     println!("\nRelic '{}' updated.", relic.name);
+> }
+> ```
+>
+> Individual relics can be reshaped, but the chambers themselves — the organizational structure of the vault — are still fixed at creation time. Stage 19 builds the Chamber Architect, letting you create, rename, and safely delete the categories that organize your credentials.
 
 ### What to Try
 2. `cargo run -- edit GitHub --generate` — regenerate the password automatically
@@ -1545,14 +1531,13 @@ Individual relics can be reshaped, but the chambers themselves — the organizat
 4. Try entering tags as "dev, git, work" — should parse into three separate tags
 5. Try entering empty tags ("clear") — should remove all tags
 
-### Common Mistakes
-
-| Mistake | Why It's Wrong | Fix |
-|---------|---------------|-----|
-| Forgetting `io::stdout().flush()` | Prompt doesn't appear before input — user types blind | Always flush after `print!` (no newline) |
-| Using `iter()` instead of `iter_mut()` | Can't modify the relic — compiler error about immutable reference | Use `iter_mut()` when you need to mutate |
-| Showing the actual password in the prompt | Shoulder-surfing risk — defeats the purpose of hidden passwords | Show `[********]` instead |
-| Not updating `updated_at` | Audit trail is broken — can't tell when a relic was last modified | Set `relic.updated_at = Utc::now()` after changes |
+> [!warning] Common Mistakes
+> | Mistake | Why It's Wrong | Fix |
+> |---------|---------------|-----|
+> | Forgetting `io::stdout().flush()` | Prompt doesn't appear before input — user types blind | Always flush after `print!` (no newline) |
+> | Using `iter()` instead of `iter_mut()` | Can't modify the relic — compiler error about immutable reference | Use `iter_mut()` when you need to mutate |
+> | Showing the actual password in the prompt | Shoulder-surfing risk — defeats the purpose of hidden passwords | Show `[********]` instead |
+> | Not updating `updated_at` | Audit trail is broken — can't tell when a relic was last modified | Set `relic.updated_at = Utc::now()` after changes |
 
 ---
 
@@ -1562,10 +1547,9 @@ The default chambers (Armory, Treasury, Library, Crypt) won't fit every user's w
 
 > *A vault without organization is a vault in chaos. The Chamber Architect designs the rooms where relics are stored — creating new chambers for new purposes, renaming them as needs evolve, and demolishing empty ones when they've served their time. But a chamber full of relics cannot be destroyed without deliberate force.*
 
-### What You'll Learn
-
-- **Rust concepts:** `HashMap` operations (`insert`, `remove`, `contains_key`, `keys`), iterating and mutating a `Vec`, confirmation prompts, the `Entry` API
-- **Design pattern:** defensive deletion (require empty or explicit `--force`)
+> [!tip] What You'll Learn
+> - **Rust concepts:** `HashMap` operations (`insert`, `remove`, `contains_key`, `keys`), iterating and mutating a `Vec`, confirmation prompts, the `Entry` API
+> - **Design pattern:** defensive deletion (require empty or explicit `--force`)
 
 ### Step 1: List Chambers with Relic Counts
 
@@ -1638,7 +1622,7 @@ This is Rust's elegant way to handle "get or create" in a HashMap. Let's break i
 
 > **Python comparison:** `counts[chamber] = counts.get(chamber, 0) + 1` or using `collections.Counter`. Rust's `Entry` API is more verbose but avoids the double lookup that Python's `get` + assignment does.
 
-> **TypeScript comparison:** `counts.set(chamber, (counts.get(chamber) ?? 0) + 1)`. Same double-lookup issue.
+> **Python comparison:** `counts[chamber] = counts.get(chamber, 0) + 1`. Same double-lookup issue.
 
 ### Step 2: Add a Chamber
 
@@ -1858,164 +1842,163 @@ Commands::Chambers { action } => {
 
 **Nested subcommands:** `iv chambers add Armory` uses clap's nested subcommand feature. The `Option<ChamberAction>` means `iv chambers` alone (no subcommand) is valid — it lists chambers.
 
-### Checkpoint: Full `src/chambers.rs`
-
-```rust
-use std::collections::HashMap;
-use std::io::{self, Write};
-use crate::model::{Chamber, Relic, Vault};
-
-pub fn list_chambers(vault: &Vault) {
-    if vault.chambers.is_empty() {
-        println!("No chambers exist. Create one with 'iv chambers add <name>'.");
-        return;
-    }
-
-    let mut counts: HashMap<&str, usize> = HashMap::new();
-    for relic in &vault.relics {
-        *counts.entry(relic.chamber.as_str()).or_insert(0) += 1;
-    }
-
-    let mut names: Vec<&String> = vault.chambers.keys().collect();
-    names.sort();
-
-    let name_width = names.iter().map(|n| n.len()).max().unwrap_or(7).max(7);
-
-    println!(
-        "{:<name_w$}  {:<6}  Description",
-        "Chamber", "Relics",
-        name_w = name_width,
-    );
-    println!(
-        "{:-<name_w$}  {:-<6}  -----------",
-        "", "",
-        name_w = name_width,
-    );
-
-    for name in &names {
-        let chamber = &vault.chambers[name.as_str()];
-        let count = counts.get(name.as_str()).unwrap_or(&0);
-        println!(
-            "{:<name_w$}  {:<6}  {} {}",
-            name, count, chamber.icon, chamber.description,
-            name_w = name_width,
-        );
-    }
-
-    println!("\n{} chamber(s).", vault.chambers.len());
-}
-
-pub fn add_chamber(vault: &mut Vault, name: &str) -> Result<(), String> {
-    let exists = vault.chambers.keys().any(|k| k.eq_ignore_ascii_case(name));
-    if exists {
-        return Err(format!("Chamber '{}' already exists.", name));
-    }
-
-    print!("Icon (emoji, e.g. ⚔️): ");
-    io::stdout().flush().unwrap();
-    let mut icon = String::new();
-    io::stdin().read_line(&mut icon).unwrap();
-    let icon = icon.trim().to_string();
-
-    print!("Description: ");
-    io::stdout().flush().unwrap();
-    let mut desc = String::new();
-    io::stdin().read_line(&mut desc).unwrap();
-    let desc = desc.trim().to_string();
-
-    vault.chambers.insert(
-        name.to_string(),
-        Chamber {
-            icon: if icon.is_empty() { "📦".to_string() } else { icon },
-            description: if desc.is_empty() { String::new() } else { desc },
-        },
-    );
-
-    println!("Chamber '{}' created.", name);
-    Ok(())
-}
-
-pub fn rename_chamber(vault: &mut Vault, old_name: &str, new_name: &str) -> Result<(), String> {
-    let actual_key = vault.chambers.keys()
-        .find(|k| k.eq_ignore_ascii_case(old_name))
-        .cloned()
-        .ok_or(format!("Chamber '{}' not found.", old_name))?;
-
-    let conflict = vault.chambers.keys().any(|k| k.eq_ignore_ascii_case(new_name));
-    if conflict {
-        return Err(format!("Chamber '{}' already exists.", new_name));
-    }
-
-    let chamber = vault.chambers.remove(&actual_key).unwrap();
-    vault.chambers.insert(new_name.to_string(), chamber);
-
-    for relic in &mut vault.relics {
-        if relic.chamber.eq_ignore_ascii_case(old_name) {
-            relic.chamber = new_name.to_string();
-        }
-    }
-
-    println!(
-        "Chamber '{}' renamed to '{}'. {} relic(s) updated.",
-        actual_key,
-        new_name,
-        vault.relics.iter().filter(|r| r.chamber == new_name).count(),
-    );
-    Ok(())
-}
-
-pub fn delete_chamber(vault: &mut Vault, name: &str, force: bool) -> Result<(), String> {
-    let actual_key = vault.chambers.keys()
-        .find(|k| k.eq_ignore_ascii_case(name))
-        .cloned()
-        .ok_or(format!("Chamber '{}' not found.", name))?;
-
-    let relic_count = vault.relics
-        .iter()
-        .filter(|r| r.chamber.eq_ignore_ascii_case(name))
-        .count();
-
-    if relic_count > 0 && !force {
-        return Err(format!(
-            "Chamber '{}' contains {} relic(s). Use --force to move them to 'Unsorted'.",
-            actual_key, relic_count,
-        ));
-    }
-
-    if relic_count > 0 && force {
-        print!(
-            "Move {} relic(s) from '{}' to 'Unsorted' and delete the chamber? [y/N]: ",
-            relic_count, actual_key,
-        );
-        io::stdout().flush().unwrap();
-
-        let mut input = String::new();
-        io::stdin().read_line(&mut input).unwrap();
-
-        if !input.trim().eq_ignore_ascii_case("y") {
-            println!("Cancelled.");
-            return Ok(());
-        }
-
-        for relic in &mut vault.relics {
-            if relic.chamber.eq_ignore_ascii_case(name) {
-                relic.chamber = "Unsorted".to_string();
-            }
-        }
-
-        vault.chambers.entry("Unsorted".to_string()).or_insert(Chamber {
-            icon: "📦".to_string(),
-            description: "Relics without a chamber".to_string(),
-        });
-    }
-
-    vault.chambers.remove(&actual_key);
-    println!("Chamber '{}' deleted.", actual_key);
-    Ok(())
-}
-```
-
-The vault's toolset is now complete — generate, copy, authenticate, search, edit, and organize. But a vault that only stores secrets without monitoring them is a vault waiting to be breached. In Act 4, you'll build the Watchtower — breach detection, security auditing, and the vigilance tools that keep your credentials safe over time.
+> [!check] Checkpoint
+> ```rust
+> use std::collections::HashMap;
+> use std::io::{self, Write};
+> use crate::model::{Chamber, Relic, Vault};
+>
+> pub fn list_chambers(vault: &Vault) {
+>     if vault.chambers.is_empty() {
+>         println!("No chambers exist. Create one with 'iv chambers add <name>'.");
+>         return;
+>     }
+>
+>     let mut counts: HashMap<&str, usize> = HashMap::new();
+>     for relic in &vault.relics {
+>         *counts.entry(relic.chamber.as_str()).or_insert(0) += 1;
+>     }
+>
+>     let mut names: Vec<&String> = vault.chambers.keys().collect();
+>     names.sort();
+>
+>     let name_width = names.iter().map(|n| n.len()).max().unwrap_or(7).max(7);
+>
+>     println!(
+>         "{:<name_w$}  {:<6}  Description",
+>         "Chamber", "Relics",
+>         name_w = name_width,
+>     );
+>     println!(
+>         "{:-<name_w$}  {:-<6}  -----------",
+>         "", "",
+>         name_w = name_width,
+>     );
+>
+>     for name in &names {
+>         let chamber = &vault.chambers[name.as_str()];
+>         let count = counts.get(name.as_str()).unwrap_or(&0);
+>         println!(
+>             "{:<name_w$}  {:<6}  {} {}",
+>             name, count, chamber.icon, chamber.description,
+>             name_w = name_width,
+>         );
+>     }
+>
+>     println!("\n{} chamber(s).", vault.chambers.len());
+> }
+>
+> pub fn add_chamber(vault: &mut Vault, name: &str) -> Result<(), String> {
+>     let exists = vault.chambers.keys().any(|k| k.eq_ignore_ascii_case(name));
+>     if exists {
+>         return Err(format!("Chamber '{}' already exists.", name));
+>     }
+>
+>     print!("Icon (emoji, e.g. ⚔️): ");
+>     io::stdout().flush().unwrap();
+>     let mut icon = String::new();
+>     io::stdin().read_line(&mut icon).unwrap();
+>     let icon = icon.trim().to_string();
+>
+>     print!("Description: ");
+>     io::stdout().flush().unwrap();
+>     let mut desc = String::new();
+>     io::stdin().read_line(&mut desc).unwrap();
+>     let desc = desc.trim().to_string();
+>
+>     vault.chambers.insert(
+>         name.to_string(),
+>         Chamber {
+>             icon: if icon.is_empty() { "📦".to_string() } else { icon },
+>             description: if desc.is_empty() { String::new() } else { desc },
+>         },
+>     );
+>
+>     println!("Chamber '{}' created.", name);
+>     Ok(())
+> }
+>
+> pub fn rename_chamber(vault: &mut Vault, old_name: &str, new_name: &str) -> Result<(), String> {
+>     let actual_key = vault.chambers.keys()
+>         .find(|k| k.eq_ignore_ascii_case(old_name))
+>         .cloned()
+>         .ok_or(format!("Chamber '{}' not found.", old_name))?;
+>
+>     let conflict = vault.chambers.keys().any(|k| k.eq_ignore_ascii_case(new_name));
+>     if conflict {
+>         return Err(format!("Chamber '{}' already exists.", new_name));
+>     }
+>
+>     let chamber = vault.chambers.remove(&actual_key).unwrap();
+>     vault.chambers.insert(new_name.to_string(), chamber);
+>
+>     for relic in &mut vault.relics {
+>         if relic.chamber.eq_ignore_ascii_case(old_name) {
+>             relic.chamber = new_name.to_string();
+>         }
+>     }
+>
+>     println!(
+>         "Chamber '{}' renamed to '{}'. {} relic(s) updated.",
+>         actual_key,
+>         new_name,
+>         vault.relics.iter().filter(|r| r.chamber == new_name).count(),
+>     );
+>     Ok(())
+> }
+>
+> pub fn delete_chamber(vault: &mut Vault, name: &str, force: bool) -> Result<(), String> {
+>     let actual_key = vault.chambers.keys()
+>         .find(|k| k.eq_ignore_ascii_case(name))
+>         .cloned()
+>         .ok_or(format!("Chamber '{}' not found.", name))?;
+>
+>     let relic_count = vault.relics
+>         .iter()
+>         .filter(|r| r.chamber.eq_ignore_ascii_case(name))
+>         .count();
+>
+>     if relic_count > 0 && !force {
+>         return Err(format!(
+>             "Chamber '{}' contains {} relic(s). Use --force to move them to 'Unsorted'.",
+>             actual_key, relic_count,
+>         ));
+>     }
+>
+>     if relic_count > 0 && force {
+>         print!(
+>             "Move {} relic(s) from '{}' to 'Unsorted' and delete the chamber? [y/N]: ",
+>             relic_count, actual_key,
+>         );
+>         io::stdout().flush().unwrap();
+>
+>         let mut input = String::new();
+>         io::stdin().read_line(&mut input).unwrap();
+>
+>         if !input.trim().eq_ignore_ascii_case("y") {
+>             println!("Cancelled.");
+>             return Ok(());
+>         }
+>
+>         for relic in &mut vault.relics {
+>             if relic.chamber.eq_ignore_ascii_case(name) {
+>                 relic.chamber = "Unsorted".to_string();
+>             }
+>         }
+>
+>         vault.chambers.entry("Unsorted".to_string()).or_insert(Chamber {
+>             icon: "📦".to_string(),
+>             description: "Relics without a chamber".to_string(),
+>         });
+>     }
+>
+>     vault.chambers.remove(&actual_key);
+>     println!("Chamber '{}' deleted.", actual_key);
+>     Ok(())
+> }
+> ```
+>
+> The vault's toolset is now complete — generate, copy, authenticate, search, edit, and organize. But a vault that only stores secrets without monitoring them is a vault waiting to be breached. In Act 4, you'll build the Watchtower — breach detection, security auditing, and the vigilance tools that keep your credentials safe over time.
 
 ### What to Try
 2. `cargo run -- chambers add Dungeon` — create a new chamber
@@ -2024,14 +2007,13 @@ The vault's toolset is now complete — generate, copy, authenticate, search, ed
 5. Move a relic to "Catacombs", then try deleting — should fail without `--force`
 6. `cargo run -- chambers delete Catacombs --force` — should prompt, then move relics to "Unsorted"
 
-### Common Mistakes
-
-| Mistake | Why It's Wrong | Fix |
-|---------|---------------|-----|
-| Forgetting to update relics when renaming | Relics still reference the old chamber name — they become orphaned | Loop through `vault.relics` and update matching `chamber` fields |
-| Not using `.cloned()` before mutating the HashMap | Borrow checker error — can't hold a reference to a key while modifying the map | `.cloned()` creates an owned copy, releasing the borrow |
-| Deleting a non-empty chamber without moving relics | Relics reference a chamber that no longer exists | Either require empty or move to "Unsorted" with `--force` |
-| Case-sensitive chamber matching | "armory" and "Armory" treated as different chambers | Use `eq_ignore_ascii_case` consistently |
+> [!warning] Common Mistakes
+> | Mistake | Why It's Wrong | Fix |
+> |---------|---------------|-----|
+> | Forgetting to update relics when renaming | Relics still reference the old chamber name — they become orphaned | Loop through `vault.relics` and update matching `chamber` fields |
+> | Not using `.cloned()` before mutating the HashMap | Borrow checker error — can't hold a reference to a key while modifying the map | `.cloned()` creates an owned copy, releasing the borrow |
+> | Deleting a non-empty chamber without moving relics | Relics reference a chamber that no longer exists | Either require empty or move to "Unsorted" with `--force` |
+> | Case-sensitive chamber matching | "armory" and "Armory" treated as different chambers | Use `eq_ignore_ascii_case` consistently |
 
 ---
 

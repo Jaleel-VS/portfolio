@@ -23,7 +23,7 @@ let room = room.to_uppercase(); // String — different type, same name
 let room = room.len();          // usize — shadowed again
 ```
 
-**Coming from Python/TS:** In Python, all variables are mutable. In Rust, immutability is the default. Shadowing looks like reassignment but it creates a brand new binding — the old value is dropped.
+**Coming from Python:** In Python, all variables are mutable. In Rust, immutability is the default. Shadowing looks like reassignment but it creates a brand new binding — the old value is dropped.
 
 ### Ownership — The Three Rules
 
@@ -51,7 +51,7 @@ let backup = sword.clone(); // deep copy — both valid
 println!("{} and {}", sword, backup); // OK
 ```
 
-**Coming from Python/TS:** In Python, `b = a` makes both point to the same object (reference counted). In Rust, `b = a` *moves* ownership — `a` is gone. Think of it like handing someone a physical object, not copying a pointer.
+**Coming from Python:** In Python, `b = a` makes both point to the same object (reference counted). In Rust, `b = a` *moves* ownership — `a` is gone. Think of it like handing someone a physical object, not copying a pointer.
 
 **Copy types** — small stack values (`i32`, `f64`, `bool`, `char`, tuples of Copy types) are copied automatically, not moved:
 
@@ -380,7 +380,7 @@ fn peek_item(inventory: &Vec<String>) -> &String {
 }
 ```
 
-**Python/TS equivalent:** In Python, `item = inventory[0]` just copies the reference (pointer). Both `item` and `inventory[0]` point to the same object. Rust doesn't allow this because it would create two owners of the same heap data.
+**Python equivalent:** In Python, `item = inventory[0]` just copies the reference (pointer). Both `item` and `inventory[0]` point to the same object. Rust doesn't allow this because it would create two owners of the same heap data.
 
 ---
 
@@ -412,7 +412,7 @@ let saved_ref = &player;
 println!("Still here: {}", player);
 ```
 
-**Python/TS equivalent:** In Python, `saved = player` just copies the reference. Both variables point to the same string object. Rust's move semantics mean the original is invalidated.
+**Python equivalent:** In Python, `saved = player` just copies the reference. Both variables point to the same string object. Rust's move semantics mean the original is invalidated.
 
 ---
 
@@ -444,7 +444,7 @@ let second = &mut inventory; // OK now
 second.push("map");
 ```
 
-**Python/TS equivalent:** In Python, you can have as many references to a list as you want, and mutate through any of them. This is exactly the kind of bug Rust prevents — two parts of your code mutating the same data leads to subtle bugs.
+**Python equivalent:** In Python, you can have as many references to a list as you want, and mutate through any of them. This is exactly the kind of bug Rust prevents — two parts of your code mutating the same data leads to subtle bugs.
 
 ---
 
@@ -478,7 +478,7 @@ fn longest<'a>(a: &'a str, b: &'a str) -> &'a str {
 // both input references"
 ```
 
-**Python/TS equivalent:** Python doesn't track reference lifetimes — the garbage collector handles it. In Rust, there's no GC, so the compiler needs proof that the returned reference won't outlive the data it points to.
+**Python equivalent:** Python doesn't track reference lifetimes — the garbage collector handles it. In Rust, there's no GC, so the compiler needs proof that the returned reference won't outlive the data it points to.
 
 ---
 
@@ -507,7 +507,7 @@ fn get_room_name() -> String {
 }
 ```
 
-**Python/TS equivalent:** In Python, the garbage collector keeps `room_name` alive as long as any reference exists. In Rust, local variables are destroyed when the function returns — returning a reference to one would be a use-after-free bug.
+**Python equivalent:** In Python, the garbage collector keeps `room_name` alive as long as any reference exists. In Rust, local variables are destroyed when the function returns — returning a reference to one would be a use-after-free bug.
 
 ---
 
@@ -536,7 +536,7 @@ players.push("Quinn");               // OK — no active borrows
 println!("{}", first);
 ```
 
-**Python/TS equivalent:** In Python, this is a classic bug source:
+**Python equivalent:** In Python, this is a classic bug source:
 ```python
 players = ["Ash", "Morgan"]
 for p in players:       # iterating (reading)
@@ -620,7 +620,7 @@ name = "client"
 path = "src/client.rs"
 ```
 
-**Version syntax** (same as npm semver):
+**Version syntax** (same as pip/PyPI semver):
 - `"1"` → any 1.x.y (most common)
 - `"1.2"` → any 1.2.x
 - `"=1.2.3"` → exactly 1.2.3
@@ -744,7 +744,7 @@ let (socket, addr) = listener.accept().await?;
 
 **Event loop** — the runtime that drives async code. It maintains a list of pending operations and polls the OS for which ones are ready. When your `.await` yields, the event loop picks up another ready task.
 
-**AWS parallel:** This is exactly how Lambda's Node.js runtime works. `await fetch(url)` doesn't block — the event loop handles other callbacks while waiting for the network response.
+**AWS parallel:** This is exactly how Lambda's Python runtime works. `await fetch(url)` doesn't block — the event loop handles other callbacks while waiting for the network response.
 
 ### The Tokio Runtime
 
@@ -937,7 +937,7 @@ let json = serde_json::to_string(&event)?;
 let parsed: GameEvent = serde_json::from_str(&json)?;
 ```
 
-**Coming from Python/TS:** This is like `json.dumps()`/`json.loads()` but type-safe. No runtime surprises — if it compiles, the serialization works.
+**Coming from Python:** This is like `json.dumps()`/`json.loads()` but type-safe. No runtime surprises — if it compiles, the serialization works.
 
 #### `chrono` — Date and Time
 

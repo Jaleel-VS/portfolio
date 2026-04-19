@@ -4,11 +4,44 @@
 
 Act 1 forged your data structures. Act 2 gave them a voice through Bedrock. Act 3 connects everything to Discord, turning a CLI prototype into a multiplayer bot. You'll learn a new framework (poise), a new interaction model (buttons and modals), and how to orchestrate async state across many simultaneous players.
 
+> [!info] Character Struct Evolution: CLI → Discord
+> In Acts 1-2, our `Character` struct was designed for a single-player CLI — it carried individual named fields (`might: i32`, `finesse: i32`, `wit: i32`, `charm: i32`, `grit: i32`) plus derived stats like `fortune`, `max_hp`, `level`, and `xp`. That worked well for local game logic and JSON serialization.
+>
+> In Act 3, we simplify the struct for Discord's multiplayer context:
+>
+> **Before (Acts 1-2 CLI):**
+> ```rust
+> struct Character {
+>     name: String,
+>     might: i32, finesse: i32, wit: i32, charm: i32, grit: i32,
+>     fortune: i32, fortune_max: i32,
+>     hp: i32, max_hp: i32, level: i32, xp: i32,
+> }
+> ```
+>
+> **After (Act 3 Discord):**
+> ```rust
+> struct Character {
+>     name: String,
+>     realm: String,
+>     language: String,
+>     stats: [u8; 5],  // [Might, Finesse, Wit, Charm, Grit] — same 5 stats, compact array
+>     hp: i32, max_hp: i32,
+>     fortune: u8, max_fortune: u8,
+> }
+> ```
+>
+> **What changed and why:**
+> - **Stats become `[u8; 5]`** — Discord's button UI allocates points one at a time (0-4 range), so `u8` is plenty. An array is easier to index by button ID than five named fields.
+> - **`realm` and `language` added** — the CLI hardcoded these in the `PromptBuilder`; Discord lets each player choose during `/create`.
+> - **`level` and `xp` dropped** — Act 3 focuses on single-quest sessions, not long-term progression. We'll add them back in Act 4 with persistence.
+> - **The five stats are the same:** index 0 = Might, 1 = Finesse, 2 = Wit, 3 = Charm, 4 = Grit.
+
 ---
 
 ## Stage 15 — The Bot Awakens
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Our CLI adventure works, but it's trapped in a terminal — one player, one session, no way to share the experience. Discord is where the players are, and a bot is how we reach them. This stage connects Crónica to Discord's gateway, teaches you the poise framework, and gets your first slash command responding. Everything in Acts 3-5 builds on this foundation.
 
@@ -34,17 +67,6 @@ async def ping(ctx):
     await ctx.respond("Pong!")
 
 bot.run("TOKEN")
-```
-
-**TypeScript comparison (discord.js):**
-```typescript
-import { Client, GatewayIntentBits } from 'discord.js';
-const client = new Client({ intents: [GatewayIntentBits.Guilds] });
-
-client.on('interactionCreate', interaction => {
-    if (interaction.commandName === 'ping') interaction.reply('Pong!');
-});
-client.login('TOKEN');
 ```
 
 In Rust, **serenity** is the low-level Discord library (like discord.py's internals). **poise** sits on top, adding slash command macros, argument parsing, and framework wiring — similar to what `discord.ext.commands` does for discord.py.
@@ -74,7 +96,7 @@ Uncomment the Act 3 dependencies:
 ```toml
 [dependencies]
 # --- Act 1 & 2 (already uncommented) ---
-rand = "0.8"
+rand = "0.9"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tokio = { version = "1", features = ["full"] }
@@ -111,8 +133,7 @@ use poise::serenity_prelude as serenity;
 
 // --- Shared state available in every command ---
 // This struct is created once when the bot starts, then passed
-// to every command via ctx.data(). Think of it like Flask's app.config
-// or Express's req.app.locals.
+// to every command via ctx.data(). Think of it like Flask's app.config.
 struct Data {}
 
 // Type aliases save us from writing these generics on every command.
@@ -218,14 +239,14 @@ cargo run
 
 You should see the bot come online in your Discord server. Type `/ping` and it should respond with "Pong! 🏓".
 
-### Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| "Missing DISCORD_TOKEN" panic | Set the env var: `export DISCORD_TOKEN="..."` |
-| `/ping` doesn't appear in Discord | Global registration takes up to an hour. Use guild-specific registration for dev |
-| "Privileged intent" error | You used `GatewayIntents::all()` — switch to `non_privileged()` or enable intents in the dashboard |
-| Bot is online but commands fail silently | Check that you ticked `applications.commands` in the OAuth2 URL generator |
+> [!warning] Common Mistakes
+> 
+> | Mistake | Fix |
+> |---------|-----|
+> | "Missing DISCORD_TOKEN" panic | Set the env var: `export DISCORD_TOKEN="..."` |
+> | `/ping` doesn't appear in Discord | Global registration takes up to an hour. Use guild-specific registration for dev |
+> | "Privileged intent" error | You used `GatewayIntents::all()` — switch to `non_privileged()` or enable intents in the dashboard |
+> | Bot is online but commands fail silently | Check that you ticked `applications.commands` in the OAuth2 URL generator |
 
 > [!tip] Dev Tip: Guild Registration
 > For instant command updates during development, replace `register_globally` with guild-specific registration:
@@ -237,18 +258,17 @@ You should see the bot come online in your Discord server. Type `/ping` and it s
 
 The bot awakens and responds to `/ping`, but it has no memory — no characters, no quests, no identity. Next stage, we'll build the character creation wizard with Discord buttons and shared state.
 
-### Checkpoint
-
-- [ ] Bot connects and shows as online in Discord
-- [ ] `/ping` appears in the slash command menu
-- [ ] Bot responds with "Pong! 🏓"
-- [ ] You understand the flow: token → intents → framework → client → gateway
+> [!check] Checkpoint
+> - [ ] Bot connects and shows as online in Discord
+> - [ ] `/ping` appears in the slash command menu
+> - [ ] Bot responds with "Pong! 🏓"
+> - [ ] You understand the flow: token → intents → framework → client → gateway
 
 ---
 
 ## Stage 16 — Character Creation
 
-> **Difficulty: Hard**
+*Difficulty: Hard*
 
 A bot that pongs is a parlor trick. Players need to create characters — pick a realm, choose a language, allocate stats — all through Discord's visual interface. This is the hardest stage in Act 3 because it introduces multi-step interactive flows: buttons, collectors, shared mutable state, and Discord's unforgiving 3-second interaction deadline. Master this pattern and every future command becomes a variation on the same theme.
 
@@ -312,6 +332,8 @@ struct Data {
 }
 ```
 
+That triple-nested type — `Arc<RwLock<HashMap<...>>>` — looks intimidating, but each layer solves a specific problem. `HashMap` stores the data. `RwLock` lets multiple commands read simultaneously while ensuring only one can write at a time (Python's `asyncio.Lock` is the closest equivalent, but `RwLock` is smarter — it doesn't block readers). `Arc` (atomic reference counting) lets us share the same lock across all async tasks without a single owner. In Python, you'd just use a global dict and hope for the best — Rust makes you prove at compile time that concurrent access is safe.
+
 Update the `setup` closure to initialize it:
 ```rust
 .setup(|ctx, _ready, framework| {
@@ -360,7 +382,11 @@ async fn create(ctx: Context<'_>) -> Result<(), Error> {
         .embed(embed)
         .components(vec![row]);
     let msg = ctx.send(reply).await?;
+```
 
+This is the Discord interaction model in action: we've sent a message containing an embed (the rich card) and a row of buttons (the components). The message is now sitting in the channel, waiting for the player to click. Discord doesn't push button clicks to us automatically — we need to actively listen for them using a **collector**. Think of it like `input()` in Python, except instead of blocking on stdin, we're awaiting a future that resolves when a specific button is clicked.
+
+```rust
     // --- Collector: wait for the user's button click ---
     // We need the message ID to filter interactions to THIS message only.
     let msg_id = msg.message().await?.id;
@@ -383,7 +409,11 @@ async fn create(ctx: Context<'_>) -> Result<(), Error> {
             return Ok(());
         }
     };
+```
 
+The `ComponentInteractionCollector` is serenity's way of waiting for a specific user interaction. It's an async future that resolves when someone clicks a button matching your filters — or when the timeout expires. We filter by `message_id` (so we only catch clicks on *this* message) and `author_id` (so other users' clicks don't interfere). The 60-second timeout prevents the command from hanging forever if the player walks away. In Python, discord.py's `View.wait()` does something similar, but Rust's collector gives you explicit control over which interactions you're listening for.
+
+```rust
     // Extract the realm from the custom_id: "realm_Verdania" → "Verdania"
     let realm = mci.data.custom_id.strip_prefix("realm_")
         .unwrap_or("Unknown")
@@ -415,7 +445,11 @@ async fn create(ctx: Context<'_>) -> Result<(), Error> {
                 .components(vec![lang_row])
         ),
     ).await?;
+```
 
+This is the key insight of Discord's interaction model: when a user clicks a button, you don't send a *new* message — you respond to the click by *updating the original message*. `CreateInteractionResponse::UpdateMessage` replaces the embed and buttons in-place, so the wizard feels like a single evolving card rather than a stream of separate messages. In Python's discord.py, this is `interaction.response.edit_message()`. In serenity, it's `mci.create_response()` with the `UpdateMessage` variant.
+
+```rust
     // Wait for language selection
     let lang_interaction = serenity::ComponentInteractionCollector::new(ctx.serenity_context())
         .message_id(msg_id)
@@ -451,7 +485,11 @@ async fn create(ctx: Context<'_>) -> Result<(), Error> {
                 .components(stat_rows)
         ),
     ).await?;
+```
 
+Now we enter the core of stat allocation: a `loop` that waits for button clicks, updates the stats array, and re-renders the embed after each click. This is fundamentally different from Python, where you'd register button callbacks and let the event loop handle it. In Rust, we own the control flow explicitly — the loop runs inside our async function, and each iteration awaits a single button click via the collector. The loop exits only when the player clicks "Confirm" with zero points remaining.
+
+```rust
     // Loop: wait for +/- clicks until the user clicks "Confirm"
     loop {
         let stat_interaction = serenity::ComponentInteractionCollector::new(
@@ -496,7 +534,11 @@ async fn create(ctx: Context<'_>) -> Result<(), Error> {
             // Write to shared state
             let mut chars = ctx.data().characters.write().await;
             chars.insert(ctx.author().id, character.clone());
+```
 
+Here we finally acquire a **write lock** on the shared character map. `.write().await` blocks until all readers finish, then gives us exclusive access. In Python you'd just do `characters[user_id] = character` — but with multiple async tasks, Rust's `RwLock` guarantees no two commands can write simultaneously. The lock is automatically released when `chars` goes out of scope at the end of this block.
+
+```rust
             // Final confirmation embed
             let done_embed = serenity::CreateEmbed::new()
                 .title(format!("Welcome, {}!", character.name))
@@ -609,32 +651,31 @@ commands: vec![ping(), create()],
 
 Discord requires you to respond to an interaction within **3 seconds**. If your code takes longer (e.g., an AI call), you must first **acknowledge** or **defer** the interaction, then edit the response later. For character creation, each step is fast (no AI calls), so direct responses work fine. We'll handle deferral in Stage 17.
 
-### Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| "This interaction failed" | You didn't respond to the `ComponentInteraction` within 3 seconds |
-| Buttons stop working after one click | You need a collector loop — each click is a new interaction that needs a response |
-| "Unknown interaction" error | The interaction token expired (15 min). Start a new `/create` |
-| Two users' buttons interfere | Always filter the collector by `author_id` |
-| Stats go above 4 or below 0 | Check bounds before incrementing/decrementing |
+> [!warning] Common Mistakes
+> 
+> | Mistake | Fix |
+> |---------|-----|
+> | "This interaction failed" | You didn't respond to the `ComponentInteraction` within 3 seconds |
+> | Buttons stop working after one click | You need a collector loop — each click is a new interaction that needs a response |
+> | "Unknown interaction" error | The interaction token expired (15 min). Start a new `/create` |
+> | Two users' buttons interfere | Always filter the collector by `author_id` |
+> | Stats go above 4 or below 0 | Check bounds before incrementing/decrementing |
 
 Characters can be forged through Discord's interface now, but they have nowhere to go — no quest, no AI narrator, no adventure. Next stage, we'll wire the AI from Act 2 into Discord and build the `/play` command.
 
-### Checkpoint
-
-- [ ] `/create` shows a realm selection embed with 4 buttons
-- [ ] Clicking a realm advances to language selection
-- [ ] Stat allocation shows +/- buttons with a visual bar
-- [ ] Buttons disable correctly at min/max values
-- [ ] Confirming saves the character and shows a summary
-- [ ] Two users can create characters simultaneously without interference
+> [!check] Checkpoint
+> - [ ] `/create` shows a realm selection embed with 4 buttons
+> - [ ] Clicking a realm advances to language selection
+> - [ ] Stat allocation shows +/- buttons with a visual bar
+> - [ ] Buttons disable correctly at min/max values
+> - [ ] Confirming saves the character and shows a summary
+> - [ ] Two users can create characters simultaneously without interference
 
 ---
 
 ## Stage 17 — The Play Command
 
-> **Difficulty: Hard**
+*Difficulty: Hard*
 
 Characters exist in Discord, but they're static — portraits hanging on a wall with no story to tell. We need the `/play` command that sends character context to the AI, waits for a narrated scene, and presents it as a rich embed with choice buttons. The catch: AI calls take seconds, and Discord demands a response in three. This stage teaches the defer-then-edit pattern that every bot with external API calls must master.
 
@@ -838,30 +879,29 @@ Key points:
 - After deferring, you have up to 15 minutes to edit the response
 - `ctx.send()` after a defer automatically edits the deferred message (poise handles this)
 
-### Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| "Interaction has already been acknowledged" | You called both `ctx.defer()` and `ctx.say()` — pick one |
-| Buttons appear but nothing happens when clicked | Button handling is in Stage 18 — we're just displaying them here |
-| AI response isn't valid JSON | Add error handling: try parsing, fall back to a default scene |
-| `drop(chars)` — why? | Holding a `RwLock` read guard across an `.await` blocks all writers. Drop it before the AI call |
+> [!warning] Common Mistakes
+> 
+> | Mistake | Fix |
+> |---------|-----|
+> | "Interaction has already been acknowledged" | You called both `ctx.defer()` and `ctx.say()` — pick one |
+> | Buttons appear but nothing happens when clicked | Button handling is in Stage 18 — we're just displaying them here |
+> | AI response isn't valid JSON | Add error handling: try parsing, fall back to a default scene |
+> | `drop(chars)` — why? | Holding a `RwLock` read guard across an `.await` blocks all writers. Drop it before the AI call |
 
 Scenes appear and choices beckon, but the buttons are decorative — clicking them does nothing yet. Next stage, we'll wire up button interactions, modals for custom actions, and the Fortune spend menu.
 
-### Checkpoint
-
-- [ ] `/play` shows "Bot is thinking..." then displays a scene embed
-- [ ] Scene has narration text, HP, and Fortune fields
-- [ ] Choice buttons appear below the embed (up to 4 + Custom Action)
-- [ ] Fortune indicator shows current/max tokens
-- [ ] Players without a character get a helpful error message
+> [!check] Checkpoint
+> - [ ] `/play` shows "Bot is thinking..." then displays a scene embed
+> - [ ] Scene has narration text, HP, and Fortune fields
+> - [ ] Choice buttons appear below the embed (up to 4 + Custom Action)
+> - [ ] Fortune indicator shows current/max tokens
+> - [ ] Players without a character get a helpful error message
 
 ---
 
 ## Stage 18 — Button Interactions
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 The scene is set and the buttons glow, but clicking them yields silence — the bot doesn't know how to handle interactions that arrive minutes after the command returned. We need a persistent event handler that catches every button click and modal submission across the entire bot's lifetime, routing them by ID to the right logic. This is the nervous system that makes the bot feel alive.
 
@@ -900,6 +940,8 @@ async def on_interaction(interaction):
 })
 ```
 
+The closure receives four arguments: the serenity context (for API calls), the event itself (a big enum covering every possible Discord event), the framework reference, and your shared `Data`. The `Box::pin(...)` wrapper is the same pattern you saw in `setup()` — it converts the async block into a pinned future that poise can store. In Python, you'd just slap `async def` on the function and be done; in Rust, the framework needs to know the future's exact memory layout, hence the pin.
+
 The handler function routes events:
 
 ```rust
@@ -916,7 +958,11 @@ async fn handle_event(
         // Not a component interaction — ignore it.
         return Ok(());
     };
+```
 
+This function fires on *every* Discord event — messages, reactions, voice state changes, everything. The `let ... else` pattern at the top is a guard: it destructures the event into a `ComponentInteraction` or bails immediately. This is Rust's version of Python's `if not isinstance(event, ComponentInteraction): return`. The `mci` variable (short for "message component interaction") gives us the `custom_id`, the user who clicked, and the message the button belongs to.
+
+```rust
     let custom_id = &mci.data.custom_id;
 
     // Route by prefix. This is the Discord equivalent of URL routing.
@@ -935,6 +981,8 @@ async fn handle_event(
     Ok(())
 }
 ```
+
+This prefix-based routing is the Discord equivalent of URL routing in a web framework. Every button you create gets a `custom_id` string, and this `if/else` chain dispatches to the right handler based on that prefix. In Python's discord.py, you'd use `@bot.event` with `on_interaction` and do the same `startswith` checks. The key insight: buttons from `/create` (like `realm_` and `stat_plus_`) never reach this handler because their collectors in Stage 16 consume them first.
 
 ### Handling Choice Buttons
 
@@ -1013,6 +1061,8 @@ async fn handle_choice(
 }
 ```
 
+Notice the three different response types at play here. `CreateInteractionResponse::Message` sends a brand-new message (used for the "no session" error). `CreateInteractionResponse::Acknowledge` silently acknowledges the click without changing anything visible — it buys us time for the AI call. And `edit_response` updates the original message in-place with the new scene. In Python, these map roughly to `interaction.response.send_message()`, `interaction.response.defer()`, and `interaction.edit_original_response()`. Getting the right response type wrong is the #1 source of "interaction failed" errors.
+
 ### The Custom Action Modal
 
 When the player clicks "Custom Action...", we show a **modal** — Discord's popup form. poise provides a `Modal` derive macro that makes this easy:
@@ -1029,7 +1079,11 @@ struct CustomActionModal {
     #[paragraph]
     action: String,
 }
+```
 
+A modal is Discord's popup form — a small dialog box that appears over the user's screen with text input fields. They're the only way to collect free-text input from a button interaction (buttons themselves can only carry a fixed `custom_id`). The `#[derive(poise::Modal)]` macro generates all the serialization and deserialization code automatically, turning your struct fields into form inputs. In Python, you'd subclass `discord.ui.Modal` and define `TextInput` fields manually; Rust's derive macro does the same work at compile time.
+
+```rust
 async fn handle_custom_action(
     ctx: &serenity::Context,
     mci: &serenity::ComponentInteraction,
@@ -1083,7 +1137,11 @@ async fn handle_custom_action(
 }
 ```
 
+The critical detail here is that `execute_modal_on_component_interaction` must be the *first* response to the button click — you cannot acknowledge or defer before showing a modal. This is a Discord API constraint, not a Rust one. The function handles the entire lifecycle: it sends the modal as the interaction response, waits for the user to submit (or time out), and returns the parsed struct. After submission, the original button interaction is consumed, so we use `mci.edit_response` to update the scene message rather than sending a new reply.
+
 ### The Fortune Spend Menu
+
+Fortune is Crónica's meta-currency — a small pool of tokens that let players bend the narrative in their favor. Rerolling a bad check, nudging the story toward a specific outcome, or finding a rare item all cost Fortune. The spend menu appears as an ephemeral message (only the clicking player sees it) so it doesn't clutter the channel for other players watching the adventure unfold.
 
 When the player clicks "Spend Fortune", we show fortune options as buttons:
 
@@ -1121,7 +1179,13 @@ async fn handle_fortune_menu(
 
     Ok(())
 }
+```
 
+The menu response uses `CreateInteractionResponse::Message` rather than `UpdateMessage` — it creates a *new* ephemeral message instead of replacing the scene embed. This is intentional: the player needs to see both the current scene and the fortune options simultaneously. The `.ephemeral(true)` flag ensures only the clicking player sees the menu, keeping the shared channel clean.
+
+When the player picks a fortune option, `handle_fortune_spend` deducts the cost and confirms:
+
+```rust
 async fn handle_fortune_spend(
     ctx: &serenity::Context,
     mci: &serenity::ComponentInteraction,
@@ -1178,31 +1242,32 @@ async fn handle_fortune_spend(
 }
 ```
 
-### Common Mistakes
+Notice how `handle_fortune_spend` holds the write lock across the entire function — it reads the session, checks the balance, and deducts in one critical section. This is safe because there are no `.await` calls between acquiring the lock and releasing it (the early-return `create_response` calls happen only when we're about to exit). In Python, you wouldn't worry about this because the GIL serializes access; in async Rust, holding a lock across an `.await` can deadlock your bot.
 
-| Mistake | Fix |
-|---------|-----|
-| "Unknown interaction" on button click | The `event_handler` isn't wired up, or you forgot to match the `custom_id` prefix |
-| Modal doesn't appear | `execute_modal_on_component_interaction` must be the **first** response to the interaction — don't acknowledge first |
-| "Interaction already acknowledged" | You responded twice to the same interaction. Each `ComponentInteraction` gets exactly one response |
-| Fortune buttons affect wrong user | Always key session lookups by `mci.user.id`, not a global variable |
+> [!warning] Common Mistakes
+> 
+> | Mistake | Fix |
+> |---------|-----|
+> | "Unknown interaction" on button click | The `event_handler` isn't wired up, or you forgot to match the `custom_id` prefix |
+> | Modal doesn't appear | `execute_modal_on_component_interaction` must be the **first** response to the interaction — don't acknowledge first |
+> | "Interaction already acknowledged" | You responded twice to the same interaction. Each `ComponentInteraction` gets exactly one response |
+> | Fortune buttons affect wrong user | Always key session lookups by `mci.user.id`, not a global variable |
 
 Choices flow, modals open, and Fortune tokens spend — but combat is still missing from Discord. The CLI combat engine from Act 2 needs a visual face: HP bars, stat-based action buttons, and exchange-by-exchange updates. Next stage, we'll build the combat UI.
 
-### Checkpoint
-
-- [ ] Clicking a choice button triggers the AI and updates the scene
-- [ ] "Custom Action..." opens a text input modal
-- [ ] Submitting the modal sends the free-text action to the AI
-- [ ] "Spend Fortune" shows an ephemeral menu with 4 options
-- [ ] Fortune tokens deduct correctly and show remaining count
-- [ ] All interactions respond within 3 seconds (defer if needed)
+> [!check] Checkpoint
+> - [ ] Clicking a choice button triggers the AI and updates the scene
+> - [ ] "Custom Action..." opens a text input modal
+> - [ ] Submitting the modal sends the free-text action to the AI
+> - [ ] "Spend Fortune" shows an ephemeral menu with 4 options
+> - [ ] Fortune tokens deduct correctly and show remaining count
+> - [ ] All interactions respond within 3 seconds (defer if needed)
 
 ---
 
 ## Stage 19 — Combat UI
 
-> **Difficulty: Hard**
+*Difficulty: Hard*
 
 Exploration works in Discord, but when combat erupts, there's no visual representation — no HP bars, no tactical choices, no sense of danger. The CLI combat engine from Act 2 needs a Discord face: embeds that show both combatants' health at a glance, stat-based action buttons that make the player *think* about their approach, and exchange-by-exchange updates that build tension with every click.
 
@@ -1474,33 +1539,32 @@ async fn handle_combat_utility(
 }
 ```
 
-### Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| HP bar shows negative blocks | Clamp with `.max(0)` before calculating filled blocks |
-| "Attack" button in the UI | There is no Attack button — the 5 stat buttons ARE the attack approaches |
-| "Luck" stat appears | Only 5 stats: Might / Finesse / Wit / Charm / Grit. No Luck |
-| Buttons overflow (more than 5 per row) | Split into multiple `CreateActionRow`s — max 5 buttons each |
-| Combat state lost between exchanges | Store enemy HP and combat state in `GameSession`, not local variables |
+> [!warning] Common Mistakes
+> 
+> | Mistake | Fix |
+> |---------|-----|
+> | HP bar shows negative blocks | Clamp with `.max(0)` before calculating filled blocks |
+> | "Attack" button in the UI | There is no Attack button — the 5 stat buttons ARE the attack approaches |
+> | "Luck" stat appears | Only 5 stats: Might / Finesse / Wit / Charm / Grit. No Luck |
+> | Buttons overflow (more than 5 per row) | Split into multiple `CreateActionRow`s — max 5 buttons each |
+> | Combat state lost between exchanges | Store enemy HP and combat state in `GameSession`, not local variables |
 
 Combat blazes through Discord with HP bars and margin bands, but players can't inspect their character or manage their gear between fights. Next stage, we'll build the `/stats` and `/inventory` commands.
 
-### Checkpoint
-
-- [ ] Combat embed shows both HP bars with block visualization
-- [ ] 5 stat buttons show stat name and current value
-- [ ] 4 utility buttons: Defend / Item / Flee / Special
-- [ ] Fortune indicator and Spend Fortune button present
-- [ ] Each exchange updates the embed in-place with AI narration
-- [ ] Combat ends when `combat_over` is true (buttons removed)
-- [ ] No Attack button, no Luck button anywhere in the UI
+> [!check] Checkpoint
+> - [ ] Combat embed shows both HP bars with block visualization
+> - [ ] 5 stat buttons show stat name and current value
+> - [ ] 4 utility buttons: Defend / Item / Flee / Special
+> - [ ] Fortune indicator and Spend Fortune button present
+> - [ ] Each exchange updates the embed in-place with AI narration
+> - [ ] Combat ends when `combat_over` is true (buttons removed)
+> - [ ] No Attack button, no Luck button anywhere in the UI
 
 ---
 
 ## Stage 20 — Stats and Inventory
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Players can fight and explore, but they're flying blind — no way to check their character sheet between encounters, no way to see what they're carrying or use an item outside of combat. We need read-only commands that display character state as rich embeds and an inventory system with select menus for item management. These utility commands round out the player experience.
 
@@ -1652,30 +1716,29 @@ Register both commands:
 commands: vec![ping(), create(), play(), stats(), inventory()],
 ```
 
-### Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Embed fields misaligned | Use `inline: true` for grid layout, `\u{200b}` spacers for alignment |
-| Select menu shows "Nothing selected" forever | You must respond to the select interaction — even just an Acknowledge |
-| Lock held across await | Clone the data you need, then `drop(lock)` before any `.await` |
-| Ephemeral message visible to others | Double-check `.ephemeral(true)` is set on the reply |
+> [!warning] Common Mistakes
+> 
+> | Mistake | Fix |
+> |---------|-----|
+> | Embed fields misaligned | Use `inline: true` for grid layout, `\u{200b}` spacers for alignment |
+> | Select menu shows "Nothing selected" forever | You must respond to the select interaction — even just an Acknowledge |
+> | Lock held across await | Clone the data you need, then `drop(lock)` before any `.await` |
+> | Ephemeral message visible to others | Double-check `.ephemeral(true)` is set on the reply |
 
 Players can inspect their heroes and manage their gear now, but completed quests vanish into the void — no permanent record, no shared legend. Next stage, we'll build the chronicle channel where finished adventures are published for all to read.
 
-### Checkpoint
-
-- [ ] `/stats` shows a formatted character sheet (ephemeral)
-- [ ] Stats display in a grid layout with all 5 stats
-- [ ] `/inventory` shows items with a select menu
-- [ ] Selecting an item triggers a response
-- [ ] Both commands handle missing characters gracefully
+> [!check] Checkpoint
+> - [ ] `/stats` shows a formatted character sheet (ephemeral)
+> - [ ] Stats display in a grid layout with all 5 stats
+> - [ ] `/inventory` shows items with a select menu
+> - [ ] Selecting an item triggers a response
+> - [ ] Both commands handle missing characters gracefully
 
 ---
 
 ## Stage 21 — The Chronicle Channel
 
-> **Difficulty: Medium**
+*Difficulty: Medium*
 
 Quests end, but their stories die with the session — no permanent record, no shared legend, no way for other players to read about your triumphs. We need a chronicle system that publishes completed adventures to a dedicated Discord channel, transforming ephemeral gameplay into a permanent, shared narrative. This stage teaches cross-channel posting and multi-embed messages.
 
@@ -1822,31 +1885,30 @@ commands: vec![ping(), create(), play(), stats(), inventory(), chronicle()],
 | `CreateInteractionResponse` | Respond to a button/select interaction |
 | `mci.edit_response()` | Update an existing interaction response |
 
-### Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| "Missing Permissions" error | Bot needs Send Messages permission in `#the-chronicle` |
-| Channel not found | Name must be exactly `the-chronicle` (no `#` prefix in the comparison) |
-| Too many embeds | Discord allows max 10 embeds per message — truncate long stories |
-| `guild_only` not set | Without it, `ctx.guild_id()` returns `None` in DMs and the command panics |
+> [!warning] Common Mistakes
+> 
+> | Mistake | Fix |
+> |---------|-----|
+> | "Missing Permissions" error | Bot needs Send Messages permission in `#the-chronicle` |
+> | Channel not found | Name must be exactly `the-chronicle` (no `#` prefix in the comparison) |
+> | Too many embeds | Discord allows max 10 embeds per message — truncate long stories |
+> | `guild_only` not set | Without it, `ctx.guild_id()` returns `None` in DMs and the command panics |
 
 Chronicles are published and legends are shared, but there's no competition — no way to see who the mightiest adventurer is. Next stage, we'll build the leaderboard and complete Act 3's command roster.
 
-### Checkpoint
-
-- [ ] `/chronicle` publishes the quest story to `#the-chronicle`
-- [ ] Title embed shows character name, realm, and stats
-- [ ] Story chapters appear as separate embeds
-- [ ] Player gets an ephemeral confirmation with a channel link
-- [ ] Command fails gracefully if no chronicle channel exists
-- [ ] Command requires a minimum story length
+> [!check] Checkpoint
+> - [ ] `/chronicle` publishes the quest story to `#the-chronicle`
+> - [ ] Title embed shows character name, realm, and stats
+> - [ ] Story chapters appear as separate embeds
+> - [ ] Player gets an ephemeral confirmation with a channel link
+> - [ ] Command fails gracefully if no chronicle channel exists
+> - [ ] Command requires a minimum story length
 
 ---
 
 ## Stage 22 — Leaderboard
 
-> **Difficulty: Easy**
+*Difficulty: Easy*
 
 Players create characters, fight monsters, and publish chronicles — but there's no sense of competition or community ranking. Who's the mightiest hero? Who's explored the most? We need a leaderboard that reads from shared state, sorts characters by power, and displays the results in a clean table-style embed. This is also the final command in Act 3, completing the bot's feature set before we add persistence.
 
@@ -1952,24 +2014,23 @@ With all commands complete, your `FrameworkOptions` should look like this:
 })
 ```
 
-### Common Mistakes
-
-| Mistake | Fix |
-|---------|-----|
-| Leaderboard shows stale data | We read from the `RwLock` each time — data is always current |
-| Monospace formatting breaks | Use backtick code blocks (` ``` `) and fixed-width padding |
-| Names overflow columns | Use the `truncate()` helper from Stage 17 |
-| Lock held across await | Clone into a Vec and `drop(chars)` before any `.await` calls |
+> [!warning] Common Mistakes
+> 
+> | Mistake | Fix |
+> |---------|-----|
+> | Leaderboard shows stale data | We read from the `RwLock` each time — data is always current |
+> | Monospace formatting breaks | Use backtick code blocks (` ``` `) and fixed-width padding |
+> | Names overflow columns | Use the `truncate()` helper from Stage 17 |
+> | Lock held across await | Clone into a Vec and `drop(chars)` before any `.await` calls |
 
 The leaderboard crowns champions and the command roster is complete — but restart the bot and every hero vanishes, every chronicle forgotten. In Act 4, we'll give Crónica a memory with SQLite persistence, proper error handling, and a full progression system.
 
-### Checkpoint
-
-- [ ] `/leaderboard` shows a ranked table of all characters
-- [ ] Rankings sorted by total stat points (descending)
-- [ ] Top 3 get medal indicators
-- [ ] Empty state handled gracefully
-- [ ] All 7 slash commands registered and working
+> [!check] Checkpoint
+> - [ ] `/leaderboard` shows a ranked table of all characters
+> - [ ] Rankings sorted by total stat points (descending)
+> - [ ] Top 3 get medal indicators
+> - [ ] Empty state handled gracefully
+> - [ ] All 7 slash commands registered and working
 
 ---
 

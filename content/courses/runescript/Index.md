@@ -94,5 +94,5 @@ Rust cheat sheet, interpreter glossary, operator precedence table, BNF grammar, 
 - A working Rust toolchain (`rustup`, `cargo`)
 - nvim + Ghostty terminal (or any editor/terminal)
 - macOS (Linux works too)
-- Familiarity with Python or TypeScript
+- Familiarity with Python
 - No prior Rust or interpreter experience needed

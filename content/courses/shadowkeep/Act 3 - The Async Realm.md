@@ -48,7 +48,15 @@ The `features = ["full"]` flag enables everything: the multi-threaded runtime, T
 
 This is the biggest architectural shift in the course. Your thread-per-connection server works, but each thread costs ~8MB of stack and an OS context switch. With 100 players, that's 800MB of stack doing nothing while players think about their next move. Async I/O lets one thread serve thousands of connections by yielding control during idle waits. This is how production servers at AWS scale — and understanding it transforms you from someone who writes Rust into someone who writes *fast* Rust.
 
-**Difficulty:** Hard (1-2 hours)
+*Difficulty: Hard (1-2 hours)*
+
+> [!tip] What You'll Learn
+> - Arc
+> - with
+> - main
+> - Send
+> - await
+
 
 ### Story Beat
 
@@ -104,8 +112,6 @@ async def main():
 
 asyncio.run(main())
 ```
-
-**TypeScript/Node comparison:** Node.js also uses an event loop (libuv), but it's single-threaded and callback-based under the hood. `async/await` in JS is syntactic sugar over Promises. Tokio's `async/await` is syntactic sugar over `Future` — Rust's equivalent of a Promise. The key difference: Rust futures are *lazy* (they do nothing until polled), while JS Promises are *eager* (they start executing immediately).
 
 ### Instructions
 
@@ -430,70 +436,69 @@ async fn main() {
 }
 ```
 
-### Common Mistakes
-
-**1 - Forgetting `.await`**
-
-```rust
-// WRONG — this creates a Future but never runs it!
-// The compiler will warn: "unused implementor of Future"
-writer.write_all(b"hello\n");
-
-// RIGHT — .await actually executes the future
-writer.write_all(b"hello\n").await.unwrap();
-```
-
-In Python, `await` is also required, but forgetting it gives you a coroutine object. In Rust, you get a compiler warning — Rust futures are lazy and do *nothing* until awaited.
-
-**2 - Blocking in async context**
-
-```rust
-// WRONG — std::thread::sleep blocks the entire Tokio worker thread!
-// All other tasks on this thread freeze.
-std::thread::sleep(Duration::from_secs(5));
-
-// RIGHT — tokio::time::sleep yields, letting other tasks run
-tokio::time::sleep(Duration::from_secs(5)).await;
-```
-
-This is the #1 async bug. If you call any blocking function (file I/O with `std::fs`, `thread::sleep`, heavy computation), you starve other tasks. Use `tokio::task::spawn_blocking()` for unavoidable blocking work.
-
-**3 - Send bounds on spawned tasks**
-
-```rust
-// WRONG — Rc is not Send, can't cross thread boundaries
-use std::rc::Rc;
-let data = Rc::new(42);
-tokio::spawn(async move {
-    println!("{data}");
-});
-
-// RIGHT — Arc is Send + Sync
-use std::sync::Arc;
-let data = Arc::new(42);
-tokio::spawn(async move {
-    println!("{data}");
-});
-```
-
-`tokio::spawn` requires the future to be `Send` because tasks can migrate between worker threads. This means everything captured by the async block must be `Send`. Use `Arc` instead of `Rc`, `tokio::sync::Mutex` or `std::sync::Mutex` instead of `RefCell`.
-
-**4 - Holding a MutexGuard across `.await`**
-
-```rust
-// WRONG with std::sync::Mutex — the guard is not Send,
-// so the compiler rejects this.
-let mut guard = state.lock().unwrap();
-writer.write_all(b"hello").await; // ERROR: MutexGuard is not Send
-drop(guard);
-
-// RIGHT — drop the guard before awaiting
-let msg = {
-    let guard = state.lock().unwrap();
-    format!("Players online: {}\n", guard.player_count())
-}; // guard dropped here
-writer.write_all(msg.as_bytes()).await.unwrap();
-```
+> [!warning] Common Mistakes
+> **1 - Forgetting `.await`**
+>
+> ```rust
+> // WRONG — this creates a Future but never runs it!
+> // The compiler will warn: "unused implementor of Future"
+> writer.write_all(b"hello\n");
+>
+> // RIGHT — .await actually executes the future
+> writer.write_all(b"hello\n").await.unwrap();
+> ```
+>
+> In Python, `await` is also required, but forgetting it gives you a coroutine object. In Rust, you get a compiler warning — Rust futures are lazy and do *nothing* until awaited.
+>
+> **2 - Blocking in async context**
+>
+> ```rust
+> // WRONG — std::thread::sleep blocks the entire Tokio worker thread!
+> // All other tasks on this thread freeze.
+> std::thread::sleep(Duration::from_secs(5));
+>
+> // RIGHT — tokio::time::sleep yields, letting other tasks run
+> tokio::time::sleep(Duration::from_secs(5)).await;
+> ```
+>
+> This is the #1 async bug. If you call any blocking function (file I/O with `std::fs`, `thread::sleep`, heavy computation), you starve other tasks. Use `tokio::task::spawn_blocking()` for unavoidable blocking work.
+>
+> **3 - Send bounds on spawned tasks**
+>
+> ```rust
+> // WRONG — Rc is not Send, can't cross thread boundaries
+> use std::rc::Rc;
+> let data = Rc::new(42);
+> tokio::spawn(async move {
+>     println!("{data}");
+> });
+>
+> // RIGHT — Arc is Send + Sync
+> use std::sync::Arc;
+> let data = Arc::new(42);
+> tokio::spawn(async move {
+>     println!("{data}");
+> });
+> ```
+>
+> `tokio::spawn` requires the future to be `Send` because tasks can migrate between worker threads. This means everything captured by the async block must be `Send`. Use `Arc` instead of `Rc`, `tokio::sync::Mutex` or `std::sync::Mutex` instead of `RefCell`.
+>
+> **4 - Holding a MutexGuard across `.await`**
+>
+> ```rust
+> // WRONG with std::sync::Mutex — the guard is not Send,
+> // so the compiler rejects this.
+> let mut guard = state.lock().unwrap();
+> writer.write_all(b"hello").await; // ERROR: MutexGuard is not Send
+> drop(guard);
+>
+> // RIGHT — drop the guard before awaiting
+> let msg = {
+>     let guard = state.lock().unwrap();
+>     format!("Players online: {}\n", guard.player_count())
+> }; // guard dropped here
+> writer.write_all(msg.as_bytes()).await.unwrap();
+> ```
 
 ### Rust Aside: What Is a Future?
 
@@ -516,8 +521,6 @@ When you write `async fn foo() -> String { ... }`, the compiler transforms it in
 The Tokio runtime calls `poll()` on your futures. If a future returns `Poll::Pending`, the runtime parks it and works on other tasks. When the I/O it's waiting for completes (the OS signals readiness via epoll/kqueue), the runtime wakes the task and polls it again.
 
 **Python comparison:** Python coroutines work similarly — `async def` creates a coroutine object, and the event loop drives it by calling `send()`. But Python coroutines are interpreted and heap-allocated. Rust futures compile down to state machines with zero heap allocation — they're as fast as hand-written state machines.
-
-**JS comparison:** A JavaScript `Promise` starts executing immediately when created. A Rust `Future` does *nothing* until polled. This is called "lazy evaluation" and it means you can build up complex future chains without any work happening until you `.await` the final result.
 
 ```mermaid
 graph TD
@@ -569,125 +572,127 @@ Both players should work independently. When one disconnects (Ctrl+C), the serve
 
 The async foundation is laid — connections are lightweight tasks, not heavy threads. But your handler can only do one thing at a time: wait for input. The castle needs to whisper horrors even when the player is silent, and respond to game events between keystrokes.
 
-### Checkpoint Code
+> [!note]
+> The checkpoint below shows a simplified `GameState` API. If your Act 2 code uses different method names, adapt accordingly — the important change is the async wrapper, not the exact method signatures.
 
-```rust
-use std::collections::HashMap;
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
-use tokio::time::{self, Duration};
-
-// -- Your existing GameState, Player, Room, Command, etc. from Act 2 --
-// (unchanged, just make sure they derive Clone where needed)
-
-#[derive(Clone)]
-struct SharedState {
-    inner: Arc<Mutex<GameState>>,
-}
-
-impl SharedState {
-    fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(GameState::new())),
-        }
-    }
-
-    fn with<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut GameState) -> R,
-    {
-        let mut guard = self.inner.lock().unwrap();
-        f(&mut guard)
-    }
-}
-
-fn start_game_loop(state: SharedState) {
-    tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(5));
-        loop {
-            interval.tick().await;
-            state.with(|game| {
-                game.tick();
-            });
-        }
-    });
-}
-
-async fn handle_client(socket: tokio::net::TcpStream, state: SharedState) {
-    let (reader, mut writer) = socket.into_split();
-    let mut reader = BufReader::new(reader);
-
-    writer
-        .write_all(b"What is your name, traveler?\n")
-        .await
-        .unwrap();
-
-    let mut name = String::new();
-    if reader.read_line(&mut name).await.unwrap() == 0 {
-        return;
-    }
-    let name = name.trim().to_string();
-
-    let welcome = format!(
-        "\n  Welcome to Shadowkeep, {name}.\n  \
-         Type 'help' for commands.\n\n"
-    );
-    writer.write_all(welcome.as_bytes()).await.unwrap();
-
-    state.with(|game| {
-        game.add_player(name.clone());
-    });
-
-    let mut input = String::new();
-    loop {
-        input.clear();
-        match reader.read_line(&mut input).await {
-            Ok(0) => {
-                println!("{name} has vanished into the darkness.");
-                state.with(|game| game.remove_player(&name));
-                break;
-            }
-            Ok(_) => {
-                let command = input.trim().to_string();
-                let response = state.with(|game| game.handle_command(&name, &command));
-                writer.write_all(response.as_bytes()).await.unwrap();
-            }
-            Err(e) => {
-                eprintln!("Error reading from {name}: {e}");
-                state.with(|game| game.remove_player(&name));
-                break;
-            }
-        }
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    let state = SharedState::new();
-    start_game_loop(state.clone());
-
-    let listener = TcpListener::bind("127.0.0.1:7878")
-        .await
-        .expect("Failed to bind to port 7878");
-
-    println!("Shadowkeep awaits on port 7878...");
-
-    loop {
-        let (socket, addr) = listener
-            .accept()
-            .await
-            .expect("Failed to accept connection");
-
-        println!("A soul approaches from {addr}...");
-        let state = state.clone();
-
-        tokio::spawn(async move {
-            handle_client(socket, state).await;
-        });
-    }
-}
-```
+> [!check] Checkpoint
+> ```rust
+> use std::collections::HashMap;
+> use std::sync::{Arc, Mutex};
+> use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+> use tokio::net::TcpListener;
+> use tokio::time::{self, Duration};
+>
+> // -- Your existing GameState, Player, Room, Command, etc. from Act 2 --
+> // (unchanged, just make sure they derive Clone where needed)
+>
+> #[derive(Clone)]
+> struct SharedState {
+>     inner: Arc<Mutex<GameState>>,
+> }
+>
+> impl SharedState {
+>     fn new() -> Self {
+>         Self {
+>             inner: Arc::new(Mutex::new(GameState::new())),
+>         }
+>     }
+>
+>     fn with<F, R>(&self, f: F) -> R
+>     where
+>         F: FnOnce(&mut GameState) -> R,
+>     {
+>         let mut guard = self.inner.lock().unwrap();
+>         f(&mut guard)
+>     }
+> }
+>
+> fn start_game_loop(state: SharedState) {
+>     tokio::spawn(async move {
+>         let mut interval = time::interval(Duration::from_secs(5));
+>         loop {
+>             interval.tick().await;
+>             state.with(|game| {
+>                 game.tick();
+>             });
+>         }
+>     });
+> }
+>
+> async fn handle_client(socket: tokio::net::TcpStream, state: SharedState) {
+>     let (reader, mut writer) = socket.into_split();
+>     let mut reader = BufReader::new(reader);
+>
+>     writer
+>         .write_all(b"What is your name, traveler?\n")
+>         .await
+>         .unwrap();
+>
+>     let mut name = String::new();
+>     if reader.read_line(&mut name).await.unwrap() == 0 {
+>         return;
+>     }
+>     let name = name.trim().to_string();
+>
+>     let welcome = format!(
+>         "\n  Welcome to Shadowkeep, {name}.\n  \
+>          Type 'help' for commands.\n\n"
+>     );
+>     writer.write_all(welcome.as_bytes()).await.unwrap();
+>
+>     state.with(|game| {
+>         game.add_player(name.clone());
+>     });
+>
+>     let mut input = String::new();
+>     loop {
+>         input.clear();
+>         match reader.read_line(&mut input).await {
+>             Ok(0) => {
+>                 println!("{name} has vanished into the darkness.");
+>                 state.with(|game| game.remove_player(&name));
+>                 break;
+>             }
+>             Ok(_) => {
+>                 let command = input.trim().to_string();
+>                 let response = state.with(|game| game.handle_command(&name, &command));
+>                 writer.write_all(response.as_bytes()).await.unwrap();
+>             }
+>             Err(e) => {
+>                 eprintln!("Error reading from {name}: {e}");
+>                 state.with(|game| game.remove_player(&name));
+>                 break;
+>             }
+>         }
+>     }
+> }
+>
+> #[tokio::main]
+> async fn main() {
+>     let state = SharedState::new();
+>     start_game_loop(state.clone());
+>
+>     let listener = TcpListener::bind("127.0.0.1:7878")
+>         .await
+>         .expect("Failed to bind to port 7878");
+>
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     loop {
+>         let (socket, addr) = listener
+>             .accept()
+>             .await
+>             .expect("Failed to accept connection");
+>
+>         println!("A soul approaches from {addr}...");
+>         let state = state.clone();
+>
+>         tokio::spawn(async move {
+>             handle_client(socket, state).await;
+>         });
+>     }
+> }
+> ```
 
 ---
 
@@ -695,7 +700,8 @@ async fn main() {
 
 Your async handler can read player input, but it can only do one thing at a time — wait for input, then respond. A real game client needs to handle multiple event sources simultaneously: player typing, game tick firing, horror timer expiring, shutdown signal arriving. `select!` is how async Rust multiplexes these concerns onto a single task, and it's the pattern you'll use in every async application you ever write.
 
-**Difficulty:** Medium (30-60 minutes)
+*Difficulty: Medium (30-60 minutes)*
+
 
 ### Story Beat
 
@@ -705,7 +711,7 @@ Your async handler can read player input, but it can only do one thing at a time
 
 ### Concept: tokio::select!
 
-`tokio::select!` waits on multiple async operations simultaneously and runs the handler for whichever completes first. The others are cancelled. It's like Python's `asyncio.wait(return_when=FIRST_COMPLETED)` or JavaScript's `Promise.race()`, but integrated into the language as a macro.
+`tokio::select!` waits on multiple async operations simultaneously and runs the handler for whichever completes first. The others are cancelled. It's like Python's `asyncio.wait(return_when=FIRST_COMPLETED)`, but integrated into the language as a macro.
 
 ```mermaid
 graph TD
@@ -883,17 +889,17 @@ loop {
 
 The `, if is_alive` after the async expression is a precondition. When `is_alive` is `false`, that branch is skipped entirely — its future isn't even polled. This is useful for state-dependent behavior.
 
-### Rust Aside: select! vs Promise.race() vs asyncio.wait()
+### Rust Aside: select! vs asyncio.wait()
 
-| Feature | Rust `select!` | JS `Promise.race()` | Python `asyncio.wait()` |
-|---------|---------------|---------------------|------------------------|
-| Cancels losers | Yes (dropped) | No (keep running) | Optional |
-| Pattern matching | Yes | No | No |
-| Preconditions | Yes (`, if cond`) | No | No |
-| Borrowing | Yes (same task) | N/A | N/A |
-| Random fairness | Yes | No (first registered) | No |
+| Feature | Rust `select!` | Python `asyncio.wait()` |
+|---------|---------------|------------------------|
+| Cancels losers | Yes (dropped) | Optional |
+| Pattern matching | Yes | No |
+| Preconditions | Yes (`, if cond`) | No |
+| Borrowing | Yes (same task) | N/A |
+| Random fairness | Yes | No |
 
-The biggest difference: in Rust, when one branch wins, the losing branches are *dropped* — their futures are cancelled. In JS, `Promise.race()` returns the first result but the other promises keep running in the background. This makes Rust's `select!` more resource-efficient.
+The biggest difference: in Rust, when one branch wins, the losing branches are *dropped* — their futures are cancelled. This makes Rust's `select!` more resource-efficient.
 
 **Cancellation safety:** Some futures are safe to cancel mid-operation, others aren't. `read_line` on a `BufReader` is cancellation-safe — if it's cancelled, no data is lost (unread data stays in the buffer). But `read_exact` is NOT cancellation-safe — if cancelled after reading partial data, those bytes are lost. Always check the docs for cancellation safety when using `select!`.
 
@@ -909,143 +915,142 @@ The biggest difference: in Rust, when one branch wins, the losing branches are *
 
 Your handler now juggles multiple concerns simultaneously. But it still locks a shared `Mutex` for every command — and that polling branch checks for events every second whether anything happened or not. Channels will replace both problems.
 
-### Checkpoint Code
-
-```rust
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
-use tokio::time::{self, Duration};
-
-#[derive(Clone)]
-struct SharedState {
-    inner: Arc<Mutex<GameState>>,
-}
-
-impl SharedState {
-    fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(GameState::new())),
-        }
-    }
-
-    fn with<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut GameState) -> R,
-    {
-        let mut guard = self.inner.lock().unwrap();
-        f(&mut guard)
-    }
-}
-
-fn start_game_loop(state: SharedState) {
-    tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(5));
-        loop {
-            interval.tick().await;
-            state.with(|game| game.tick());
-        }
-    });
-}
-
-async fn handle_client(socket: tokio::net::TcpStream, state: SharedState) {
-    let (reader, mut writer) = socket.into_split();
-    let mut reader = BufReader::new(reader);
-
-    writer
-        .write_all(b"What is your name, traveler?\n")
-        .await
-        .unwrap();
-
-    let mut name = String::new();
-    if reader.read_line(&mut name).await.unwrap() == 0 {
-        return;
-    }
-    let name = name.trim().to_string();
-
-    let welcome = format!(
-        "\n  Welcome to Shadowkeep, {name}.\n  \
-         Type 'help' for commands.\n\n"
-    );
-    writer.write_all(welcome.as_bytes()).await.unwrap();
-
-    state.with(|game| game.add_player(name.clone()));
-
-    let mut input = String::new();
-    let mut horror_interval = time::interval(Duration::from_secs(30));
-    let mut horror_tick: usize = 0;
-
-    loop {
-        tokio::select! {
-            result = reader.read_line(&mut input) => {
-                match result {
-                    Ok(0) => {
-                        println!("{name} has vanished into the darkness.");
-                        state.with(|game| game.remove_player(&name));
-                        break;
-                    }
-                    Ok(_) => {
-                        let command = input.trim().to_string();
-                        let response = state.with(|game| {
-                            game.handle_command(&name, &command)
-                        });
-                        writer.write_all(response.as_bytes()).await.unwrap();
-                        input.clear();
-                    }
-                    Err(e) => {
-                        eprintln!("Error reading from {name}: {e}");
-                        state.with(|game| game.remove_player(&name));
-                        break;
-                    }
-                }
-            }
-
-            _ = horror_interval.tick() => {
-                let messages = [
-                    "A cold draft whispers through the corridor...\n",
-                    "You hear scratching inside the walls...\n",
-                    "The torchlight flickers and dims...\n",
-                    "Something wet drips onto your shoulder...\n",
-                    "A distant scream echoes through the castle...\n",
-                ];
-                let msg = messages[horror_tick % messages.len()];
-                horror_tick += 1;
-
-                if writer.write_all(msg.as_bytes()).await.is_err() {
-                    state.with(|game| game.remove_player(&name));
-                    break;
-                }
-            }
-        }
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    let state = SharedState::new();
-    start_game_loop(state.clone());
-
-    let listener = TcpListener::bind("127.0.0.1:7878")
-        .await
-        .expect("Failed to bind to port 7878");
-
-    println!("Shadowkeep awaits on port 7878...");
-
-    loop {
-        let (socket, addr) = listener
-            .accept()
-            .await
-            .expect("Failed to accept connection");
-
-        println!("A soul approaches from {addr}...");
-        let state = state.clone();
-
-        tokio::spawn(async move {
-            handle_client(socket, state).await;
-        });
-    }
-}
-```
+> [!check] Checkpoint
+> ```rust
+> use std::sync::{Arc, Mutex};
+> use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+> use tokio::net::TcpListener;
+> use tokio::time::{self, Duration};
+>
+> #[derive(Clone)]
+> struct SharedState {
+>     inner: Arc<Mutex<GameState>>,
+> }
+>
+> impl SharedState {
+>     fn new() -> Self {
+>         Self {
+>             inner: Arc::new(Mutex::new(GameState::new())),
+>         }
+>     }
+>
+>     fn with<F, R>(&self, f: F) -> R
+>     where
+>         F: FnOnce(&mut GameState) -> R,
+>     {
+>         let mut guard = self.inner.lock().unwrap();
+>         f(&mut guard)
+>     }
+> }
+>
+> fn start_game_loop(state: SharedState) {
+>     tokio::spawn(async move {
+>         let mut interval = time::interval(Duration::from_secs(5));
+>         loop {
+>             interval.tick().await;
+>             state.with(|game| game.tick());
+>         }
+>     });
+> }
+>
+> async fn handle_client(socket: tokio::net::TcpStream, state: SharedState) {
+>     let (reader, mut writer) = socket.into_split();
+>     let mut reader = BufReader::new(reader);
+>
+>     writer
+>         .write_all(b"What is your name, traveler?\n")
+>         .await
+>         .unwrap();
+>
+>     let mut name = String::new();
+>     if reader.read_line(&mut name).await.unwrap() == 0 {
+>         return;
+>     }
+>     let name = name.trim().to_string();
+>
+>     let welcome = format!(
+>         "\n  Welcome to Shadowkeep, {name}.\n  \
+>          Type 'help' for commands.\n\n"
+>     );
+>     writer.write_all(welcome.as_bytes()).await.unwrap();
+>
+>     state.with(|game| game.add_player(name.clone()));
+>
+>     let mut input = String::new();
+>     let mut horror_interval = time::interval(Duration::from_secs(30));
+>     let mut horror_tick: usize = 0;
+>
+>     loop {
+>         tokio::select! {
+>             result = reader.read_line(&mut input) => {
+>                 match result {
+>                     Ok(0) => {
+>                         println!("{name} has vanished into the darkness.");
+>                         state.with(|game| game.remove_player(&name));
+>                         break;
+>                     }
+>                     Ok(_) => {
+>                         let command = input.trim().to_string();
+>                         let response = state.with(|game| {
+>                             game.handle_command(&name, &command)
+>                         });
+>                         writer.write_all(response.as_bytes()).await.unwrap();
+>                         input.clear();
+>                     }
+>                     Err(e) => {
+>                         eprintln!("Error reading from {name}: {e}");
+>                         state.with(|game| game.remove_player(&name));
+>                         break;
+>                     }
+>                 }
+>             }
+>
+>             _ = horror_interval.tick() => {
+>                 let messages = [
+>                     "A cold draft whispers through the corridor...\n",
+>                     "You hear scratching inside the walls...\n",
+>                     "The torchlight flickers and dims...\n",
+>                     "Something wet drips onto your shoulder...\n",
+>                     "A distant scream echoes through the castle...\n",
+>                 ];
+>                 let msg = messages[horror_tick % messages.len()];
+>                 horror_tick += 1;
+>
+>                 if writer.write_all(msg.as_bytes()).await.is_err() {
+>                     state.with(|game| game.remove_player(&name));
+>                     break;
+>                 }
+>             }
+>         }
+>     }
+> }
+>
+> #[tokio::main]
+> async fn main() {
+>     let state = SharedState::new();
+>     start_game_loop(state.clone());
+>
+>     let listener = TcpListener::bind("127.0.0.1:7878")
+>         .await
+>         .expect("Failed to bind to port 7878");
+>
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     loop {
+>         let (socket, addr) = listener
+>             .accept()
+>             .await
+>             .expect("Failed to accept connection");
+>
+>         println!("A soul approaches from {addr}...");
+>         let state = state.clone();
+>
+>         tokio::spawn(async move {
+>             handle_client(socket, state).await;
+>         });
+>     }
+> }
+> ```
 
 ---
 
@@ -1053,7 +1058,15 @@ async fn main() {
 
 Your tasks still communicate by locking a shared `Mutex` — every player handler fights for the same lock on every command. Channels decouple producers from consumers: player handlers *send* events without waiting, and a single processor *receives* and handles them. This eliminates lock contention and is the foundation of the actor model used by Erlang, Elixir, and every high-performance message-passing system.
 
-**Difficulty:** Medium (30-60 minutes)
+*Difficulty: Medium (30-60 minutes)*
+
+> [!tip] What You'll Learn
+> - main
+> - Tick
+> - mpsc
+> - watch
+> - Mutex
+
 
 ### Story Beat
 
@@ -1092,8 +1105,6 @@ async def consumer():
     event = await queue.get()  # blocks until something arrives
     print(event)
 ```
-
-**JS comparison:** There's no built-in equivalent in Node.js. The closest is an EventEmitter, but that's synchronous and doesn't have backpressure. Tokio's mpsc channels have a bounded capacity — if the channel is full, `send()` waits until there's room. This prevents fast producers from overwhelming slow consumers.
 
 ### Instructions
 
@@ -1446,221 +1457,220 @@ The message delivery might feel slightly delayed (up to 500ms) because we're pol
 
 Events flow inward through the channel, but responses still crawl back through a polling loop. The castle needs a bell tower — a way to ring once and have every soul hear it instantly.
 
-### Checkpoint Code
-
-```rust
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
-use tokio::sync::mpsc;
-use tokio::time::{self, Duration};
-
-#[derive(Debug, Clone)]
-enum GameEvent {
-    PlayerCommand { player_name: String, command: String },
-    PlayerJoined { player_name: String },
-    PlayerLeft { player_name: String },
-    Tick,
-    SendToPlayer { player_name: String, message: String },
-    SendToRoom { room_id: usize, message: String },
-}
-
-#[derive(Clone)]
-struct SharedState {
-    inner: Arc<Mutex<GameState>>,
-}
-
-impl SharedState {
-    fn new() -> Self {
-        Self {
-            inner: Arc::new(Mutex::new(GameState::new())),
-        }
-    }
-
-    fn with<F, R>(&self, f: F) -> R
-    where
-        F: FnOnce(&mut GameState) -> R,
-    {
-        let mut guard = self.inner.lock().unwrap();
-        f(&mut guard)
-    }
-}
-
-fn start_game_loop(event_tx: mpsc::Sender<GameEvent>) {
-    tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(5));
-        loop {
-            interval.tick().await;
-            if event_tx.send(GameEvent::Tick).await.is_err() {
-                break;
-            }
-        }
-    });
-}
-
-fn start_event_processor(
-    mut event_rx: mpsc::Receiver<GameEvent>,
-    state: SharedState,
-) {
-    tokio::spawn(async move {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                GameEvent::PlayerCommand { player_name, command } => {
-                    let response = state.with(|game| {
-                        game.handle_command(&player_name, &command)
-                    });
-                    state.with(|game| game.queue_message(&player_name, &response));
-                }
-                GameEvent::PlayerJoined { player_name } => {
-                    let msg = state.with(|game| {
-                        game.add_player(player_name.clone());
-                        format!("{player_name} has entered Shadowkeep.\n")
-                    });
-                    state.with(|game| game.broadcast_message(&msg));
-                }
-                GameEvent::PlayerLeft { player_name } => {
-                    let msg = state.with(|game| {
-                        game.remove_player(&player_name);
-                        format!("{player_name} has been consumed by darkness.\n")
-                    });
-                    state.with(|game| game.broadcast_message(&msg));
-                }
-                GameEvent::Tick => {
-                    state.with(|game| game.tick());
-                }
-                GameEvent::SendToPlayer { player_name, message } => {
-                    state.with(|game| game.queue_message(&player_name, &message));
-                }
-                GameEvent::SendToRoom { room_id, message } => {
-                    state.with(|game| game.broadcast_to_room(room_id, &message));
-                }
-            }
-        }
-    });
-}
-
-async fn handle_client(
-    socket: tokio::net::TcpStream,
-    state: SharedState,
-    event_tx: mpsc::Sender<GameEvent>,
-) {
-    let (reader, mut writer) = socket.into_split();
-    let mut reader = BufReader::new(reader);
-
-    writer.write_all(b"What is your name, traveler?\n").await.unwrap();
-
-    let mut name = String::new();
-    if reader.read_line(&mut name).await.unwrap() == 0 {
-        return;
-    }
-    let name = name.trim().to_string();
-
-    let welcome = format!(
-        "\n  Welcome to Shadowkeep, {name}.\n  Type 'help' for commands.\n\n"
-    );
-    writer.write_all(welcome.as_bytes()).await.unwrap();
-
-    let _ = event_tx
-        .send(GameEvent::PlayerJoined { player_name: name.clone() })
-        .await;
-
-    let mut input = String::new();
-    let mut horror_interval = time::interval(Duration::from_secs(30));
-    let mut horror_tick: usize = 0;
-    let mut message_poll = time::interval(Duration::from_millis(500));
-
-    loop {
-        tokio::select! {
-            result = reader.read_line(&mut input) => {
-                match result {
-                    Ok(0) | Err(_) => {
-                        let _ = event_tx
-                            .send(GameEvent::PlayerLeft {
-                                player_name: name.clone(),
-                            })
-                            .await;
-                        break;
-                    }
-                    Ok(_) => {
-                        let command = input.trim().to_string();
-                        let _ = event_tx
-                            .send(GameEvent::PlayerCommand {
-                                player_name: name.clone(),
-                                command,
-                            })
-                            .await;
-                        input.clear();
-                    }
-                }
-            }
-
-            _ = horror_interval.tick() => {
-                let messages = [
-                    "A cold draft whispers through the corridor...\n",
-                    "You hear scratching inside the walls...\n",
-                    "The torchlight flickers and dims...\n",
-                    "Something wet drips onto your shoulder...\n",
-                    "A distant scream echoes through the castle...\n",
-                ];
-                let msg = messages[horror_tick % messages.len()];
-                horror_tick += 1;
-                if writer.write_all(msg.as_bytes()).await.is_err() {
-                    let _ = event_tx
-                        .send(GameEvent::PlayerLeft {
-                            player_name: name.clone(),
-                        })
-                        .await;
-                    break;
-                }
-            }
-
-            _ = message_poll.tick() => {
-                let messages = state.with(|game| game.drain_messages(&name));
-                for msg in messages {
-                    if writer.write_all(msg.as_bytes()).await.is_err() {
-                        let _ = event_tx
-                            .send(GameEvent::PlayerLeft {
-                                player_name: name.clone(),
-                            })
-                            .await;
-                        break;
-                    }
-                }
-            }
-        }
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    let state = SharedState::new();
-    let (event_tx, event_rx) = mpsc::channel::<GameEvent>(256);
-
-    start_event_processor(event_rx, state.clone());
-    start_game_loop(event_tx.clone());
-
-    let listener = TcpListener::bind("127.0.0.1:7878")
-        .await
-        .expect("Failed to bind to port 7878");
-
-    println!("Shadowkeep awaits on port 7878...");
-
-    loop {
-        let (socket, addr) = listener
-            .accept()
-            .await
-            .expect("Failed to accept connection");
-
-        println!("A soul approaches from {addr}...");
-        let event_tx = event_tx.clone();
-        let state = state.clone();
-
-        tokio::spawn(async move {
-            handle_client(socket, state, event_tx).await;
-        });
-    }
-}
-```
+> [!check] Checkpoint
+> ```rust
+> use std::sync::{Arc, Mutex};
+> use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+> use tokio::net::TcpListener;
+> use tokio::sync::mpsc;
+> use tokio::time::{self, Duration};
+>
+> #[derive(Debug, Clone)]
+> enum GameEvent {
+>     PlayerCommand { player_name: String, command: String },
+>     PlayerJoined { player_name: String },
+>     PlayerLeft { player_name: String },
+>     Tick,
+>     SendToPlayer { player_name: String, message: String },
+>     SendToRoom { room_id: usize, message: String },
+> }
+>
+> #[derive(Clone)]
+> struct SharedState {
+>     inner: Arc<Mutex<GameState>>,
+> }
+>
+> impl SharedState {
+>     fn new() -> Self {
+>         Self {
+>             inner: Arc::new(Mutex::new(GameState::new())),
+>         }
+>     }
+>
+>     fn with<F, R>(&self, f: F) -> R
+>     where
+>         F: FnOnce(&mut GameState) -> R,
+>     {
+>         let mut guard = self.inner.lock().unwrap();
+>         f(&mut guard)
+>     }
+> }
+>
+> fn start_game_loop(event_tx: mpsc::Sender<GameEvent>) {
+>     tokio::spawn(async move {
+>         let mut interval = time::interval(Duration::from_secs(5));
+>         loop {
+>             interval.tick().await;
+>             if event_tx.send(GameEvent::Tick).await.is_err() {
+>                 break;
+>             }
+>         }
+>     });
+> }
+>
+> fn start_event_processor(
+>     mut event_rx: mpsc::Receiver<GameEvent>,
+>     state: SharedState,
+> ) {
+>     tokio::spawn(async move {
+>         while let Some(event) = event_rx.recv().await {
+>             match event {
+>                 GameEvent::PlayerCommand { player_name, command } => {
+>                     let response = state.with(|game| {
+>                         game.handle_command(&player_name, &command)
+>                     });
+>                     state.with(|game| game.queue_message(&player_name, &response));
+>                 }
+>                 GameEvent::PlayerJoined { player_name } => {
+>                     let msg = state.with(|game| {
+>                         game.add_player(player_name.clone());
+>                         format!("{player_name} has entered Shadowkeep.\n")
+>                     });
+>                     state.with(|game| game.broadcast_message(&msg));
+>                 }
+>                 GameEvent::PlayerLeft { player_name } => {
+>                     let msg = state.with(|game| {
+>                         game.remove_player(&player_name);
+>                         format!("{player_name} has been consumed by darkness.\n")
+>                     });
+>                     state.with(|game| game.broadcast_message(&msg));
+>                 }
+>                 GameEvent::Tick => {
+>                     state.with(|game| game.tick());
+>                 }
+>                 GameEvent::SendToPlayer { player_name, message } => {
+>                     state.with(|game| game.queue_message(&player_name, &message));
+>                 }
+>                 GameEvent::SendToRoom { room_id, message } => {
+>                     state.with(|game| game.broadcast_to_room(room_id, &message));
+>                 }
+>             }
+>         }
+>     });
+> }
+>
+> async fn handle_client(
+>     socket: tokio::net::TcpStream,
+>     state: SharedState,
+>     event_tx: mpsc::Sender<GameEvent>,
+> ) {
+>     let (reader, mut writer) = socket.into_split();
+>     let mut reader = BufReader::new(reader);
+>
+>     writer.write_all(b"What is your name, traveler?\n").await.unwrap();
+>
+>     let mut name = String::new();
+>     if reader.read_line(&mut name).await.unwrap() == 0 {
+>         return;
+>     }
+>     let name = name.trim().to_string();
+>
+>     let welcome = format!(
+>         "\n  Welcome to Shadowkeep, {name}.\n  Type 'help' for commands.\n\n"
+>     );
+>     writer.write_all(welcome.as_bytes()).await.unwrap();
+>
+>     let _ = event_tx
+>         .send(GameEvent::PlayerJoined { player_name: name.clone() })
+>         .await;
+>
+>     let mut input = String::new();
+>     let mut horror_interval = time::interval(Duration::from_secs(30));
+>     let mut horror_tick: usize = 0;
+>     let mut message_poll = time::interval(Duration::from_millis(500));
+>
+>     loop {
+>         tokio::select! {
+>             result = reader.read_line(&mut input) => {
+>                 match result {
+>                     Ok(0) | Err(_) => {
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerLeft {
+>                                 player_name: name.clone(),
+>                             })
+>                             .await;
+>                         break;
+>                     }
+>                     Ok(_) => {
+>                         let command = input.trim().to_string();
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerCommand {
+>                                 player_name: name.clone(),
+>                                 command,
+>                             })
+>                             .await;
+>                         input.clear();
+>                     }
+>                 }
+>             }
+>
+>             _ = horror_interval.tick() => {
+>                 let messages = [
+>                     "A cold draft whispers through the corridor...\n",
+>                     "You hear scratching inside the walls...\n",
+>                     "The torchlight flickers and dims...\n",
+>                     "Something wet drips onto your shoulder...\n",
+>                     "A distant scream echoes through the castle...\n",
+>                 ];
+>                 let msg = messages[horror_tick % messages.len()];
+>                 horror_tick += 1;
+>                 if writer.write_all(msg.as_bytes()).await.is_err() {
+>                     let _ = event_tx
+>                         .send(GameEvent::PlayerLeft {
+>                             player_name: name.clone(),
+>                         })
+>                         .await;
+>                     break;
+>                 }
+>             }
+>
+>             _ = message_poll.tick() => {
+>                 let messages = state.with(|game| game.drain_messages(&name));
+>                 for msg in messages {
+>                     if writer.write_all(msg.as_bytes()).await.is_err() {
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerLeft {
+>                                 player_name: name.clone(),
+>                             })
+>                             .await;
+>                         break;
+>                     }
+>                 }
+>             }
+>         }
+>     }
+> }
+>
+> #[tokio::main]
+> async fn main() {
+>     let state = SharedState::new();
+>     let (event_tx, event_rx) = mpsc::channel::<GameEvent>(256);
+>
+>     start_event_processor(event_rx, state.clone());
+>     start_game_loop(event_tx.clone());
+>
+>     let listener = TcpListener::bind("127.0.0.1:7878")
+>         .await
+>         .expect("Failed to bind to port 7878");
+>
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     loop {
+>         let (socket, addr) = listener
+>             .accept()
+>             .await
+>             .expect("Failed to accept connection");
+>
+>         println!("A soul approaches from {addr}...");
+>         let event_tx = event_tx.clone();
+>         let state = state.clone();
+>
+>         tokio::spawn(async move {
+>             handle_client(socket, state, event_tx).await;
+>         });
+>     }
+> }
+> ```
 
 ---
 
@@ -1668,7 +1678,15 @@ async fn main() {
 
 Your mpsc channel sends events inward to a processor, but responses flow back through a polling loop — checking every 500ms whether there's a message. That's half a second of latency on every chat message, every monster attack, every room description. Broadcast channels deliver messages *instantly* to every subscriber, completing the event-driven architecture: commands flow in through mpsc, responses fan out through broadcast.
 
-**Difficulty:** Medium (30-60 minutes)
+*Difficulty: Medium (30-60 minutes)*
+
+> [!tip] What You'll Learn
+> - main
+> - mpsc
+> - count
+> - Clone
+> - select!
+
 
 ### Story Beat
 
@@ -1703,8 +1721,6 @@ async def broadcast(message):
 ```
 
 Tokio's broadcast channel does this internally, but lock-free and much faster.
-
-**JS comparison:** This is like an EventEmitter where every listener gets every event. But unlike EventEmitter, broadcast has a bounded buffer and handles slow consumers gracefully (they get a `Lagged` error if they fall behind).
 
 ### Instructions
 
@@ -2078,278 +2094,277 @@ enum BroadcastMsg {
 
 Messages flow instantly in both directions. But what happens when you press Ctrl+C? Right now the server dies mid-sentence, connections sever, state is lost. The castle needs to learn how to sleep gracefully.
 
-### Checkpoint Code
-
-```rust
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
-use tokio::sync::{broadcast, mpsc};
-use tokio::time::{self, Duration};
-
-#[derive(Debug, Clone)]
-enum GameEvent {
-    PlayerCommand { player_name: String, command: String },
-    PlayerJoined { player_name: String },
-    PlayerLeft { player_name: String },
-    Tick,
-    SendToPlayer { player_name: String, message: String },
-    SendToRoom { room_id: usize, message: String },
-}
-
-#[derive(Debug, Clone)]
-enum BroadcastMsg {
-    DirectMessage { player_name: String, text: String },
-    RoomMessage { room_id: usize, text: String },
-    GlobalMessage { text: String },
-}
-
-#[derive(Clone)]
-struct SharedState {
-    inner: Arc<Mutex<GameState>>,
-}
-
-impl SharedState {
-    fn new() -> Self {
-        Self { inner: Arc::new(Mutex::new(GameState::new())) }
-    }
-    fn with<F, R>(&self, f: F) -> R
-    where F: FnOnce(&mut GameState) -> R {
-        let mut guard = self.inner.lock().unwrap();
-        f(&mut guard)
-    }
-}
-
-fn start_game_loop(event_tx: mpsc::Sender<GameEvent>) {
-    tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(5));
-        loop {
-            interval.tick().await;
-            if event_tx.send(GameEvent::Tick).await.is_err() {
-                break;
-            }
-        }
-    });
-}
-
-fn start_event_processor(
-    mut event_rx: mpsc::Receiver<GameEvent>,
-    state: SharedState,
-    broadcast_tx: broadcast::Sender<BroadcastMsg>,
-) {
-    tokio::spawn(async move {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                GameEvent::PlayerCommand { player_name, command } => {
-                    let response = state.with(|game| {
-                        game.handle_command(&player_name, &command)
-                    });
-                    let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
-                        player_name: player_name.clone(),
-                        text: response,
-                    });
-                    if command.starts_with("say ") {
-                        let room_id = state.with(|game| {
-                            game.player_room(&player_name)
-                        });
-                        if let Some(room_id) = room_id {
-                            let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
-                                room_id,
-                                text: format!(
-                                    "{player_name} says: {}\n",
-                                    &command[4..]
-                                ),
-                            });
-                        }
-                    }
-                }
-                GameEvent::PlayerJoined { player_name } => {
-                    state.with(|game| game.add_player(player_name.clone()));
-                    let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
-                        text: format!("{player_name} has entered Shadowkeep.\n"),
-                    });
-                }
-                GameEvent::PlayerLeft { player_name } => {
-                    state.with(|game| game.remove_player(&player_name));
-                    let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
-                        text: format!(
-                            "{player_name} has been consumed by darkness.\n"
-                        ),
-                    });
-                }
-                GameEvent::Tick => {
-                    let events = state.with(|game| game.tick());
-                    for (room_id, text) in events {
-                        let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
-                            room_id,
-                            text,
-                        });
-                    }
-                }
-                GameEvent::SendToPlayer { player_name, message } => {
-                    let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
-                        player_name,
-                        text: message,
-                    });
-                }
-                GameEvent::SendToRoom { room_id, message } => {
-                    let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
-                        room_id,
-                        text: message,
-                    });
-                }
-            }
-        }
-    });
-}
-
-async fn handle_client(
-    socket: tokio::net::TcpStream,
-    event_tx: mpsc::Sender<GameEvent>,
-    mut broadcast_rx: broadcast::Receiver<BroadcastMsg>,
-) {
-    let (reader, mut writer) = socket.into_split();
-    let mut reader = BufReader::new(reader);
-
-    writer.write_all(b"What is your name, traveler?\n").await.unwrap();
-
-    let mut name = String::new();
-    if reader.read_line(&mut name).await.unwrap() == 0 {
-        return;
-    }
-    let name = name.trim().to_string();
-
-    let welcome = format!(
-        "\n  Welcome to Shadowkeep, {name}.\n  Type 'help' for commands.\n\n"
-    );
-    writer.write_all(welcome.as_bytes()).await.unwrap();
-
-    let _ = event_tx
-        .send(GameEvent::PlayerJoined { player_name: name.clone() })
-        .await;
-
-    let mut current_room: usize = 0;
-    let mut input = String::new();
-    let mut horror_interval = time::interval(Duration::from_secs(30));
-    let mut horror_tick: usize = 0;
-
-    loop {
-        tokio::select! {
-            result = reader.read_line(&mut input) => {
-                match result {
-                    Ok(0) | Err(_) => {
-                        let _ = event_tx
-                            .send(GameEvent::PlayerLeft {
-                                player_name: name.clone(),
-                            })
-                            .await;
-                        break;
-                    }
-                    Ok(_) => {
-                        let command = input.trim().to_string();
-                        let _ = event_tx
-                            .send(GameEvent::PlayerCommand {
-                                player_name: name.clone(),
-                                command,
-                            })
-                            .await;
-                        input.clear();
-                    }
-                }
-            }
-
-            result = broadcast_rx.recv() => {
-                match result {
-                    Ok(msg) => {
-                        let text = match msg {
-                            BroadcastMsg::DirectMessage {
-                                ref player_name, ref text,
-                            } if player_name == &name => Some(text.clone()),
-                            BroadcastMsg::RoomMessage {
-                                room_id, ref text,
-                            } if room_id == current_room => Some(text.clone()),
-                            BroadcastMsg::GlobalMessage {
-                                ref text,
-                            } => Some(text.clone()),
-                            _ => None,
-                        };
-                        if let Some(text) = text {
-                            if writer.write_all(text.as_bytes()).await.is_err() {
-                                let _ = event_tx
-                                    .send(GameEvent::PlayerLeft {
-                                        player_name: name.clone(),
-                                    })
-                                    .await;
-                                break;
-                            }
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                        let _ = writer
-                            .write_all(
-                                format!("[You blink and miss {n} moments...]\n")
-                                    .as_bytes(),
-                            )
-                            .await;
-                    }
-                    Err(broadcast::error::RecvError::Closed) => break,
-                }
-            }
-
-            _ = horror_interval.tick() => {
-                let messages = [
-                    "A cold draft whispers through the corridor...\n",
-                    "You hear scratching inside the walls...\n",
-                    "The torchlight flickers and dims...\n",
-                    "Something wet drips onto your shoulder...\n",
-                    "A distant scream echoes through the castle...\n",
-                ];
-                let msg = messages[horror_tick % messages.len()];
-                horror_tick += 1;
-                if writer.write_all(msg.as_bytes()).await.is_err() {
-                    let _ = event_tx
-                        .send(GameEvent::PlayerLeft {
-                            player_name: name.clone(),
-                        })
-                        .await;
-                    break;
-                }
-            }
-        }
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    let state = SharedState::new();
-    let (event_tx, event_rx) = mpsc::channel::<GameEvent>(256);
-    let (broadcast_tx, _) = broadcast::channel::<BroadcastMsg>(128);
-
-    start_event_processor(event_rx, state.clone(), broadcast_tx.clone());
-    start_game_loop(event_tx.clone());
-
-    let listener = TcpListener::bind("127.0.0.1:7878")
-        .await
-        .expect("Failed to bind to port 7878");
-
-    println!("Shadowkeep awaits on port 7878...");
-
-    loop {
-        let (socket, addr) = listener
-            .accept()
-            .await
-            .expect("Failed to accept connection");
-
-        println!("A soul approaches from {addr}...");
-        let event_tx = event_tx.clone();
-        let broadcast_rx = broadcast_tx.subscribe();
-
-        tokio::spawn(async move {
-            handle_client(socket, event_tx, broadcast_rx).await;
-        });
-    }
-}
-```
+> [!check] Checkpoint
+> ```rust
+> use std::sync::{Arc, Mutex};
+> use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+> use tokio::net::TcpListener;
+> use tokio::sync::{broadcast, mpsc};
+> use tokio::time::{self, Duration};
+>
+> #[derive(Debug, Clone)]
+> enum GameEvent {
+>     PlayerCommand { player_name: String, command: String },
+>     PlayerJoined { player_name: String },
+>     PlayerLeft { player_name: String },
+>     Tick,
+>     SendToPlayer { player_name: String, message: String },
+>     SendToRoom { room_id: usize, message: String },
+> }
+>
+> #[derive(Debug, Clone)]
+> enum BroadcastMsg {
+>     DirectMessage { player_name: String, text: String },
+>     RoomMessage { room_id: usize, text: String },
+>     GlobalMessage { text: String },
+> }
+>
+> #[derive(Clone)]
+> struct SharedState {
+>     inner: Arc<Mutex<GameState>>,
+> }
+>
+> impl SharedState {
+>     fn new() -> Self {
+>         Self { inner: Arc::new(Mutex::new(GameState::new())) }
+>     }
+>     fn with<F, R>(&self, f: F) -> R
+>     where F: FnOnce(&mut GameState) -> R {
+>         let mut guard = self.inner.lock().unwrap();
+>         f(&mut guard)
+>     }
+> }
+>
+> fn start_game_loop(event_tx: mpsc::Sender<GameEvent>) {
+>     tokio::spawn(async move {
+>         let mut interval = time::interval(Duration::from_secs(5));
+>         loop {
+>             interval.tick().await;
+>             if event_tx.send(GameEvent::Tick).await.is_err() {
+>                 break;
+>             }
+>         }
+>     });
+> }
+>
+> fn start_event_processor(
+>     mut event_rx: mpsc::Receiver<GameEvent>,
+>     state: SharedState,
+>     broadcast_tx: broadcast::Sender<BroadcastMsg>,
+> ) {
+>     tokio::spawn(async move {
+>         while let Some(event) = event_rx.recv().await {
+>             match event {
+>                 GameEvent::PlayerCommand { player_name, command } => {
+>                     let response = state.with(|game| {
+>                         game.handle_command(&player_name, &command)
+>                     });
+>                     let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
+>                         player_name: player_name.clone(),
+>                         text: response,
+>                     });
+>                     if command.starts_with("say ") {
+>                         let room_id = state.with(|game| {
+>                             game.player_room(&player_name)
+>                         });
+>                         if let Some(room_id) = room_id {
+>                             let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
+>                                 room_id,
+>                                 text: format!(
+>                                     "{player_name} says: {}\n",
+>                                     &command[4..]
+>                                 ),
+>                             });
+>                         }
+>                     }
+>                 }
+>                 GameEvent::PlayerJoined { player_name } => {
+>                     state.with(|game| game.add_player(player_name.clone()));
+>                     let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
+>                         text: format!("{player_name} has entered Shadowkeep.\n"),
+>                     });
+>                 }
+>                 GameEvent::PlayerLeft { player_name } => {
+>                     state.with(|game| game.remove_player(&player_name));
+>                     let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
+>                         text: format!(
+>                             "{player_name} has been consumed by darkness.\n"
+>                         ),
+>                     });
+>                 }
+>                 GameEvent::Tick => {
+>                     let events = state.with(|game| game.tick());
+>                     for (room_id, text) in events {
+>                         let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
+>                             room_id,
+>                             text,
+>                         });
+>                     }
+>                 }
+>                 GameEvent::SendToPlayer { player_name, message } => {
+>                     let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
+>                         player_name,
+>                         text: message,
+>                     });
+>                 }
+>                 GameEvent::SendToRoom { room_id, message } => {
+>                     let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
+>                         room_id,
+>                         text: message,
+>                     });
+>                 }
+>             }
+>         }
+>     });
+> }
+>
+> async fn handle_client(
+>     socket: tokio::net::TcpStream,
+>     event_tx: mpsc::Sender<GameEvent>,
+>     mut broadcast_rx: broadcast::Receiver<BroadcastMsg>,
+> ) {
+>     let (reader, mut writer) = socket.into_split();
+>     let mut reader = BufReader::new(reader);
+>
+>     writer.write_all(b"What is your name, traveler?\n").await.unwrap();
+>
+>     let mut name = String::new();
+>     if reader.read_line(&mut name).await.unwrap() == 0 {
+>         return;
+>     }
+>     let name = name.trim().to_string();
+>
+>     let welcome = format!(
+>         "\n  Welcome to Shadowkeep, {name}.\n  Type 'help' for commands.\n\n"
+>     );
+>     writer.write_all(welcome.as_bytes()).await.unwrap();
+>
+>     let _ = event_tx
+>         .send(GameEvent::PlayerJoined { player_name: name.clone() })
+>         .await;
+>
+>     let mut current_room: usize = 0;
+>     let mut input = String::new();
+>     let mut horror_interval = time::interval(Duration::from_secs(30));
+>     let mut horror_tick: usize = 0;
+>
+>     loop {
+>         tokio::select! {
+>             result = reader.read_line(&mut input) => {
+>                 match result {
+>                     Ok(0) | Err(_) => {
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerLeft {
+>                                 player_name: name.clone(),
+>                             })
+>                             .await;
+>                         break;
+>                     }
+>                     Ok(_) => {
+>                         let command = input.trim().to_string();
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerCommand {
+>                                 player_name: name.clone(),
+>                                 command,
+>                             })
+>                             .await;
+>                         input.clear();
+>                     }
+>                 }
+>             }
+>
+>             result = broadcast_rx.recv() => {
+>                 match result {
+>                     Ok(msg) => {
+>                         let text = match msg {
+>                             BroadcastMsg::DirectMessage {
+>                                 ref player_name, ref text,
+>                             } if player_name == &name => Some(text.clone()),
+>                             BroadcastMsg::RoomMessage {
+>                                 room_id, ref text,
+>                             } if room_id == current_room => Some(text.clone()),
+>                             BroadcastMsg::GlobalMessage {
+>                                 ref text,
+>                             } => Some(text.clone()),
+>                             _ => None,
+>                         };
+>                         if let Some(text) = text {
+>                             if writer.write_all(text.as_bytes()).await.is_err() {
+>                                 let _ = event_tx
+>                                     .send(GameEvent::PlayerLeft {
+>                                         player_name: name.clone(),
+>                                     })
+>                                     .await;
+>                                 break;
+>                             }
+>                         }
+>                     }
+>                     Err(broadcast::error::RecvError::Lagged(n)) => {
+>                         let _ = writer
+>                             .write_all(
+>                                 format!("[You blink and miss {n} moments...]\n")
+>                                     .as_bytes(),
+>                             )
+>                             .await;
+>                     }
+>                     Err(broadcast::error::RecvError::Closed) => break,
+>                 }
+>             }
+>
+>             _ = horror_interval.tick() => {
+>                 let messages = [
+>                     "A cold draft whispers through the corridor...\n",
+>                     "You hear scratching inside the walls...\n",
+>                     "The torchlight flickers and dims...\n",
+>                     "Something wet drips onto your shoulder...\n",
+>                     "A distant scream echoes through the castle...\n",
+>                 ];
+>                 let msg = messages[horror_tick % messages.len()];
+>                 horror_tick += 1;
+>                 if writer.write_all(msg.as_bytes()).await.is_err() {
+>                     let _ = event_tx
+>                         .send(GameEvent::PlayerLeft {
+>                             player_name: name.clone(),
+>                         })
+>                         .await;
+>                     break;
+>                 }
+>             }
+>         }
+>     }
+> }
+>
+> #[tokio::main]
+> async fn main() {
+>     let state = SharedState::new();
+>     let (event_tx, event_rx) = mpsc::channel::<GameEvent>(256);
+>     let (broadcast_tx, _) = broadcast::channel::<BroadcastMsg>(128);
+>
+>     start_event_processor(event_rx, state.clone(), broadcast_tx.clone());
+>     start_game_loop(event_tx.clone());
+>
+>     let listener = TcpListener::bind("127.0.0.1:7878")
+>         .await
+>         .expect("Failed to bind to port 7878");
+>
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     loop {
+>         let (socket, addr) = listener
+>             .accept()
+>             .await
+>             .expect("Failed to accept connection");
+>
+>         println!("A soul approaches from {addr}...");
+>         let event_tx = event_tx.clone();
+>         let broadcast_rx = broadcast_tx.subscribe();
+>
+>         tokio::spawn(async move {
+>             handle_client(socket, event_tx, broadcast_rx).await;
+>         });
+>     }
+> }
+> ```
 
 ---
 
@@ -2357,7 +2372,15 @@ async fn main() {
 
 A server that dies on Ctrl+C loses game state, drops connections mid-sentence, and leaves players staring at a dead terminal. Graceful shutdown is a production requirement — every AWS service handles SIGTERM cleanly. You're learning it now because the pattern (signal detection → notify tasks → drain work → save state → exit) applies to every long-running process you'll ever build.
 
-**Difficulty:** Medium (30-60 minutes)
+*Difficulty: Medium (30-60 minutes)*
+
+> [!tip] What You'll Learn
+> - main
+> - None
+> - Wait
+> - watch
+> - Detect
+
 
 ### Story Beat
 
@@ -2391,8 +2414,6 @@ graph TD
 ```
 
 **Python comparison:** Python uses `signal.signal(SIGINT, handler)` or `loop.add_signal_handler()`. Tokio provides `tokio::signal::ctrl_c()` which is an async function that resolves when Ctrl+C is pressed.
-
-**JS comparison:** Node.js uses `process.on('SIGINT', handler)`. Same idea, different syntax.
 
 ### Instructions
 
@@ -2691,333 +2712,332 @@ We use `watch` for the shutdown signal because tasks check it in their `select!`
 
 The castle sleeps and wakes cleanly. But there's one last ghost to exorcise — players who vanish without saying goodbye, their connections hanging open like empty eye sockets. The castle needs to detect the dead.
 
-### Checkpoint Code
-
-```rust
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
-use tokio::sync::{broadcast, mpsc, watch};
-use tokio::time::{self, Duration};
-use tokio::signal;
-
-#[derive(Debug, Clone)]
-enum GameEvent {
-    PlayerCommand { player_name: String, command: String },
-    PlayerJoined { player_name: String },
-    PlayerLeft { player_name: String },
-    Tick,
-    SendToPlayer { player_name: String, message: String },
-    SendToRoom { room_id: usize, message: String },
-}
-
-#[derive(Debug, Clone)]
-enum BroadcastMsg {
-    DirectMessage { player_name: String, text: String },
-    RoomMessage { room_id: usize, text: String },
-    GlobalMessage { text: String },
-}
-
-#[derive(Clone)]
-struct SharedState {
-    inner: Arc<Mutex<GameState>>,
-}
-
-impl SharedState {
-    fn new() -> Self {
-        Self { inner: Arc::new(Mutex::new(GameState::new())) }
-    }
-    fn with<F, R>(&self, f: F) -> R
-    where F: FnOnce(&mut GameState) -> R {
-        let mut guard = self.inner.lock().unwrap();
-        f(&mut guard)
-    }
-}
-
-fn start_game_loop(
-    event_tx: mpsc::Sender<GameEvent>,
-    mut shutdown_rx: watch::Receiver<bool>,
-) {
-    tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(5));
-        loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    if event_tx.send(GameEvent::Tick).await.is_err() {
-                        break;
-                    }
-                }
-                _ = shutdown_rx.changed() => {
-                    println!("Game loop received shutdown signal.");
-                    break;
-                }
-            }
-        }
-    });
-}
-
-fn start_event_processor(
-    mut event_rx: mpsc::Receiver<GameEvent>,
-    state: SharedState,
-    broadcast_tx: broadcast::Sender<BroadcastMsg>,
-) {
-    tokio::spawn(async move {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                GameEvent::PlayerCommand { player_name, command } => {
-                    let response = state.with(|game| {
-                        game.handle_command(&player_name, &command)
-                    });
-                    let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
-                        player_name: player_name.clone(),
-                        text: response,
-                    });
-                    if command.starts_with("say ") {
-                        let room_id = state.with(|game| {
-                            game.player_room(&player_name)
-                        });
-                        if let Some(room_id) = room_id {
-                            let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
-                                room_id,
-                                text: format!(
-                                    "{player_name} says: {}\n",
-                                    &command[4..]
-                                ),
-                            });
-                        }
-                    }
-                }
-                GameEvent::PlayerJoined { player_name } => {
-                    state.with(|game| game.add_player(player_name.clone()));
-                    let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
-                        text: format!(
-                            "{player_name} has entered Shadowkeep.\n"
-                        ),
-                    });
-                }
-                GameEvent::PlayerLeft { player_name } => {
-                    state.with(|game| game.remove_player(&player_name));
-                    let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
-                        text: format!(
-                            "{player_name} has been consumed by darkness.\n"
-                        ),
-                    });
-                }
-                GameEvent::Tick => {
-                    let events = state.with(|game| game.tick());
-                    for (room_id, text) in events {
-                        let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
-                            room_id,
-                            text,
-                        });
-                    }
-                }
-                GameEvent::SendToPlayer { player_name, message } => {
-                    let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
-                        player_name,
-                        text: message,
-                    });
-                }
-                GameEvent::SendToRoom { room_id, message } => {
-                    let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
-                        room_id,
-                        text: message,
-                    });
-                }
-            }
-        }
-        println!("Event processor shutting down — all senders dropped.");
-    });
-}
-
-async fn handle_client(
-    socket: tokio::net::TcpStream,
-    event_tx: mpsc::Sender<GameEvent>,
-    mut broadcast_rx: broadcast::Receiver<BroadcastMsg>,
-    mut shutdown_rx: watch::Receiver<bool>,
-) {
-    let (reader, mut writer) = socket.into_split();
-    let mut reader = BufReader::new(reader);
-
-    writer.write_all(b"What is your name, traveler?\n").await.unwrap();
-
-    let mut name = String::new();
-    if reader.read_line(&mut name).await.unwrap() == 0 {
-        return;
-    }
-    let name = name.trim().to_string();
-
-    let welcome = format!(
-        "\n  Welcome to Shadowkeep, {name}.\n  Type 'help' for commands.\n\n"
-    );
-    writer.write_all(welcome.as_bytes()).await.unwrap();
-
-    let _ = event_tx
-        .send(GameEvent::PlayerJoined { player_name: name.clone() })
-        .await;
-
-    let mut current_room: usize = 0;
-    let mut input = String::new();
-    let mut horror_interval = time::interval(Duration::from_secs(30));
-    let mut horror_tick: usize = 0;
-
-    loop {
-        tokio::select! {
-            result = reader.read_line(&mut input) => {
-                match result {
-                    Ok(0) | Err(_) => {
-                        let _ = event_tx
-                            .send(GameEvent::PlayerLeft {
-                                player_name: name.clone(),
-                            })
-                            .await;
-                        break;
-                    }
-                    Ok(_) => {
-                        let command = input.trim().to_string();
-                        let _ = event_tx
-                            .send(GameEvent::PlayerCommand {
-                                player_name: name.clone(),
-                                command,
-                            })
-                            .await;
-                        input.clear();
-                    }
-                }
-            }
-
-            result = broadcast_rx.recv() => {
-                match result {
-                    Ok(msg) => {
-                        let text = match msg {
-                            BroadcastMsg::DirectMessage {
-                                ref player_name, ref text,
-                            } if player_name == &name => Some(text.clone()),
-                            BroadcastMsg::RoomMessage {
-                                room_id, ref text,
-                            } if room_id == current_room => {
-                                Some(text.clone())
-                            }
-                            BroadcastMsg::GlobalMessage {
-                                ref text,
-                            } => Some(text.clone()),
-                            _ => None,
-                        };
-                        if let Some(text) = text {
-                            let _ = writer.write_all(text.as_bytes()).await;
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                        let _ = writer
-                            .write_all(
-                                format!(
-                                    "[You blink and miss {n} moments...]\n"
-                                )
-                                .as_bytes(),
-                            )
-                            .await;
-                    }
-                    Err(broadcast::error::RecvError::Closed) => break,
-                }
-            }
-
-            _ = horror_interval.tick() => {
-                let messages = [
-                    "A cold draft whispers through the corridor...\n",
-                    "You hear scratching inside the walls...\n",
-                    "The torchlight flickers and dims...\n",
-                    "Something wet drips onto your shoulder...\n",
-                    "A distant scream echoes through the castle...\n",
-                ];
-                let msg = messages[horror_tick % messages.len()];
-                horror_tick += 1;
-                if writer.write_all(msg.as_bytes()).await.is_err() {
-                    let _ = event_tx
-                        .send(GameEvent::PlayerLeft {
-                            player_name: name.clone(),
-                        })
-                        .await;
-                    break;
-                }
-            }
-
-            _ = shutdown_rx.changed() => {
-                println!("{name} is being disconnected for shutdown.");
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                break;
-            }
-        }
-    }
-}
-
-#[tokio::main]
-async fn main() {
-    let state = SharedState::new();
-    let (event_tx, event_rx) = mpsc::channel::<GameEvent>(256);
-    let (broadcast_tx, _) = broadcast::channel::<BroadcastMsg>(128);
-    let (shutdown_tx, shutdown_rx) = watch::channel(false);
-
-    start_event_processor(event_rx, state.clone(), broadcast_tx.clone());
-    start_game_loop(event_tx.clone(), shutdown_rx.clone());
-
-    let listener = TcpListener::bind("127.0.0.1:7878")
-        .await
-        .expect("Failed to bind to port 7878");
-
-    println!("Shadowkeep awaits on port 7878...");
-
-    tokio::select! {
-        _ = async {
-            loop {
-                let (socket, addr) = listener
-                    .accept()
-                    .await
-                    .expect("Failed to accept connection");
-
-                println!("A soul approaches from {addr}...");
-                let event_tx = event_tx.clone();
-                let broadcast_rx = broadcast_tx.subscribe();
-                let shutdown_rx = shutdown_rx.clone();
-
-                tokio::spawn(async move {
-                    handle_client(socket, event_tx, broadcast_rx, shutdown_rx)
-                        .await;
-                });
-            }
-            #[allow(unreachable_code)]
-            Ok::<_, std::io::Error>(())
-        } => {}
-
-        _ = signal::ctrl_c() => {
-            println!(
-                "\nThe dawn approaches... Shadowkeep is shutting down."
-            );
-        }
-    }
-
-    // Shutdown sequence
-    let _ = shutdown_tx.send(true);
-
-    let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
-        text: "\n  The castle trembles... Shadowkeep is closing its gates.\n  \
-               Farewell, traveler.\n\n"
-            .to_string(),
-    });
-
-    drop(event_tx);
-
-    state.with(|game| {
-        if let Err(e) = game.save("shadowkeep_save.json") {
-            eprintln!("Failed to save game state: {e}");
-        } else {
-            println!("Game state saved.");
-        }
-    });
-
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    println!("Shadowkeep sleeps. Until next time.");
-}
-```
+> [!check] Checkpoint
+> ```rust
+> use std::sync::{Arc, Mutex};
+> use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+> use tokio::net::TcpListener;
+> use tokio::sync::{broadcast, mpsc, watch};
+> use tokio::time::{self, Duration};
+> use tokio::signal;
+>
+> #[derive(Debug, Clone)]
+> enum GameEvent {
+>     PlayerCommand { player_name: String, command: String },
+>     PlayerJoined { player_name: String },
+>     PlayerLeft { player_name: String },
+>     Tick,
+>     SendToPlayer { player_name: String, message: String },
+>     SendToRoom { room_id: usize, message: String },
+> }
+>
+> #[derive(Debug, Clone)]
+> enum BroadcastMsg {
+>     DirectMessage { player_name: String, text: String },
+>     RoomMessage { room_id: usize, text: String },
+>     GlobalMessage { text: String },
+> }
+>
+> #[derive(Clone)]
+> struct SharedState {
+>     inner: Arc<Mutex<GameState>>,
+> }
+>
+> impl SharedState {
+>     fn new() -> Self {
+>         Self { inner: Arc::new(Mutex::new(GameState::new())) }
+>     }
+>     fn with<F, R>(&self, f: F) -> R
+>     where F: FnOnce(&mut GameState) -> R {
+>         let mut guard = self.inner.lock().unwrap();
+>         f(&mut guard)
+>     }
+> }
+>
+> fn start_game_loop(
+>     event_tx: mpsc::Sender<GameEvent>,
+>     mut shutdown_rx: watch::Receiver<bool>,
+> ) {
+>     tokio::spawn(async move {
+>         let mut interval = time::interval(Duration::from_secs(5));
+>         loop {
+>             tokio::select! {
+>                 _ = interval.tick() => {
+>                     if event_tx.send(GameEvent::Tick).await.is_err() {
+>                         break;
+>                     }
+>                 }
+>                 _ = shutdown_rx.changed() => {
+>                     println!("Game loop received shutdown signal.");
+>                     break;
+>                 }
+>             }
+>         }
+>     });
+> }
+>
+> fn start_event_processor(
+>     mut event_rx: mpsc::Receiver<GameEvent>,
+>     state: SharedState,
+>     broadcast_tx: broadcast::Sender<BroadcastMsg>,
+> ) {
+>     tokio::spawn(async move {
+>         while let Some(event) = event_rx.recv().await {
+>             match event {
+>                 GameEvent::PlayerCommand { player_name, command } => {
+>                     let response = state.with(|game| {
+>                         game.handle_command(&player_name, &command)
+>                     });
+>                     let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
+>                         player_name: player_name.clone(),
+>                         text: response,
+>                     });
+>                     if command.starts_with("say ") {
+>                         let room_id = state.with(|game| {
+>                             game.player_room(&player_name)
+>                         });
+>                         if let Some(room_id) = room_id {
+>                             let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
+>                                 room_id,
+>                                 text: format!(
+>                                     "{player_name} says: {}\n",
+>                                     &command[4..]
+>                                 ),
+>                             });
+>                         }
+>                     }
+>                 }
+>                 GameEvent::PlayerJoined { player_name } => {
+>                     state.with(|game| game.add_player(player_name.clone()));
+>                     let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
+>                         text: format!(
+>                             "{player_name} has entered Shadowkeep.\n"
+>                         ),
+>                     });
+>                 }
+>                 GameEvent::PlayerLeft { player_name } => {
+>                     state.with(|game| game.remove_player(&player_name));
+>                     let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
+>                         text: format!(
+>                             "{player_name} has been consumed by darkness.\n"
+>                         ),
+>                     });
+>                 }
+>                 GameEvent::Tick => {
+>                     let events = state.with(|game| game.tick());
+>                     for (room_id, text) in events {
+>                         let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
+>                             room_id,
+>                             text,
+>                         });
+>                     }
+>                 }
+>                 GameEvent::SendToPlayer { player_name, message } => {
+>                     let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
+>                         player_name,
+>                         text: message,
+>                     });
+>                 }
+>                 GameEvent::SendToRoom { room_id, message } => {
+>                     let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
+>                         room_id,
+>                         text: message,
+>                     });
+>                 }
+>             }
+>         }
+>         println!("Event processor shutting down — all senders dropped.");
+>     });
+> }
+>
+> async fn handle_client(
+>     socket: tokio::net::TcpStream,
+>     event_tx: mpsc::Sender<GameEvent>,
+>     mut broadcast_rx: broadcast::Receiver<BroadcastMsg>,
+>     mut shutdown_rx: watch::Receiver<bool>,
+> ) {
+>     let (reader, mut writer) = socket.into_split();
+>     let mut reader = BufReader::new(reader);
+>
+>     writer.write_all(b"What is your name, traveler?\n").await.unwrap();
+>
+>     let mut name = String::new();
+>     if reader.read_line(&mut name).await.unwrap() == 0 {
+>         return;
+>     }
+>     let name = name.trim().to_string();
+>
+>     let welcome = format!(
+>         "\n  Welcome to Shadowkeep, {name}.\n  Type 'help' for commands.\n\n"
+>     );
+>     writer.write_all(welcome.as_bytes()).await.unwrap();
+>
+>     let _ = event_tx
+>         .send(GameEvent::PlayerJoined { player_name: name.clone() })
+>         .await;
+>
+>     let mut current_room: usize = 0;
+>     let mut input = String::new();
+>     let mut horror_interval = time::interval(Duration::from_secs(30));
+>     let mut horror_tick: usize = 0;
+>
+>     loop {
+>         tokio::select! {
+>             result = reader.read_line(&mut input) => {
+>                 match result {
+>                     Ok(0) | Err(_) => {
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerLeft {
+>                                 player_name: name.clone(),
+>                             })
+>                             .await;
+>                         break;
+>                     }
+>                     Ok(_) => {
+>                         let command = input.trim().to_string();
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerCommand {
+>                                 player_name: name.clone(),
+>                                 command,
+>                             })
+>                             .await;
+>                         input.clear();
+>                     }
+>                 }
+>             }
+>
+>             result = broadcast_rx.recv() => {
+>                 match result {
+>                     Ok(msg) => {
+>                         let text = match msg {
+>                             BroadcastMsg::DirectMessage {
+>                                 ref player_name, ref text,
+>                             } if player_name == &name => Some(text.clone()),
+>                             BroadcastMsg::RoomMessage {
+>                                 room_id, ref text,
+>                             } if room_id == current_room => {
+>                                 Some(text.clone())
+>                             }
+>                             BroadcastMsg::GlobalMessage {
+>                                 ref text,
+>                             } => Some(text.clone()),
+>                             _ => None,
+>                         };
+>                         if let Some(text) = text {
+>                             let _ = writer.write_all(text.as_bytes()).await;
+>                         }
+>                     }
+>                     Err(broadcast::error::RecvError::Lagged(n)) => {
+>                         let _ = writer
+>                             .write_all(
+>                                 format!(
+>                                     "[You blink and miss {n} moments...]\n"
+>                                 )
+>                                 .as_bytes(),
+>                             )
+>                             .await;
+>                     }
+>                     Err(broadcast::error::RecvError::Closed) => break,
+>                 }
+>             }
+>
+>             _ = horror_interval.tick() => {
+>                 let messages = [
+>                     "A cold draft whispers through the corridor...\n",
+>                     "You hear scratching inside the walls...\n",
+>                     "The torchlight flickers and dims...\n",
+>                     "Something wet drips onto your shoulder...\n",
+>                     "A distant scream echoes through the castle...\n",
+>                 ];
+>                 let msg = messages[horror_tick % messages.len()];
+>                 horror_tick += 1;
+>                 if writer.write_all(msg.as_bytes()).await.is_err() {
+>                     let _ = event_tx
+>                         .send(GameEvent::PlayerLeft {
+>                             player_name: name.clone(),
+>                         })
+>                         .await;
+>                     break;
+>                 }
+>             }
+>
+>             _ = shutdown_rx.changed() => {
+>                 println!("{name} is being disconnected for shutdown.");
+>                 tokio::time::sleep(Duration::from_millis(100)).await;
+>                 break;
+>             }
+>         }
+>     }
+> }
+>
+> #[tokio::main]
+> async fn main() {
+>     let state = SharedState::new();
+>     let (event_tx, event_rx) = mpsc::channel::<GameEvent>(256);
+>     let (broadcast_tx, _) = broadcast::channel::<BroadcastMsg>(128);
+>     let (shutdown_tx, shutdown_rx) = watch::channel(false);
+>
+>     start_event_processor(event_rx, state.clone(), broadcast_tx.clone());
+>     start_game_loop(event_tx.clone(), shutdown_rx.clone());
+>
+>     let listener = TcpListener::bind("127.0.0.1:7878")
+>         .await
+>         .expect("Failed to bind to port 7878");
+>
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     tokio::select! {
+>         _ = async {
+>             loop {
+>                 let (socket, addr) = listener
+>                     .accept()
+>                     .await
+>                     .expect("Failed to accept connection");
+>
+>                 println!("A soul approaches from {addr}...");
+>                 let event_tx = event_tx.clone();
+>                 let broadcast_rx = broadcast_tx.subscribe();
+>                 let shutdown_rx = shutdown_rx.clone();
+>
+>                 tokio::spawn(async move {
+>                     handle_client(socket, event_tx, broadcast_rx, shutdown_rx)
+>                         .await;
+>                 });
+>             }
+>             #[allow(unreachable_code)]
+>             Ok::<_, std::io::Error>(())
+>         } => {}
+>
+>         _ = signal::ctrl_c() => {
+>             println!(
+>                 "\nThe dawn approaches... Shadowkeep is shutting down."
+>             );
+>         }
+>     }
+>
+>     // Shutdown sequence
+>     let _ = shutdown_tx.send(true);
+>
+>     let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
+>         text: "\n  The castle trembles... Shadowkeep is closing its gates.\n  \
+>                Farewell, traveler.\n\n"
+>             .to_string(),
+>     });
+>
+>     drop(event_tx);
+>
+>     state.with(|game| {
+>         if let Err(e) = game.save("shadowkeep_save.json") {
+>             eprintln!("Failed to save game state: {e}");
+>         } else {
+>             println!("Game state saved.");
+>         }
+>     });
+>
+>     tokio::time::sleep(Duration::from_secs(1)).await;
+>     println!("Shadowkeep sleeps. Until next time.");
+> }
+> ```
 
 ---
 
@@ -3025,7 +3045,15 @@ async fn main() {
 
 TCP connections can silently die — a player closes their laptop, their WiFi drops, their process crashes. Without active detection, the server thinks they're still connected: their name lingers in the room, their slot is occupied, their data leaks. Heartbeats solve this by periodically probing each connection. If the probe fails, the ghost is exorcised. This is the same keepalive pattern used by load balancers, database connection pools, and every production TCP service.
 
-**Difficulty:** Medium (30-60 minutes)
+*Difficulty: Medium (30-60 minutes)*
+
+> [!tip] What You'll Learn
+> - select!
+> - Instant
+> - asyncio
+> - freezegun
+> - websockets
+
 
 ### Story Beat
 
@@ -3053,8 +3081,6 @@ graph LR
 ```
 
 **Python comparison:** Python's `asyncio` doesn't have built-in keepalive for raw TCP. You'd implement it the same way — a periodic timer that writes to the socket. WebSocket libraries (like `websockets`) have built-in ping/pong frames.
-
-**JS comparison:** Node.js TCP sockets have `socket.setKeepAlive(true, interval)` which uses OS-level TCP keepalive. But OS keepalive is slow (default 2 hours!). Application-level heartbeats are faster and more controllable.
 
 ### Instructions
 
@@ -3387,429 +3413,428 @@ This is incredibly useful for testing timeout behavior. In Python, you'd mock `t
 
 The async architecture is complete: lightweight tasks, instant messaging, graceful shutdown, and dead connection detection. The castle's infrastructure is production-grade. In Act 4, you'll give it teeth — combat, scripting, color, a custom protocol, and a real deployment.
 
-### Checkpoint Code
-
-```rust
-use std::sync::{Arc, Mutex};
-use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
-use tokio::net::TcpListener;
-use tokio::signal;
-use tokio::sync::{broadcast, mpsc, watch};
-use tokio::time::{self, Duration, Instant};
-
-#[derive(Debug, Clone)]
-enum GameEvent {
-    PlayerCommand { player_name: String, command: String },
-    PlayerJoined { player_name: String },
-    PlayerLeft { player_name: String },
-    Tick,
-    SendToPlayer { player_name: String, message: String },
-    SendToRoom { room_id: usize, message: String },
-}
-
-#[derive(Debug, Clone)]
-enum BroadcastMsg {
-    DirectMessage { player_name: String, text: String },
-    RoomMessage { room_id: usize, text: String },
-    GlobalMessage { text: String },
-}
-
-#[derive(Clone)]
-struct SharedState {
-    inner: Arc<Mutex<GameState>>,
-}
-
-impl SharedState {
-    fn new() -> Self {
-        Self { inner: Arc::new(Mutex::new(GameState::new())) }
-    }
-    fn with<F, R>(&self, f: F) -> R
-    where F: FnOnce(&mut GameState) -> R {
-        let mut guard = self.inner.lock().unwrap();
-        f(&mut guard)
-    }
-}
-
-struct ConnectionConfig {
-    heartbeat_interval: Duration,
-    activity_timeout: Duration,
-    horror_interval: Duration,
-}
-
-impl Default for ConnectionConfig {
-    fn default() -> Self {
-        Self {
-            heartbeat_interval: Duration::from_secs(30),
-            activity_timeout: Duration::from_secs(120),
-            horror_interval: Duration::from_secs(30),
-        }
-    }
-}
-
-fn start_game_loop(
-    event_tx: mpsc::Sender<GameEvent>,
-    mut shutdown_rx: watch::Receiver<bool>,
-) {
-    tokio::spawn(async move {
-        let mut interval = time::interval(Duration::from_secs(5));
-        loop {
-            tokio::select! {
-                _ = interval.tick() => {
-                    if event_tx.send(GameEvent::Tick).await.is_err() {
-                        break;
-                    }
-                }
-                _ = shutdown_rx.changed() => {
-                    println!("Game loop received shutdown signal.");
-                    break;
-                }
-            }
-        }
-    });
-}
-
-fn start_event_processor(
-    mut event_rx: mpsc::Receiver<GameEvent>,
-    state: SharedState,
-    broadcast_tx: broadcast::Sender<BroadcastMsg>,
-) {
-    tokio::spawn(async move {
-        while let Some(event) = event_rx.recv().await {
-            match event {
-                GameEvent::PlayerCommand { player_name, command } => {
-                    let response = state.with(|game| {
-                        game.handle_command(&player_name, &command)
-                    });
-                    let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
-                        player_name: player_name.clone(),
-                        text: response,
-                    });
-                    if command.starts_with("say ") {
-                        let room_id = state.with(|game| {
-                            game.player_room(&player_name)
-                        });
-                        if let Some(room_id) = room_id {
-                            let _ = broadcast_tx.send(
-                                BroadcastMsg::RoomMessage {
-                                    room_id,
-                                    text: format!(
-                                        "{player_name} says: {}\n",
-                                        &command[4..]
-                                    ),
-                                },
-                            );
-                        }
-                    }
-                }
-                GameEvent::PlayerJoined { player_name } => {
-                    state.with(|game| {
-                        game.add_player(player_name.clone())
-                    });
-                    let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
-                        text: format!(
-                            "{player_name} has entered Shadowkeep.\n"
-                        ),
-                    });
-                }
-                GameEvent::PlayerLeft { player_name } => {
-                    state.with(|game| game.remove_player(&player_name));
-                    let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
-                        text: format!(
-                            "{player_name} has been consumed by darkness.\n"
-                        ),
-                    });
-                }
-                GameEvent::Tick => {
-                    let events = state.with(|game| game.tick());
-                    for (room_id, text) in events {
-                        let _ = broadcast_tx.send(
-                            BroadcastMsg::RoomMessage { room_id, text },
-                        );
-                    }
-                }
-                GameEvent::SendToPlayer { player_name, message } => {
-                    let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
-                        player_name,
-                        text: message,
-                    });
-                }
-                GameEvent::SendToRoom { room_id, message } => {
-                    let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
-                        room_id,
-                        text: message,
-                    });
-                }
-            }
-        }
-        println!("Event processor shutting down — all senders dropped.");
-    });
-}
-
-async fn handle_client(
-    socket: tokio::net::TcpStream,
-    event_tx: mpsc::Sender<GameEvent>,
-    mut broadcast_rx: broadcast::Receiver<BroadcastMsg>,
-    mut shutdown_rx: watch::Receiver<bool>,
-) {
-    let config = ConnectionConfig::default();
-    let connected_at = Instant::now();
-
-    let (reader, mut writer) = socket.into_split();
-    let mut reader = BufReader::new(reader);
-
-    writer
-        .write_all(b"What is your name, traveler?\n")
-        .await
-        .unwrap();
-
-    let mut name = String::new();
-    if reader.read_line(&mut name).await.unwrap() == 0 {
-        return;
-    }
-    let name = name.trim().to_string();
-
-    let welcome = format!(
-        "\n  Welcome to Shadowkeep, {name}.\n  Type 'help' for commands.\n\n"
-    );
-    writer.write_all(welcome.as_bytes()).await.unwrap();
-
-    let _ = event_tx
-        .send(GameEvent::PlayerJoined {
-            player_name: name.clone(),
-        })
-        .await;
-
-    let mut current_room: usize = 0;
-    let mut input = String::new();
-    let mut horror_interval = time::interval(config.horror_interval);
-    let mut horror_tick: usize = 0;
-    let mut heartbeat = time::interval(config.heartbeat_interval);
-    heartbeat.tick().await; // skip first immediate tick
-    let mut last_activity = Instant::now();
-
-    loop {
-        tokio::select! {
-            result = reader.read_line(&mut input) => {
-                match result {
-                    Ok(0) | Err(_) => {
-                        let _ = event_tx
-                            .send(GameEvent::PlayerLeft {
-                                player_name: name.clone(),
-                            })
-                            .await;
-                        break;
-                    }
-                    Ok(_) => {
-                        last_activity = Instant::now();
-                        let command = input.trim().to_string();
-                        let _ = event_tx
-                            .send(GameEvent::PlayerCommand {
-                                player_name: name.clone(),
-                                command,
-                            })
-                            .await;
-                        input.clear();
-                    }
-                }
-            }
-
-            result = broadcast_rx.recv() => {
-                match result {
-                    Ok(msg) => {
-                        let text = match msg {
-                            BroadcastMsg::DirectMessage {
-                                ref player_name, ref text,
-                            } if player_name == &name => {
-                                Some(text.clone())
-                            }
-                            BroadcastMsg::RoomMessage {
-                                room_id, ref text,
-                            } if room_id == current_room => {
-                                Some(text.clone())
-                            }
-                            BroadcastMsg::GlobalMessage {
-                                ref text,
-                            } => Some(text.clone()),
-                            _ => None,
-                        };
-                        if let Some(text) = text {
-                            if writer
-                                .write_all(text.as_bytes())
-                                .await
-                                .is_err()
-                            {
-                                let _ = event_tx
-                                    .send(GameEvent::PlayerLeft {
-                                        player_name: name.clone(),
-                                    })
-                                    .await;
-                                break;
-                            }
-                        }
-                    }
-                    Err(broadcast::error::RecvError::Lagged(n)) => {
-                        let _ = writer
-                            .write_all(
-                                format!(
-                                    "[You blink and miss {n} moments...]\n"
-                                )
-                                .as_bytes(),
-                            )
-                            .await;
-                    }
-                    Err(broadcast::error::RecvError::Closed) => break,
-                }
-            }
-
-            _ = horror_interval.tick() => {
-                let messages = [
-                    "A cold draft whispers through the corridor...\n",
-                    "You hear scratching inside the walls...\n",
-                    "The torchlight flickers and dims...\n",
-                    "Something wet drips onto your shoulder...\n",
-                    "A distant scream echoes through the castle...\n",
-                ];
-                let msg = messages[horror_tick % messages.len()];
-                horror_tick += 1;
-                if writer.write_all(msg.as_bytes()).await.is_err() {
-                    let _ = event_tx
-                        .send(GameEvent::PlayerLeft {
-                            player_name: name.clone(),
-                        })
-                        .await;
-                    break;
-                }
-            }
-
-            _ = heartbeat.tick() => {
-                if last_activity.elapsed() > config.activity_timeout {
-                    println!(
-                        "{name} timed out (no activity for {}s).",
-                        config.activity_timeout.as_secs()
-                    );
-                    let _ = writer
-                        .write_all(
-                            b"\nYou have been idle too long. \
-                              The darkness claims you...\n",
-                        )
-                        .await;
-                    let _ = event_tx
-                        .send(GameEvent::PlayerLeft {
-                            player_name: name.clone(),
-                        })
-                        .await;
-                    break;
-                }
-
-                let pings = [
-                    "...the castle breathes...\n",
-                    "...shadows shift...\n",
-                    "...silence presses in...\n",
-                ];
-                let ping_msg = pings[horror_tick % pings.len()];
-                if writer
-                    .write_all(ping_msg.as_bytes())
-                    .await
-                    .is_err()
-                {
-                    println!(
-                        "{name} disconnected (heartbeat failed)."
-                    );
-                    let _ = event_tx
-                        .send(GameEvent::PlayerLeft {
-                            player_name: name.clone(),
-                        })
-                        .await;
-                    break;
-                }
-            }
-
-            _ = shutdown_rx.changed() => {
-                println!("{name} is being disconnected for shutdown.");
-                tokio::time::sleep(Duration::from_millis(100)).await;
-                break;
-            }
-        }
-    }
-
-    let duration = connected_at.elapsed();
-    let minutes = duration.as_secs() / 60;
-    let seconds = duration.as_secs() % 60;
-    println!("{name} departed after {minutes}m {seconds}s in Shadowkeep.");
-}
-
-#[tokio::main]
-async fn main() {
-    let state = SharedState::new();
-    let (event_tx, event_rx) = mpsc::channel::<GameEvent>(256);
-    let (broadcast_tx, _) = broadcast::channel::<BroadcastMsg>(128);
-    let (shutdown_tx, shutdown_rx) = watch::channel(false);
-
-    start_event_processor(event_rx, state.clone(), broadcast_tx.clone());
-    start_game_loop(event_tx.clone(), shutdown_rx.clone());
-
-    let listener = TcpListener::bind("127.0.0.1:7878")
-        .await
-        .expect("Failed to bind to port 7878");
-
-    println!("Shadowkeep awaits on port 7878...");
-
-    tokio::select! {
-        _ = async {
-            loop {
-                let (socket, addr) = listener
-                    .accept()
-                    .await
-                    .expect("Failed to accept connection");
-
-                println!("A soul approaches from {addr}...");
-                let event_tx = event_tx.clone();
-                let broadcast_rx = broadcast_tx.subscribe();
-                let shutdown_rx = shutdown_rx.clone();
-
-                tokio::spawn(async move {
-                    handle_client(
-                        socket,
-                        event_tx,
-                        broadcast_rx,
-                        shutdown_rx,
-                    )
-                    .await;
-                });
-            }
-            #[allow(unreachable_code)]
-            Ok::<_, std::io::Error>(())
-        } => {}
-
-        _ = signal::ctrl_c() => {
-            println!(
-                "\nThe dawn approaches... Shadowkeep is shutting down."
-            );
-        }
-    }
-
-    let _ = shutdown_tx.send(true);
-
-    let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
-        text: "\n  The castle trembles... Shadowkeep is closing its gates.\n  \
-               Farewell, traveler.\n\n"
-            .to_string(),
-    });
-
-    drop(event_tx);
-
-    state.with(|game| {
-        if let Err(e) = game.save("shadowkeep_save.json") {
-            eprintln!("Failed to save game state: {e}");
-        } else {
-            println!("Game state saved.");
-        }
-    });
-
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    println!("Shadowkeep sleeps. Until next time.");
-}
-```
+> [!check] Checkpoint
+> ```rust
+> use std::sync::{Arc, Mutex};
+> use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
+> use tokio::net::TcpListener;
+> use tokio::signal;
+> use tokio::sync::{broadcast, mpsc, watch};
+> use tokio::time::{self, Duration, Instant};
+>
+> #[derive(Debug, Clone)]
+> enum GameEvent {
+>     PlayerCommand { player_name: String, command: String },
+>     PlayerJoined { player_name: String },
+>     PlayerLeft { player_name: String },
+>     Tick,
+>     SendToPlayer { player_name: String, message: String },
+>     SendToRoom { room_id: usize, message: String },
+> }
+>
+> #[derive(Debug, Clone)]
+> enum BroadcastMsg {
+>     DirectMessage { player_name: String, text: String },
+>     RoomMessage { room_id: usize, text: String },
+>     GlobalMessage { text: String },
+> }
+>
+> #[derive(Clone)]
+> struct SharedState {
+>     inner: Arc<Mutex<GameState>>,
+> }
+>
+> impl SharedState {
+>     fn new() -> Self {
+>         Self { inner: Arc::new(Mutex::new(GameState::new())) }
+>     }
+>     fn with<F, R>(&self, f: F) -> R
+>     where F: FnOnce(&mut GameState) -> R {
+>         let mut guard = self.inner.lock().unwrap();
+>         f(&mut guard)
+>     }
+> }
+>
+> struct ConnectionConfig {
+>     heartbeat_interval: Duration,
+>     activity_timeout: Duration,
+>     horror_interval: Duration,
+> }
+>
+> impl Default for ConnectionConfig {
+>     fn default() -> Self {
+>         Self {
+>             heartbeat_interval: Duration::from_secs(30),
+>             activity_timeout: Duration::from_secs(120),
+>             horror_interval: Duration::from_secs(30),
+>         }
+>     }
+> }
+>
+> fn start_game_loop(
+>     event_tx: mpsc::Sender<GameEvent>,
+>     mut shutdown_rx: watch::Receiver<bool>,
+> ) {
+>     tokio::spawn(async move {
+>         let mut interval = time::interval(Duration::from_secs(5));
+>         loop {
+>             tokio::select! {
+>                 _ = interval.tick() => {
+>                     if event_tx.send(GameEvent::Tick).await.is_err() {
+>                         break;
+>                     }
+>                 }
+>                 _ = shutdown_rx.changed() => {
+>                     println!("Game loop received shutdown signal.");
+>                     break;
+>                 }
+>             }
+>         }
+>     });
+> }
+>
+> fn start_event_processor(
+>     mut event_rx: mpsc::Receiver<GameEvent>,
+>     state: SharedState,
+>     broadcast_tx: broadcast::Sender<BroadcastMsg>,
+> ) {
+>     tokio::spawn(async move {
+>         while let Some(event) = event_rx.recv().await {
+>             match event {
+>                 GameEvent::PlayerCommand { player_name, command } => {
+>                     let response = state.with(|game| {
+>                         game.handle_command(&player_name, &command)
+>                     });
+>                     let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
+>                         player_name: player_name.clone(),
+>                         text: response,
+>                     });
+>                     if command.starts_with("say ") {
+>                         let room_id = state.with(|game| {
+>                             game.player_room(&player_name)
+>                         });
+>                         if let Some(room_id) = room_id {
+>                             let _ = broadcast_tx.send(
+>                                 BroadcastMsg::RoomMessage {
+>                                     room_id,
+>                                     text: format!(
+>                                         "{player_name} says: {}\n",
+>                                         &command[4..]
+>                                     ),
+>                                 },
+>                             );
+>                         }
+>                     }
+>                 }
+>                 GameEvent::PlayerJoined { player_name } => {
+>                     state.with(|game| {
+>                         game.add_player(player_name.clone())
+>                     });
+>                     let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
+>                         text: format!(
+>                             "{player_name} has entered Shadowkeep.\n"
+>                         ),
+>                     });
+>                 }
+>                 GameEvent::PlayerLeft { player_name } => {
+>                     state.with(|game| game.remove_player(&player_name));
+>                     let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
+>                         text: format!(
+>                             "{player_name} has been consumed by darkness.\n"
+>                         ),
+>                     });
+>                 }
+>                 GameEvent::Tick => {
+>                     let events = state.with(|game| game.tick());
+>                     for (room_id, text) in events {
+>                         let _ = broadcast_tx.send(
+>                             BroadcastMsg::RoomMessage { room_id, text },
+>                         );
+>                     }
+>                 }
+>                 GameEvent::SendToPlayer { player_name, message } => {
+>                     let _ = broadcast_tx.send(BroadcastMsg::DirectMessage {
+>                         player_name,
+>                         text: message,
+>                     });
+>                 }
+>                 GameEvent::SendToRoom { room_id, message } => {
+>                     let _ = broadcast_tx.send(BroadcastMsg::RoomMessage {
+>                         room_id,
+>                         text: message,
+>                     });
+>                 }
+>             }
+>         }
+>         println!("Event processor shutting down — all senders dropped.");
+>     });
+> }
+>
+> async fn handle_client(
+>     socket: tokio::net::TcpStream,
+>     event_tx: mpsc::Sender<GameEvent>,
+>     mut broadcast_rx: broadcast::Receiver<BroadcastMsg>,
+>     mut shutdown_rx: watch::Receiver<bool>,
+> ) {
+>     let config = ConnectionConfig::default();
+>     let connected_at = Instant::now();
+>
+>     let (reader, mut writer) = socket.into_split();
+>     let mut reader = BufReader::new(reader);
+>
+>     writer
+>         .write_all(b"What is your name, traveler?\n")
+>         .await
+>         .unwrap();
+>
+>     let mut name = String::new();
+>     if reader.read_line(&mut name).await.unwrap() == 0 {
+>         return;
+>     }
+>     let name = name.trim().to_string();
+>
+>     let welcome = format!(
+>         "\n  Welcome to Shadowkeep, {name}.\n  Type 'help' for commands.\n\n"
+>     );
+>     writer.write_all(welcome.as_bytes()).await.unwrap();
+>
+>     let _ = event_tx
+>         .send(GameEvent::PlayerJoined {
+>             player_name: name.clone(),
+>         })
+>         .await;
+>
+>     let mut current_room: usize = 0;
+>     let mut input = String::new();
+>     let mut horror_interval = time::interval(config.horror_interval);
+>     let mut horror_tick: usize = 0;
+>     let mut heartbeat = time::interval(config.heartbeat_interval);
+>     heartbeat.tick().await; // skip first immediate tick
+>     let mut last_activity = Instant::now();
+>
+>     loop {
+>         tokio::select! {
+>             result = reader.read_line(&mut input) => {
+>                 match result {
+>                     Ok(0) | Err(_) => {
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerLeft {
+>                                 player_name: name.clone(),
+>                             })
+>                             .await;
+>                         break;
+>                     }
+>                     Ok(_) => {
+>                         last_activity = Instant::now();
+>                         let command = input.trim().to_string();
+>                         let _ = event_tx
+>                             .send(GameEvent::PlayerCommand {
+>                                 player_name: name.clone(),
+>                                 command,
+>                             })
+>                             .await;
+>                         input.clear();
+>                     }
+>                 }
+>             }
+>
+>             result = broadcast_rx.recv() => {
+>                 match result {
+>                     Ok(msg) => {
+>                         let text = match msg {
+>                             BroadcastMsg::DirectMessage {
+>                                 ref player_name, ref text,
+>                             } if player_name == &name => {
+>                                 Some(text.clone())
+>                             }
+>                             BroadcastMsg::RoomMessage {
+>                                 room_id, ref text,
+>                             } if room_id == current_room => {
+>                                 Some(text.clone())
+>                             }
+>                             BroadcastMsg::GlobalMessage {
+>                                 ref text,
+>                             } => Some(text.clone()),
+>                             _ => None,
+>                         };
+>                         if let Some(text) = text {
+>                             if writer
+>                                 .write_all(text.as_bytes())
+>                                 .await
+>                                 .is_err()
+>                             {
+>                                 let _ = event_tx
+>                                     .send(GameEvent::PlayerLeft {
+>                                         player_name: name.clone(),
+>                                     })
+>                                     .await;
+>                                 break;
+>                             }
+>                         }
+>                     }
+>                     Err(broadcast::error::RecvError::Lagged(n)) => {
+>                         let _ = writer
+>                             .write_all(
+>                                 format!(
+>                                     "[You blink and miss {n} moments...]\n"
+>                                 )
+>                                 .as_bytes(),
+>                             )
+>                             .await;
+>                     }
+>                     Err(broadcast::error::RecvError::Closed) => break,
+>                 }
+>             }
+>
+>             _ = horror_interval.tick() => {
+>                 let messages = [
+>                     "A cold draft whispers through the corridor...\n",
+>                     "You hear scratching inside the walls...\n",
+>                     "The torchlight flickers and dims...\n",
+>                     "Something wet drips onto your shoulder...\n",
+>                     "A distant scream echoes through the castle...\n",
+>                 ];
+>                 let msg = messages[horror_tick % messages.len()];
+>                 horror_tick += 1;
+>                 if writer.write_all(msg.as_bytes()).await.is_err() {
+>                     let _ = event_tx
+>                         .send(GameEvent::PlayerLeft {
+>                             player_name: name.clone(),
+>                         })
+>                         .await;
+>                     break;
+>                 }
+>             }
+>
+>             _ = heartbeat.tick() => {
+>                 if last_activity.elapsed() > config.activity_timeout {
+>                     println!(
+>                         "{name} timed out (no activity for {}s).",
+>                         config.activity_timeout.as_secs()
+>                     );
+>                     let _ = writer
+>                         .write_all(
+>                             b"\nYou have been idle too long. \
+>                               The darkness claims you...\n",
+>                         )
+>                         .await;
+>                     let _ = event_tx
+>                         .send(GameEvent::PlayerLeft {
+>                             player_name: name.clone(),
+>                         })
+>                         .await;
+>                     break;
+>                 }
+>
+>                 let pings = [
+>                     "...the castle breathes...\n",
+>                     "...shadows shift...\n",
+>                     "...silence presses in...\n",
+>                 ];
+>                 let ping_msg = pings[horror_tick % pings.len()];
+>                 if writer
+>                     .write_all(ping_msg.as_bytes())
+>                     .await
+>                     .is_err()
+>                 {
+>                     println!(
+>                         "{name} disconnected (heartbeat failed)."
+>                     );
+>                     let _ = event_tx
+>                         .send(GameEvent::PlayerLeft {
+>                             player_name: name.clone(),
+>                         })
+>                         .await;
+>                     break;
+>                 }
+>             }
+>
+>             _ = shutdown_rx.changed() => {
+>                 println!("{name} is being disconnected for shutdown.");
+>                 tokio::time::sleep(Duration::from_millis(100)).await;
+>                 break;
+>             }
+>         }
+>     }
+>
+>     let duration = connected_at.elapsed();
+>     let minutes = duration.as_secs() / 60;
+>     let seconds = duration.as_secs() % 60;
+>     println!("{name} departed after {minutes}m {seconds}s in Shadowkeep.");
+> }
+>
+> #[tokio::main]
+> async fn main() {
+>     let state = SharedState::new();
+>     let (event_tx, event_rx) = mpsc::channel::<GameEvent>(256);
+>     let (broadcast_tx, _) = broadcast::channel::<BroadcastMsg>(128);
+>     let (shutdown_tx, shutdown_rx) = watch::channel(false);
+>
+>     start_event_processor(event_rx, state.clone(), broadcast_tx.clone());
+>     start_game_loop(event_tx.clone(), shutdown_rx.clone());
+>
+>     let listener = TcpListener::bind("127.0.0.1:7878")
+>         .await
+>         .expect("Failed to bind to port 7878");
+>
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     tokio::select! {
+>         _ = async {
+>             loop {
+>                 let (socket, addr) = listener
+>                     .accept()
+>                     .await
+>                     .expect("Failed to accept connection");
+>
+>                 println!("A soul approaches from {addr}...");
+>                 let event_tx = event_tx.clone();
+>                 let broadcast_rx = broadcast_tx.subscribe();
+>                 let shutdown_rx = shutdown_rx.clone();
+>
+>                 tokio::spawn(async move {
+>                     handle_client(
+>                         socket,
+>                         event_tx,
+>                         broadcast_rx,
+>                         shutdown_rx,
+>                     )
+>                     .await;
+>                 });
+>             }
+>             #[allow(unreachable_code)]
+>             Ok::<_, std::io::Error>(())
+>         } => {}
+>
+>         _ = signal::ctrl_c() => {
+>             println!(
+>                 "\nThe dawn approaches... Shadowkeep is shutting down."
+>             );
+>         }
+>     }
+>
+>     let _ = shutdown_tx.send(true);
+>
+>     let _ = broadcast_tx.send(BroadcastMsg::GlobalMessage {
+>         text: "\n  The castle trembles... Shadowkeep is closing its gates.\n  \
+>                Farewell, traveler.\n\n"
+>             .to_string(),
+>     });
+>
+>     drop(event_tx);
+>
+>     state.with(|game| {
+>         if let Err(e) = game.save("shadowkeep_save.json") {
+>             eprintln!("Failed to save game state: {e}");
+>         } else {
+>             println!("Game state saved.");
+>         }
+>     });
+>
+>     tokio::time::sleep(Duration::from_secs(1)).await;
+>     println!("Shadowkeep sleeps. Until next time.");
+> }
+> ```
 
 ---
 

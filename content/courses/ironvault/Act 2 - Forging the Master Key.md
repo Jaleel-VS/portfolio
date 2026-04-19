@@ -2,7 +2,7 @@
 
 > *"The vault stands sealed, its iron door cold to the touch. No lockpick will open it, no battering ram will breach it. Only a key forged from your own secret — a word spoken into the furnace of cryptography — can turn the lock. But beware: forge the key poorly, and any thief with a fast enough hammer can shatter it."*
 
-In Act 1 you built the vault's contents — relics, chambers, the data model that holds your secrets. But those secrets sit in plaintext JSON on disk. Anyone who steals your laptop, copies your backup, or glances at your filesystem can read every password you own.
+In Act 1 you built the vault's contents — relics, chambers, the data model that holds your secrets. But those secrets sit in plaintext JSON on disk. Anyone who steals your laptop, copies your backup, or glances at your filesystem can read every password you own. Act 2 fixes this with real cryptography. The concepts get harder here: byte arrays, key derivation, encryption. If you've never worked with crypto before, that's fine — we'll build every piece from first principles.
 
 Act 2 changes everything. By the end of these six stages, your vault will be sealed behind military-grade cryptography. The same encryption that protects classified government data (AES-256) and the same key derivation that won the Password Hashing Competition (Argon2id) will guard your relics.
 
@@ -17,13 +17,13 @@ This is the hardest act in the course. Cryptography is unforgiving — a single 
 - Session management: cached keys in tmpfs, lock files, PID tracking
 - Auto-lock timeout with configurable expiry
 
-**Crate versions used:** `argon2 0.5`, `aes-gcm 0.10`, `rand 0.8`, `rpassword 7.4`, `hex 0.4`, `chrono 0.4`, `toml 0.8`, `serde 1.0`
+**Crate versions used:** `argon2 0.5`, `aes-gcm 0.10`, `rand 0.9`, `rpassword 7.4`, `hex 0.4`, `chrono 0.4`, `toml 0.8`, `serde 1.0`
 
 ---
 
 ## Stage 8 — The Salt Mines
 
-**Difficulty:** Medium | **Concepts:** Key derivation, arrays, slices, OsRng, hex encoding
+*Difficulty: Medium*
 
 Your master password is a human-readable string — maybe 20 characters, maybe 40. AES-256 needs exactly 256 bits of high-entropy key material. You can't just pad the password with zeros or hash it with SHA-256 (which is catastrophically fast for attackers). This stage builds the bridge between a human secret and a cryptographic key, using Argon2id — the algorithm specifically designed to make brute-force attacks economically ruinous.
 
@@ -75,7 +75,7 @@ Add the crates we need to `Cargo.toml`:
 [dependencies]
 # ... existing deps from Act 1 ...
 argon2 = "0.5"          # Argon2id key derivation
-rand = "0.8"            # Cryptographic random number generation
+rand = "0.9"            # Cryptographic random number generation
 hex = "0.4"             # Hex encoding for display
 ```
 
@@ -110,7 +110,7 @@ pub fn generate_salt() -> [u8; 16] {
 
 Let's break down every piece:
 
-**`[u8; 16]`** — This is a Rust *array*: exactly 16 bytes, stack-allocated, fixed size. In Python you'd use `bytes(16)` or `os.urandom(16)`. In TypeScript, `crypto.randomBytes(16)`. The Rust version is special: the size `16` is part of the *type*. You can't accidentally pass a 15-byte salt — the compiler rejects it.
+**`[u8; 16]`** — This is a Rust *array*: exactly 16 bytes, stack-allocated, fixed size. In Python you'd use `bytes(16)` or `os.urandom(16)`. The Rust version is special: the size `16` is part of the *type*. You can't accidentally pass a 15-byte salt — the compiler rejects it.
 
 ```python
 # Python equivalent
@@ -118,16 +118,11 @@ import os
 salt = os.urandom(16)  # Returns bytes, but nothing enforces length
 ```
 
-```typescript
-// TypeScript equivalent
-const salt = crypto.randomBytes(16); // Returns Buffer, length not type-checked
-```
-
 **`[0u8; 16]`** — Array initialization syntax. `0u8` means "the value 0 as a u8 (unsigned byte)." The `; 16` means "repeat it 16 times." This creates `[0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]`.
 
 **`OsRng.fill_bytes(&mut salt)`** — `OsRng` is a zero-sized struct (it has no fields — it's just a handle to the OS entropy source). `fill_bytes` takes a `&mut [u8]` — a mutable reference to a byte slice — and fills it with random data. The `&mut` means "I'm borrowing this array and I'm going to modify it."
 
-> **Why `OsRng` and not `rand::thread_rng()`?** For cryptographic purposes, `OsRng` reads directly from the OS entropy pool. `thread_rng()` uses a userspace CSPRNG (ChaCha12) seeded from `OsRng` — also secure, but for salt generation we want the most direct path to hardware entropy. Both are fine here; we use `OsRng` to be explicit about our security intent.
+> **Why `OsRng` and not `rand::rng()`?** For cryptographic purposes, `OsRng` reads directly from the OS entropy pool. `rand::rng()` uses a userspace CSPRNG (ChaCha12) seeded from `OsRng` — also secure, but for salt generation we want the most direct path to hardware entropy. Both are fine here; we use `OsRng` to be explicit about our security intent.
 
 ### 8.3 — Deriving a Key with Argon2id
 
@@ -194,7 +189,7 @@ There's a lot happening here. Let's unpack the Rust concepts:
 | Type | What it is | Size known at | Analogy |
 |------|-----------|---------------|---------|
 | `[u8; 32]` | Array — exactly 32 bytes, owned | Compile time | Python `bytes(32)` but size is enforced by the type system |
-| `&[u8]` | Slice — a *view* into some bytes, any length | Runtime | Python `memoryview` or TypeScript `Uint8Array` |
+| `&[u8]` | Slice — a *view* into some bytes, any length | Runtime | Python `memoryview` |
 | `&[u8; 16]` | Reference to a 16-byte array | Compile time | A pointer to exactly 16 bytes |
 
 When `hash_password_into` asks for `&[u8]`, you can pass `&[u8; 16]` because Rust automatically converts (coerces) a reference to a fixed-size array into a slice. The slice just "forgets" the compile-time length.
@@ -203,11 +198,6 @@ When `hash_password_into` asks for `&[u8]`, you can pass `&[u8; 16]` because Rus
 # Python — no distinction between "exactly 16 bytes" and "some bytes"
 salt = os.urandom(16)       # type: bytes (any length)
 key = hashlib.sha256(salt)  # accepts any bytes
-```
-
-```typescript
-// TypeScript — you can annotate length but it's not enforced
-const salt: Uint8Array = crypto.randomBytes(16); // length not in the type
 ```
 
 **`Params::new(m_cost, t_cost, p_cost, Some(output_len))`** — This is the `argon2` 0.5 API for constructing parameters. It returns `Result<Params>` because it validates the parameters (e.g., `m_cost` must be at least `8 * p_cost`). The `Some(KEY_LENGTH)` sets the output length; `None` would use the default (32 bytes, which is what we want anyway, but being explicit is better).
@@ -295,6 +285,9 @@ All tests passed. The Salt Mines are operational.
 
 Notice the ~200ms delay on each derivation. That's the point. You feel it as a brief pause. An attacker feels it as centuries.
 
+> [!warning] Security note: the key is in plain memory
+> Right now, the master key sits in memory as a plain `[u8; 32]`. If the process crashes, that memory could be dumped to disk. In Stage 27, we'll fix this with `zeroize` — a crate that overwrites sensitive memory when it's dropped. For now, be aware this is a known gap we'll close later.
+
 ### 8.5 — Proper Unit Tests
 
 Add tests to `src/crypto.rs`:
@@ -365,106 +358,108 @@ You now have a key derivation function that turns a password into a 256-bit key 
 
 3. **Print the salt and key as hex.** Get comfortable with `hex::encode()`. You'll use it constantly when debugging crypto code.
 
-### 8.7 — Common Mistakes
+> [!warning] Common Mistake: Using `String` for the password
+> `String` in Rust is heap-allocated and may be copied by the allocator during reallocation. When the `String` is dropped, the memory is freed but *not zeroed* — the password lingers in freed memory until something else overwrites it. In Stage 12 we'll use `secrecy::SecretString` to fix this. For now, we use `&[u8]` which at least avoids unnecessary copies.
 
-**Using `String` for the password.** `String` in Rust is heap-allocated and may be copied by the allocator during reallocation. When the `String` is dropped, the memory is freed but *not zeroed* — the password lingers in freed memory until something else overwrites it. In Stage 12 we'll use `secrecy::SecretString` to fix this. For now, we use `&[u8]` which at least avoids unnecessary copies.
+> [!warning] Common Mistake: Hardcoding the salt
+> If every vault uses the same salt, an attacker can precompute a table of password→key mappings and crack any vault instantly. Always generate a fresh random salt per vault.
 
-**Hardcoding the salt.** If every vault uses the same salt, an attacker can precompute a table of password→key mappings and crack any vault instantly. Always generate a fresh random salt per vault.
+> [!warning] Common Mistake: Using `rand::rng()` for salt generation
+> This actually works fine — `rand::rng()` is cryptographically secure (it uses ChaCha12 seeded from `OsRng`). But using `OsRng` directly makes the security intent explicit. In crypto code, clarity beats cleverness.
 
-**Using `rand::thread_rng()` for salt generation.** This actually works fine — `thread_rng()` is cryptographically secure (it uses ChaCha12 seeded from `OsRng`). But using `OsRng` directly makes the security intent explicit. In crypto code, clarity beats cleverness.
+> [!warning] Common Mistake: Choosing weak Argon2 parameters
+> The OWASP recommendation for 2024+ is `m=64MiB, t=3, p=4` as a minimum. If you're running on a beefy server, crank `m_cost` higher. The goal: key derivation should take 200-500ms on the target machine.
 
-**Choosing weak Argon2 parameters.** The OWASP recommendation for 2024+ is `m=64MiB, t=3, p=4` as a minimum. If you're running on a beefy server, crank `m_cost` higher. The goal: key derivation should take 200-500ms on the target machine.
+> [!check] Checkpoint
+> ```rust
+> // src/crypto.rs — Cryptographic operations for Ironvault
+>
+> use argon2::{Algorithm, Argon2, Params, Version};
+> use rand::rngs::OsRng;
+> use rand::RngCore;
+>
+> // --- Constants (§3.2 Key Derivation) ---
+>
+> pub const ARGON2_M_COST: u32 = 65_536; // 64 MiB in KiB
+> pub const ARGON2_T_COST: u32 = 3;      // 3 iterations
+> pub const ARGON2_P_COST: u32 = 4;      // 4 parallel lanes
+> pub const KEY_LENGTH: usize = 32;       // 256 bits for AES-256
+>
+> // --- Salt Generation ---
+>
+> pub fn generate_salt() -> [u8; 16] {
+> let mut salt = [0u8; 16];
+> OsRng.fill_bytes(&mut salt);
+> salt
+> }
+>
+> // --- Key Derivation ---
+>
+> pub fn derive_key(password: &[u8], salt: &[u8; 16]) -> Result<[u8; 32], argon2::Error> {
+> let params = Params::new(ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST, Some(KEY_LENGTH))?;
+> let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+> let mut key = [0u8; 32];
+> argon2.hash_password_into(password, salt, &mut key)?;
+> Ok(key)
+> }
+>
+> #[cfg(test)]
+> mod tests {
+> use super::*;
+>
+> #[test]
+> fn salt_is_16_bytes() {
+> let salt = generate_salt();
+> assert_eq!(salt.len(), 16);
+> }
+>
+> #[test]
+> fn salt_is_random() {
+> let salt1 = generate_salt();
+> let salt2 = generate_salt();
+> assert_ne!(salt1, salt2);
+> }
+>
+> #[test]
+> fn derive_key_deterministic() {
+> let salt = [0xAA; 16];
+> let key1 = derive_key(b"test password", &salt).unwrap();
+> let key2 = derive_key(b"test password", &salt).unwrap();
+> assert_eq!(key1, key2);
+> }
+>
+> #[test]
+> fn derive_key_different_salt() {
+> let salt1 = [0xAA; 16];
+> let salt2 = [0xBB; 16];
+> let key1 = derive_key(b"test password", &salt1).unwrap();
+> let key2 = derive_key(b"test password", &salt2).unwrap();
+> assert_ne!(key1, key2);
+> }
+>
+> #[test]
+> fn derive_key_different_password() {
+> let salt = [0xAA; 16];
+> let key1 = derive_key(b"password1", &salt).unwrap();
+> let key2 = derive_key(b"password2", &salt).unwrap();
+> assert_ne!(key1, key2);
+> }
+>
+> #[test]
+> fn derive_key_length() {
+> let salt = [0xAA; 16];
+> let key = derive_key(b"test", &salt).unwrap();
+> assert_eq!(key.len(), 32);
+> }
+> }
+> ```
 
-### Checkpoint: Full `src/crypto.rs` after Stage 8
-
-```rust
-// src/crypto.rs — Cryptographic operations for Ironvault
-
-use argon2::{Algorithm, Argon2, Params, Version};
-use rand::rngs::OsRng;
-use rand::RngCore;
-
-// --- Constants (§3.2 Key Derivation) ---
-
-pub const ARGON2_M_COST: u32 = 65_536; // 64 MiB in KiB
-pub const ARGON2_T_COST: u32 = 3;      // 3 iterations
-pub const ARGON2_P_COST: u32 = 4;      // 4 parallel lanes
-pub const KEY_LENGTH: usize = 32;       // 256 bits for AES-256
-
-// --- Salt Generation ---
-
-pub fn generate_salt() -> [u8; 16] {
-    let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
-    salt
-}
-
-// --- Key Derivation ---
-
-pub fn derive_key(password: &[u8], salt: &[u8; 16]) -> Result<[u8; 32], argon2::Error> {
-    let params = Params::new(ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST, Some(KEY_LENGTH))?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut key = [0u8; 32];
-    argon2.hash_password_into(password, salt, &mut key)?;
-    Ok(key)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn salt_is_16_bytes() {
-        let salt = generate_salt();
-        assert_eq!(salt.len(), 16);
-    }
-
-    #[test]
-    fn salt_is_random() {
-        let salt1 = generate_salt();
-        let salt2 = generate_salt();
-        assert_ne!(salt1, salt2);
-    }
-
-    #[test]
-    fn derive_key_deterministic() {
-        let salt = [0xAA; 16];
-        let key1 = derive_key(b"test password", &salt).unwrap();
-        let key2 = derive_key(b"test password", &salt).unwrap();
-        assert_eq!(key1, key2);
-    }
-
-    #[test]
-    fn derive_key_different_salt() {
-        let salt1 = [0xAA; 16];
-        let salt2 = [0xBB; 16];
-        let key1 = derive_key(b"test password", &salt1).unwrap();
-        let key2 = derive_key(b"test password", &salt2).unwrap();
-        assert_ne!(key1, key2);
-    }
-
-    #[test]
-    fn derive_key_different_password() {
-        let salt = [0xAA; 16];
-        let key1 = derive_key(b"password1", &salt).unwrap();
-        let key2 = derive_key(b"password2", &salt).unwrap();
-        assert_ne!(key1, key2);
-    }
-
-    #[test]
-    fn derive_key_length() {
-        let salt = [0xAA; 16];
-        let key = derive_key(b"test", &salt).unwrap();
-        assert_eq!(key.len(), 32);
-    }
-}
-```
 
 ---
 
 ## Stage 9 — The Cipher
 
-**Difficulty:** Hard | **Concepts:** AES-256-GCM, AEAD, Vec\<u8\>, slice splitting, custom error types, From trait
+*Difficulty: Hard*
 
 You have a 256-bit key from Argon2id, but a key alone doesn't protect anything. This stage builds the encryption and decryption functions that transform readable JSON into indecipherable ciphertext — and back again. Critically, it uses *authenticated* encryption (AES-GCM), which means tampering with even a single byte of the encrypted vault will be detected and rejected. Without authentication, an attacker who can't read your passwords could still silently corrupt them.
 
@@ -569,7 +564,7 @@ impl From<aes_gcm::Error> for CryptoError {
 }
 ```
 
-**Why custom errors?** In Python, you'd catch `ValueError` or `CryptoError` and check the message string. In TypeScript, you'd catch `Error` and hope the message is useful. Rust's approach is different: each error variant is a distinct type. You can `match` on it, and the compiler ensures you handle every case.
+**Why custom errors?** In Python, you'd catch `ValueError` or `CryptoError` and check the message string. Rust's approach is different: each error variant is a distinct type. You can `match` on it, and the compiler ensures you handle every case.
 
 **The `From` trait** is Rust's conversion mechanism. By implementing `From<argon2::Error> for CryptoError`, we tell Rust: "whenever you see an `argon2::Error` and need a `CryptoError`, wrap it in `CryptoError::KeyDerivation`." This makes the `?` operator work seamlessly:
 
@@ -712,13 +707,6 @@ ciphertext = encrypted[12:]
 # But Python copies the bytes! Rust just creates views.
 ```
 
-```typescript
-// TypeScript equivalent
-const nonce = encrypted.slice(0, 12);
-const ciphertext = encrypted.slice(12);
-// Also copies in most implementations
-```
-
 **Why `ciphertext_with_tag`?** The `aes-gcm` crate's `encrypt()` appends the 16-byte auth tag to the ciphertext. Its `decrypt()` expects the tag to still be appended. We don't need to split them — the library handles it internally.
 
 ### 9.5 — Testing the Cipher
@@ -818,224 +806,226 @@ With key derivation and authenticated encryption in hand, you're ready to define
 
 3. **Inspect the encrypted output.** Print `hex::encode(&encrypted)` and notice the first 24 hex chars are the nonce (12 bytes × 2 hex chars each). The rest is ciphertext + tag.
 
-### 9.7 — Common Mistakes
+> [!warning] Common Mistake: Reusing a nonce
+> This is the #1 crypto implementation bug. If you ever see code that uses a counter or timestamp as a nonce, be very suspicious. Random nonces from `OsRng` are the safest approach for our use case.
 
-**Reusing a nonce.** This is the #1 crypto implementation bug. If you ever see code that uses a counter or timestamp as a nonce, be very suspicious. Random nonces from `OsRng` are the safest approach for our use case.
+> [!warning] Common Mistake: Not checking the auth tag
+> Some crypto libraries return decrypted data even when the tag doesn't match, leaving it to the caller to verify. The `aes-gcm` crate does the right thing: `decrypt()` returns `Err` if the tag is invalid. Never ignore this error.
 
-**Not checking the auth tag.** Some crypto libraries return decrypted data even when the tag doesn't match, leaving it to the caller to verify. The `aes-gcm` crate does the right thing: `decrypt()` returns `Err` if the tag is invalid. Never ignore this error.
+> [!warning] Common Mistake: Using `String::from_utf8()` on decrypted bytes without checking
+> After decryption, you get `Vec<u8>`. If the original plaintext was UTF-8 (like our JSON vault), you need `String::from_utf8(decrypted)?` which validates the bytes. Don't use `from_utf8_unchecked` — if something went wrong in decryption, you'd get undefined behavior.
 
-**Using `String::from_utf8()` on decrypted bytes without checking.** After decryption, you get `Vec<u8>`. If the original plaintext was UTF-8 (like our JSON vault), you need `String::from_utf8(decrypted)?` which validates the bytes. Don't use `from_utf8_unchecked` — if something went wrong in decryption, you'd get undefined behavior.
+> [!warning] Common Mistake: Storing the key in a `String` or `Vec<u8>`
+> These types don't zeroize on drop. The key lingers in freed memory. We'll fix this with `secrecy::Secret<[u8; 32]>` in a later stage.
 
-**Storing the key in a `String` or `Vec<u8>`.** These types don't zeroize on drop. The key lingers in freed memory. We'll fix this with `secrecy::Secret<[u8; 32]>` in a later stage.
+> [!check] Checkpoint
+> ```rust
+> // src/crypto.rs — Cryptographic operations for Ironvault
+>
+> use aes_gcm::{
+> aead::{Aead, AeadCore, KeyInit, OsRng as AeadOsRng},
+> Aes256Gcm, Key, Nonce,
+> };
+> use argon2::{Algorithm, Argon2, Params, Version};
+> use rand::rngs::OsRng;
+> use rand::RngCore;
+> use std::fmt;
+>
+> // --- Constants ---
+>
+> pub const ARGON2_M_COST: u32 = 65_536;
+> pub const ARGON2_T_COST: u32 = 3;
+> pub const ARGON2_P_COST: u32 = 4;
+> pub const KEY_LENGTH: usize = 32;
+> pub const NONCE_LENGTH: usize = 12;
+>
+> // --- Error Type ---
+>
+> #[derive(Debug)]
+> pub enum CryptoError {
+> KeyDerivation(argon2::Error),
+> Cipher(aes_gcm::Error),
+> InvalidData(String),
+> }
+>
+> impl fmt::Display for CryptoError {
+> fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+> match self {
+> CryptoError::KeyDerivation(e) => write!(f, "Key derivation failed: {e}"),
+> CryptoError::Cipher(_) => {
+> write!(f, "Decryption failed (wrong password or corrupted data)")
+> }
+> CryptoError::InvalidData(msg) => write!(f, "Invalid data: {msg}"),
+> }
+> }
+> }
+>
+> impl From<argon2::Error> for CryptoError {
+> fn from(e: argon2::Error) -> Self {
+> CryptoError::KeyDerivation(e)
+> }
+> }
+>
+> impl From<aes_gcm::Error> for CryptoError {
+> fn from(e: aes_gcm::Error) -> Self {
+> CryptoError::Cipher(e)
+> }
+> }
+>
+> // --- Salt Generation ---
+>
+> pub fn generate_salt() -> [u8; 16] {
+> let mut salt = [0u8; 16];
+> OsRng.fill_bytes(&mut salt);
+> salt
+> }
+>
+> // --- Key Derivation ---
+>
+> pub fn derive_key(password: &[u8], salt: &[u8; 16]) -> Result<[u8; 32], CryptoError> {
+> let params = Params::new(ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST, Some(KEY_LENGTH))?;
+> let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
+> let mut key = [0u8; 32];
+> argon2.hash_password_into(password, salt, &mut key)?;
+> Ok(key)
+> }
+>
+> // --- Encryption ---
+>
+> pub fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
+> let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+> let nonce = Aes256Gcm::generate_nonce(&mut AeadOsRng);
+> let ciphertext = cipher.encrypt(&nonce, plaintext)?;
+>
+> let mut output = Vec::with_capacity(NONCE_LENGTH + ciphertext.len());
+> output.extend_from_slice(&nonce);
+> output.extend_from_slice(&ciphertext);
+> Ok(output)
+> }
+>
+> // --- Decryption ---
+>
+> pub fn decrypt(key: &[u8; 32], encrypted: &[u8]) -> Result<Vec<u8>, CryptoError> {
+> if encrypted.len() < NONCE_LENGTH + 16 {
+> return Err(CryptoError::InvalidData(format!(
+> "Encrypted data too short: {} bytes (minimum {})",
+> encrypted.len(),
+> NONCE_LENGTH + 16
+> )));
+> }
+>
+> let (nonce_bytes, ciphertext_with_tag) = encrypted.split_at(NONCE_LENGTH);
+> let nonce = Nonce::from_slice(nonce_bytes);
+> let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
+> let plaintext = cipher.decrypt(nonce, ciphertext_with_tag)?;
+> Ok(plaintext)
+> }
+>
+> #[cfg(test)]
+> mod tests {
+> use super::*;
+>
+> #[test]
+> fn salt_is_16_bytes() {
+> assert_eq!(generate_salt().len(), 16);
+> }
+>
+> #[test]
+> fn salt_is_random() {
+> assert_ne!(generate_salt(), generate_salt());
+> }
+>
+> #[test]
+> fn derive_key_deterministic() {
+> let salt = [0xAA; 16];
+> let k1 = derive_key(b"test", &salt).unwrap();
+> let k2 = derive_key(b"test", &salt).unwrap();
+> assert_eq!(k1, k2);
+> }
+>
+> #[test]
+> fn derive_key_different_salt() {
+> let k1 = derive_key(b"test", &[0xAA; 16]).unwrap();
+> let k2 = derive_key(b"test", &[0xBB; 16]).unwrap();
+> assert_ne!(k1, k2);
+> }
+>
+> #[test]
+> fn derive_key_different_password() {
+> let salt = [0xAA; 16];
+> let k1 = derive_key(b"pass1", &salt).unwrap();
+> let k2 = derive_key(b"pass2", &salt).unwrap();
+> assert_ne!(k1, k2);
+> }
+>
+> #[test]
+> fn derive_key_length() {
+> assert_eq!(derive_key(b"x", &[0; 16]).unwrap().len(), 32);
+> }
+>
+> #[test]
+> fn encrypt_decrypt_round_trip() {
+> let key = [0x42; 32];
+> let plaintext = b"The Armory holds three relics.";
+> let encrypted = encrypt(&key, plaintext).unwrap();
+> let decrypted = decrypt(&key, &encrypted).unwrap();
+> assert_eq!(decrypted, plaintext);
+> }
+>
+> #[test]
+> fn encrypt_produces_different_output_each_time() {
+> let key = [0x42; 32];
+> let enc1 = encrypt(&key, b"same").unwrap();
+> let enc2 = encrypt(&key, b"same").unwrap();
+> assert_ne!(enc1, enc2);
+> }
+>
+> #[test]
+> fn wrong_key_fails() {
+> let encrypted = encrypt(&[0x42; 32], b"secret").unwrap();
+> assert!(decrypt(&[0x43; 32], &encrypted).is_err());
+> }
+>
+> #[test]
+> fn tampered_ciphertext_fails() {
+> let key = [0x42; 32];
+> let mut encrypted = encrypt(&key, b"secret").unwrap();
+> encrypted[15] ^= 0x01;
+> assert!(decrypt(&key, &encrypted).is_err());
+> }
+>
+> #[test]
+> fn tampered_nonce_fails() {
+> let key = [0x42; 32];
+> let mut encrypted = encrypt(&key, b"secret").unwrap();
+> encrypted[0] ^= 0x01;
+> assert!(decrypt(&key, &encrypted).is_err());
+> }
+>
+> #[test]
+> fn too_short_data_fails() {
+> assert!(matches!(
+> decrypt(&[0x42; 32], &[0u8; 10]),
+> Err(CryptoError::InvalidData(_))
+> ));
+> }
+>
+> #[test]
+> fn empty_plaintext_round_trip() {
+> let key = [0x42; 32];
+> let encrypted = encrypt(&key, b"").unwrap();
+> assert_eq!(encrypted.len(), 12 + 16);
+> assert_eq!(decrypt(&key, &encrypted).unwrap(), b"");
+> }
+> }
+> ```
 
-### Checkpoint: Updated `src/crypto.rs` after Stage 9
-
-```rust
-// src/crypto.rs — Cryptographic operations for Ironvault
-
-use aes_gcm::{
-    aead::{Aead, AeadCore, KeyInit, OsRng as AeadOsRng},
-    Aes256Gcm, Key, Nonce,
-};
-use argon2::{Algorithm, Argon2, Params, Version};
-use rand::rngs::OsRng;
-use rand::RngCore;
-use std::fmt;
-
-// --- Constants ---
-
-pub const ARGON2_M_COST: u32 = 65_536;
-pub const ARGON2_T_COST: u32 = 3;
-pub const ARGON2_P_COST: u32 = 4;
-pub const KEY_LENGTH: usize = 32;
-pub const NONCE_LENGTH: usize = 12;
-
-// --- Error Type ---
-
-#[derive(Debug)]
-pub enum CryptoError {
-    KeyDerivation(argon2::Error),
-    Cipher(aes_gcm::Error),
-    InvalidData(String),
-}
-
-impl fmt::Display for CryptoError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        match self {
-            CryptoError::KeyDerivation(e) => write!(f, "Key derivation failed: {e}"),
-            CryptoError::Cipher(_) => {
-                write!(f, "Decryption failed (wrong password or corrupted data)")
-            }
-            CryptoError::InvalidData(msg) => write!(f, "Invalid data: {msg}"),
-        }
-    }
-}
-
-impl From<argon2::Error> for CryptoError {
-    fn from(e: argon2::Error) -> Self {
-        CryptoError::KeyDerivation(e)
-    }
-}
-
-impl From<aes_gcm::Error> for CryptoError {
-    fn from(e: aes_gcm::Error) -> Self {
-        CryptoError::Cipher(e)
-    }
-}
-
-// --- Salt Generation ---
-
-pub fn generate_salt() -> [u8; 16] {
-    let mut salt = [0u8; 16];
-    OsRng.fill_bytes(&mut salt);
-    salt
-}
-
-// --- Key Derivation ---
-
-pub fn derive_key(password: &[u8], salt: &[u8; 16]) -> Result<[u8; 32], CryptoError> {
-    let params = Params::new(ARGON2_M_COST, ARGON2_T_COST, ARGON2_P_COST, Some(KEY_LENGTH))?;
-    let argon2 = Argon2::new(Algorithm::Argon2id, Version::V0x13, params);
-    let mut key = [0u8; 32];
-    argon2.hash_password_into(password, salt, &mut key)?;
-    Ok(key)
-}
-
-// --- Encryption ---
-
-pub fn encrypt(key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
-    let nonce = Aes256Gcm::generate_nonce(&mut AeadOsRng);
-    let ciphertext = cipher.encrypt(&nonce, plaintext)?;
-
-    let mut output = Vec::with_capacity(NONCE_LENGTH + ciphertext.len());
-    output.extend_from_slice(&nonce);
-    output.extend_from_slice(&ciphertext);
-    Ok(output)
-}
-
-// --- Decryption ---
-
-pub fn decrypt(key: &[u8; 32], encrypted: &[u8]) -> Result<Vec<u8>, CryptoError> {
-    if encrypted.len() < NONCE_LENGTH + 16 {
-        return Err(CryptoError::InvalidData(format!(
-            "Encrypted data too short: {} bytes (minimum {})",
-            encrypted.len(),
-            NONCE_LENGTH + 16
-        )));
-    }
-
-    let (nonce_bytes, ciphertext_with_tag) = encrypted.split_at(NONCE_LENGTH);
-    let nonce = Nonce::from_slice(nonce_bytes);
-    let cipher = Aes256Gcm::new(Key::<Aes256Gcm>::from_slice(key));
-    let plaintext = cipher.decrypt(nonce, ciphertext_with_tag)?;
-    Ok(plaintext)
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn salt_is_16_bytes() {
-        assert_eq!(generate_salt().len(), 16);
-    }
-
-    #[test]
-    fn salt_is_random() {
-        assert_ne!(generate_salt(), generate_salt());
-    }
-
-    #[test]
-    fn derive_key_deterministic() {
-        let salt = [0xAA; 16];
-        let k1 = derive_key(b"test", &salt).unwrap();
-        let k2 = derive_key(b"test", &salt).unwrap();
-        assert_eq!(k1, k2);
-    }
-
-    #[test]
-    fn derive_key_different_salt() {
-        let k1 = derive_key(b"test", &[0xAA; 16]).unwrap();
-        let k2 = derive_key(b"test", &[0xBB; 16]).unwrap();
-        assert_ne!(k1, k2);
-    }
-
-    #[test]
-    fn derive_key_different_password() {
-        let salt = [0xAA; 16];
-        let k1 = derive_key(b"pass1", &salt).unwrap();
-        let k2 = derive_key(b"pass2", &salt).unwrap();
-        assert_ne!(k1, k2);
-    }
-
-    #[test]
-    fn derive_key_length() {
-        assert_eq!(derive_key(b"x", &[0; 16]).unwrap().len(), 32);
-    }
-
-    #[test]
-    fn encrypt_decrypt_round_trip() {
-        let key = [0x42; 32];
-        let plaintext = b"The Armory holds three relics.";
-        let encrypted = encrypt(&key, plaintext).unwrap();
-        let decrypted = decrypt(&key, &encrypted).unwrap();
-        assert_eq!(decrypted, plaintext);
-    }
-
-    #[test]
-    fn encrypt_produces_different_output_each_time() {
-        let key = [0x42; 32];
-        let enc1 = encrypt(&key, b"same").unwrap();
-        let enc2 = encrypt(&key, b"same").unwrap();
-        assert_ne!(enc1, enc2);
-    }
-
-    #[test]
-    fn wrong_key_fails() {
-        let encrypted = encrypt(&[0x42; 32], b"secret").unwrap();
-        assert!(decrypt(&[0x43; 32], &encrypted).is_err());
-    }
-
-    #[test]
-    fn tampered_ciphertext_fails() {
-        let key = [0x42; 32];
-        let mut encrypted = encrypt(&key, b"secret").unwrap();
-        encrypted[15] ^= 0x01;
-        assert!(decrypt(&key, &encrypted).is_err());
-    }
-
-    #[test]
-    fn tampered_nonce_fails() {
-        let key = [0x42; 32];
-        let mut encrypted = encrypt(&key, b"secret").unwrap();
-        encrypted[0] ^= 0x01;
-        assert!(decrypt(&key, &encrypted).is_err());
-    }
-
-    #[test]
-    fn too_short_data_fails() {
-        assert!(matches!(
-            decrypt(&[0x42; 32], &[0u8; 10]),
-            Err(CryptoError::InvalidData(_))
-        ));
-    }
-
-    #[test]
-    fn empty_plaintext_round_trip() {
-        let key = [0x42; 32];
-        let encrypted = encrypt(&key, b"").unwrap();
-        assert_eq!(encrypted.len(), 12 + 16);
-        assert_eq!(decrypt(&key, &encrypted).unwrap(), b"");
-    }
-}
-```
 
 ---
 
 ## Stage 10 — The Vault Door
 
-**Difficulty:** Hard | **Concepts:** Binary I/O, Read/Write traits, byte packing, Cursor, atomic file writes
+*Difficulty: Hard*
 
 You have encryption and key derivation, but no way to persist an encrypted vault to disk. The challenge: you need metadata (salt, nonce, Argon2 parameters) *before* you can decrypt, but that metadata must be stored alongside the ciphertext. This stage defines a binary file format with a plaintext header and an encrypted payload — the physical structure that makes the vault a real file on disk rather than an in-memory exercise.
 
@@ -1443,19 +1433,20 @@ The vault file format is defined and tested — you can write encrypted data to 
 
 3. **Read just the header.** Write a small program that reads only the first 50 bytes and prints the Argon2 parameters. This is what `iv unlock` will do — read the header to know how to derive the key, then prompt for the password.
 
-### 10.7 — Common Mistakes
+> [!warning] Common Mistake: Forgetting `sync_all()`
+> Without fsync, a power failure can leave you with an empty or partial temp file. On macOS, the default filesystem (APFS) is journaled, so this is less likely — but not impossible. Always fsync.
 
-**Forgetting `sync_all()`.** Without fsync, a power failure can leave you with an empty or partial temp file. On macOS, the default filesystem (APFS) is journaled, so this is less likely — but not impossible. Always fsync.
+> [!warning] Common Mistake: Not using atomic rename
+> If you write directly to the vault file and crash mid-write, the file is corrupted and your passwords are gone. The temp-file-then-rename pattern is non-negotiable for any file that stores important data.
 
-**Not using atomic rename.** If you write directly to the vault file and crash mid-write, the file is corrupted and your passwords are gone. The temp-file-then-rename pattern is non-negotiable for any file that stores important data.
-
-**Storing the nonce in both the header and the encrypted blob.** Our `encrypt()` function prepends the nonce to the ciphertext. But we also store the nonce in the header (so we can read it before decryption). In `save_vault`, we extract the nonce from the encrypted blob and store it in the header, then write only the ciphertext+tag after the header. In `load_vault`, we reconstruct the nonce+ciphertext+tag blob before calling `decrypt()`. This is a bit awkward — in a production codebase, you might refactor `encrypt`/`decrypt` to take the nonce as a separate parameter.
+> [!warning] Common Mistake: Storing the nonce in both the header and the encrypted blob
+> Our `encrypt()` function prepends the nonce to the ciphertext. But we also store the nonce in the header (so we can read it before decryption). In `save_vault`, we extract the nonce from the encrypted blob and store it in the header, then write only the ciphertext+tag after the header. In `load_vault`, we reconstruct the nonce+ciphertext+tag blob before calling `decrypt()`. This is a bit awkward — in a production codebase, you might refactor `encrypt`/`decrypt` to take the nonce as a separate parameter.
 
 ---
 
 ## Stage 11 — The Master Key Ceremony
 
-**Difficulty:** Hard | **Concepts:** rpassword, interactive prompts, retry loops, process::exit, wiring it all together
+*Difficulty: Hard*
 
 You have all the cryptographic primitives — key derivation, encryption, decryption, a binary file format — but they're disconnected functions. This stage wires them into the two most important user-facing operations: creating a new vault (`iv init`) and opening an existing one (`iv unlock`). This is where the vault becomes real — a user types a password, and either a new fortress is forged or an existing one opens its doors.
 
@@ -1754,19 +1745,20 @@ The vault can be created and unlocked, but every command requires typing the mas
 
 3. **Delete the vault and re-create it with the same password.** The encrypted output will be completely different because the salt and nonce are random. This is correct — same password, different vault file.
 
-### 11.6 — Common Mistakes
+> [!warning] Common Mistake: Comparing passwords with `==` on `String`
+> String comparison in Rust is *not* constant-time. An attacker who can measure timing could theoretically determine how many characters match. For password *confirmation* (user typing the same password twice), this doesn't matter — the attacker is the user. But never use `==` to verify a password against a stored hash. GCM's tag verification is constant-time internally (via the `subtle` crate).
 
-**Comparing passwords with `==` on `String`.** String comparison in Rust is *not* constant-time. An attacker who can measure timing could theoretically determine how many characters match. For password *confirmation* (user typing the same password twice), this doesn't matter — the attacker is the user. But never use `==` to verify a password against a stored hash. GCM's tag verification is constant-time internally (via the `subtle` crate).
+> [!warning] Common Mistake: Using `String` for the password after this point
+> Once you have the derived key, the password should be dropped immediately. In our current code, `prompt_new_password()` returns `Vec<u8>` which is dropped at the end of `cmd_init()`. But the memory isn't zeroed. We'll fix this with `zeroize` in a later stage.
 
-**Using `String` for the password after this point.** Once you have the derived key, the password should be dropped immediately. In our current code, `prompt_new_password()` returns `Vec<u8>` which is dropped at the end of `cmd_init()`. But the memory isn't zeroed. We'll fix this with `zeroize` in a later stage.
-
-**Not reading params from the vault header.** If you always use the hardcoded defaults for key derivation, you can never change the Argon2 parameters without breaking existing vaults. Always read the params from the header — that's why they're stored there.
+> [!warning] Common Mistake: Not reading params from the vault header
+> If you always use the hardcoded defaults for key derivation, you can never change the Argon2 parameters without breaking existing vaults. Always read the params from the header — that's why they're stored there.
 
 ---
 
 ## Stage 12 — The Session Seal
 
-**Difficulty:** Hard | **Concepts:** tmpfs, file permissions, PermissionsExt, process IDs, session management
+*Difficulty: Hard*
 
 Running Argon2id on every single command makes the vault unusable — 200ms of key derivation for a quick `iv list` is maddening. But keeping the derived key in memory only works for a single process invocation. This stage solves the UX problem by caching the derived key in a temporary file on RAM-backed storage, with strict permissions and PID tracking. The result: authenticate once, then use the vault freely until you lock it or the session expires.
 
@@ -2124,21 +2116,23 @@ Sessions make the vault usable, but an unlocked session that never expires is a 
 
 3. **Simulate a stale session.** Unlock, note the PID in `~/.ironvault/session.lock`, then kill that process (or just wait — the PID will be reused eventually). The next command should detect the stale session and re-prompt.
 
-### 12.7 — Common Mistakes
+> [!warning] Common Mistake: Setting permissions before writing
+> If you `chmod 600` an empty file, then write to it, some systems might reset the permissions. Always write first, then set permissions. (Better yet, use `open()` with a umask, but that requires more platform-specific code.)
 
-**Setting permissions before writing.** If you `chmod 600` an empty file, then write to it, some systems might reset the permissions. Always write first, then set permissions. (Better yet, use `open()` with a umask, but that requires more platform-specific code.)
+> [!warning] Common Mistake: Not zeroizing before deleting
+> `fs::remove_file()` unlinks the file from the directory, but the data may still be on disk until overwritten by something else. By writing zeros first, we ensure the key bytes are gone even if the filesystem doesn't immediately reclaim the blocks.
 
-**Not zeroizing before deleting.** `fs::remove_file()` unlinks the file from the directory, but the data may still be on disk until overwritten by something else. By writing zeros first, we ensure the key bytes are gone even if the filesystem doesn't immediately reclaim the blocks.
+> [!warning] Common Mistake: Trusting the PID blindly
+> PIDs are recycled. If process 12345 unlocked the vault and then died, a new process might get PID 12345. Our `is_pid_alive` check would say "yes, it's alive" even though it's a different process. This is a known limitation — the window is small (PIDs cycle through tens of thousands of values), and the timeout in Stage 13 provides a second layer of defense.
 
-**Trusting the PID blindly.** PIDs are recycled. If process 12345 unlocked the vault and then died, a new process might get PID 12345. Our `is_pid_alive` check would say "yes, it's alive" even though it's a different process. This is a known limitation — the window is small (PIDs cycle through tens of thousands of values), and the timeout in Stage 13 provides a second layer of defense.
-
-**Running as root.** If Ironvault runs as root, the key cache file at `/tmp/ironvault-0` is readable by root — which is every process running as root. Don't run password managers as root.
+> [!warning] Common Mistake: Running as root
+> If Ironvault runs as root, the key cache file at `/tmp/ironvault-0` is readable by root — which is every process running as root. Don't run password managers as root.
 
 ---
 
 ## Stage 13 — The Timeout
 
-**Difficulty:** Medium | **Concepts:** TOML parsing, config with defaults, duration arithmetic, SystemTime
+*Difficulty: Medium*
 
 An unlocked vault that stays unlocked forever is an invitation to disaster. If you step away from your desk, anyone who sits down has full access to every credential. This stage adds an inactivity timeout — after a configurable period of silence, the session key is zeroized and the vault re-seals itself. It also introduces the configuration file, giving users control over security-convenience tradeoffs.
 
@@ -2246,11 +2240,6 @@ All other fields get their defaults. This is much friendlier than requiring ever
 DEFAULT_CONFIG = {"lock_timeout_minutes": 15, "clipboard_clear_seconds": 30}
 user_config = toml.load("config.toml")
 config = {**DEFAULT_CONFIG, **user_config}  # user overrides defaults
-```
-
-```typescript
-// TypeScript equivalent
-const config = { ...DEFAULT_CONFIG, ...userConfig };
 ```
 
 In Rust, `#[serde(default)]` does this automatically at the struct level.
@@ -2436,15 +2425,17 @@ cargo run -- unlock    # Should say "Session expired" and re-prompt
 
 4. **Kill the process and try again.** Note the PID in the lock file, then run `kill <pid>` (it'll fail because the process already exited, but that's fine). The next command should detect the stale PID and re-prompt.
 
-### 13.7 — Common Mistakes
+> [!warning] Common Mistake: Using `chrono` for simple duration math
+> We don't actually need `chrono` for the timeout check — `SystemTime` and Unix timestamps (u64 seconds) are sufficient. `chrono` is useful when you need human-readable dates (like `created_at` in the vault JSON), but for "has N seconds elapsed?" plain arithmetic works.
 
-**Using `chrono` for simple duration math.** We don't actually need `chrono` for the timeout check — `SystemTime` and Unix timestamps (u64 seconds) are sufficient. `chrono` is useful when you need human-readable dates (like `created_at` in the vault JSON), but for "has N seconds elapsed?" plain arithmetic works.
+> [!warning] Common Mistake: Not handling clock skew
+> If the system clock jumps backward (NTP correction, manual adjustment, VM migration), `now - last_activity` could underflow. `saturating_sub` handles this gracefully. Never use plain subtraction on timestamps.
 
-**Not handling clock skew.** If the system clock jumps backward (NTP correction, manual adjustment, VM migration), `now - last_activity` could underflow. `saturating_sub` handles this gracefully. Never use plain subtraction on timestamps.
+> [!warning] Common Mistake: Making the timeout configurable but not the Argon2 params
+> We store Argon2 params in the vault header *and* in the config file. The header params are authoritative (used for decryption). The config params are used only when creating a new vault or changing the password. Don't mix them up.
 
-**Making the timeout configurable but not the Argon2 params.** We store Argon2 params in the vault header *and* in the config file. The header params are authoritative (used for decryption). The config params are used only when creating a new vault or changing the password. Don't mix them up.
-
-**Infinite timeout.** Never allow `lock_timeout_minutes = 0` to mean "no timeout." If you want that behavior, make it explicit (e.g., a separate `disable_timeout = true` flag) so users can't accidentally set it.
+> [!warning] Common Mistake: Infinite timeout
+> Never allow `lock_timeout_minutes = 0` to mean "no timeout." If you want that behavior, make it explicit (e.g., a separate `disable_timeout = true` flag) so users can't accidentally set it.
 
 ---
 

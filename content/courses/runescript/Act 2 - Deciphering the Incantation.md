@@ -25,11 +25,12 @@ graph TD
 
 Getting that tree right — making `*` bind tighter than `+` — is the central challenge of this act. We solve it with **Pratt parsing**, a technique that assigns a *binding power* to each operator and uses it to decide how tightly operands cling to their neighbors.
 
-**What you'll learn:**
-- Rust's `Box<T>` for recursive data structures (why enums can't contain themselves directly)
-- Recursive descent parsing — each grammar rule becomes a function
-- Pratt parsing — the elegant algorithm for operator precedence
-- Error recovery — reporting multiple parse errors without stopping at the first one
+> [!tip] What You'll Learn
+> - Rust's `Box<T>` for recursive data structures (why enums can't contain themselves directly)
+> - Recursive descent parsing — each grammar rule becomes a function
+> - Pratt parsing — the elegant algorithm for operator precedence
+> - Error recovery — reporting multiple parse errors without stopping at the first one
+
 
 **Estimated time:** 5–8 hours across Stages 8–14.
 
@@ -38,6 +39,8 @@ Getting that tree right — making `*` bind tighter than `+` — is the central 
 ---
 
 ## Stage 8: The Spell Tree — Easy
+
+*Difficulty: Easy*
 
 **Goal:** Define the `Expr` and `Stmt` enums that represent every possible AST node, and understand why recursive types need `Box<T>`.
 
@@ -51,7 +54,7 @@ Before the parser can build a tree, we need types to represent the tree's nodes.
 
 The tricky part is **recursion**. A `Binary` expression contains two sub-expressions. An `If` statement contains a condition expression and a body of statements. In Python, this is trivial — everything is a reference on the heap. In Rust, enum variants must have a known size at compile time, and a type can't contain itself (that would be infinite size). The solution is `Box<T>`.
 
-### Python/TS equivalent
+### Python equivalent
 
 In Python, you'd use dataclasses with no size concerns:
 
@@ -70,17 +73,6 @@ class If:
 ```
 
 Python objects are always heap-allocated and accessed through references. The `left` field doesn't *contain* an `Expr` — it *points to* one. So recursive types work automatically.
-
-In TypeScript:
-
-```typescript
-type Expr =
-  | { tag: "binary"; op: BinOp; left: Expr; right: Expr }
-  | { tag: "intLit"; value: number }
-  // ...
-```
-
-Same story — JS objects are references. No size issue.
 
 Rust is different. An `enum` variant's data is stored *inline* — not behind a pointer. If `Binary` contained two `Expr` values directly, the compiler would need to know the size of `Expr` to lay out `Binary`, but `Expr`'s size depends on `Binary`'s size... infinite recursion. `Box<Expr>` breaks the cycle: a `Box` is always pointer-sized (8 bytes on 64-bit), regardless of what it points to.
 
@@ -249,12 +241,11 @@ fn main() {
 - `{:#?}` — the "pretty-print Debug" format. `#` adds indentation and newlines, making nested structures readable. Without `#`, everything prints on one line.
 - The nesting shows the tree structure: `Add` has `IntLit(1)` on the left and `Mul(IntLit(2), IntLit(3))` on the right. This means `*` binds tighter than `+` — exactly what the precedence table (§5.1) requires.
 
-### Common mistakes
-
-- **Forgetting `Box::new(...)` when constructing recursive variants** — you can't write `Expr::Binary(BinOp::Add, Expr::IntLit(1), ...)`. The type expects `Box<Expr>`, not `Expr`. The compiler says: "expected `Box<Expr>`, found `Expr`."
-- **Trying to put `Stmt` inside `Expr`** — the spec keeps these separate. Expressions produce values; statements don't. If you need a block that produces a value, that's a design decision for a future language version (§12).
-- **Forgetting `mod ast;` in `main.rs`** — same as every new module.
-- **Confusing `Box<Expr>` with `&Expr`** — `Box` *owns* the data (it's freed when the Box is dropped). `&Expr` *borrows* it (someone else owns it). In the AST, nodes own their children, so we use `Box`.
+> [!warning] Common Mistakes
+> - **Forgetting `Box::new(...)` when constructing recursive variants** — you can't write `Expr::Binary(BinOp::Add, Expr::IntLit(1), ...)`. The type expects `Box<Expr>`, not `Expr`. The compiler says: "expected `Box<Expr>`, found `Expr`."
+> - **Trying to put `Stmt` inside `Expr`** — the spec keeps these separate. Expressions produce values; statements don't. If you need a block that produces a value, that's a design decision for a future language version (§12).
+> - **Forgetting `mod ast;` in `main.rs`** — same as every new module.
+> - **Confusing `Box<Expr>` with `&Expr`** — `Box` *owns* the data (it's freed when the Box is dropped). `&Expr` *borrows* it (someone else owns it). In the AST, nodes own their children, so we use `Box`.
 
 ### Verify it works
 
@@ -287,80 +278,81 @@ The tree correctly nests `Mul` inside `Add`, showing that `2 * 3` is computed fi
 
 The spell tree's shape is defined — every possible node the parser can produce has a home. Now we need the parser itself: a struct that walks the token stream and assembles these nodes into a tree, starting with the simplest expressions.
 
-### Checkpoint
-
-**`src/ast.rs`** (complete):
-
-```rust
-#[derive(Debug, Clone, PartialEq)]
-pub enum UnaryOp {
-    Neg,
-    Not,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum BinOp {
-    Add, Sub, Mul, Div, Mod,
-    Eq, Neq, Lt, LtEq, Gt, GtEq,
-    And, Or,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Expr {
-    IntLit(i64),
-    StringLit(String),
-    BoolLit(bool),
-    NilLit,
-    Ident(String),
-    Array(Vec<Expr>),
-    Index(Box<Expr>, Box<Expr>),
-    Unary(UnaryOp, Box<Expr>),
-    Binary(BinOp, Box<Expr>, Box<Expr>),
-    Call(Box<Expr>, Vec<Expr>),
-    FieldAccess(Box<Expr>, String),
-    Assign(Box<Expr>, Box<Expr>),
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum Stmt {
-    ExprStmt(Expr),
-    Let(String, Expr),
-    FnDecl(String, Vec<String>, Vec<Stmt>),
-    If(Expr, Vec<Stmt>, Option<Vec<Stmt>>),
-    While(Expr, Vec<Stmt>),
-    For(String, Expr, Vec<Stmt>),
-    Return(Option<Expr>),
-    Block(Vec<Stmt>),
-}
-```
-
-**`src/main.rs`** (updated):
-
-```rust
-mod token;
-mod lexer;
-mod ast;
-
-fn main() {
-    use ast::{Expr, BinOp};
-
-    let tree = Expr::Binary(
-        BinOp::Add,
-        Box::new(Expr::IntLit(1)),
-        Box::new(Expr::Binary(
-            BinOp::Mul,
-            Box::new(Expr::IntLit(2)),
-            Box::new(Expr::IntLit(3)),
-        )),
-    );
-
-    println!("Spell tree: {:#?}", tree);
-}
-```
+> [!check] Checkpoint
+> **`src/ast.rs`** (complete):
+>
+> ```rust
+> #[derive(Debug, Clone, PartialEq)]
+> pub enum UnaryOp {
+>     Neg,
+>     Not,
+> }
+>
+> #[derive(Debug, Clone, PartialEq)]
+> pub enum BinOp {
+>     Add, Sub, Mul, Div, Mod,
+>     Eq, Neq, Lt, LtEq, Gt, GtEq,
+>     And, Or,
+> }
+>
+> #[derive(Debug, Clone, PartialEq)]
+> pub enum Expr {
+>     IntLit(i64),
+>     StringLit(String),
+>     BoolLit(bool),
+>     NilLit,
+>     Ident(String),
+>     Array(Vec<Expr>),
+>     Index(Box<Expr>, Box<Expr>),
+>     Unary(UnaryOp, Box<Expr>),
+>     Binary(BinOp, Box<Expr>, Box<Expr>),
+>     Call(Box<Expr>, Vec<Expr>),
+>     FieldAccess(Box<Expr>, String),
+>     Assign(Box<Expr>, Box<Expr>),
+> }
+>
+> #[derive(Debug, Clone, PartialEq)]
+> pub enum Stmt {
+>     ExprStmt(Expr),
+>     Let(String, Expr),
+>     FnDecl(String, Vec<String>, Vec<Stmt>),
+>     If(Expr, Vec<Stmt>, Option<Vec<Stmt>>),
+>     While(Expr, Vec<Stmt>),
+>     For(String, Expr, Vec<Stmt>),
+>     Return(Option<Expr>),
+>     Block(Vec<Stmt>),
+> }
+> ```
+>
+> **`src/main.rs`** (updated):
+>
+> ```rust
+> mod token;
+> mod lexer;
+> mod ast;
+>
+> fn main() {
+>     use ast::{Expr, BinOp};
+>
+>     let tree = Expr::Binary(
+>         BinOp::Add,
+>         Box::new(Expr::IntLit(1)),
+>         Box::new(Expr::Binary(
+>             BinOp::Mul,
+>             Box::new(Expr::IntLit(2)),
+>             Box::new(Expr::IntLit(3)),
+>         )),
+>     );
+>
+>     println!("Spell tree: {:#?}", tree);
+> }
+> ```
 
 ---
 
 ## Stage 9: Literals and Names — Easy
+
+*Difficulty: Easy*
 
 **Goal:** Build the `Parser` struct with peek/advance over tokens, and parse the simplest expressions: integer literals, string literals, booleans, nil, and identifiers. This is the `primary` rule from the grammar.
 
@@ -376,7 +368,7 @@ We start with the **primary** rule — the bottom of the grammar (§5). Primary 
 
 Every parser function corresponds to a grammar rule. The call stack mirrors the grammar's nesting. This is **recursive descent** — the most intuitive parsing technique.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 class Parser:
@@ -650,12 +642,11 @@ mod tests {
 
 The `parser_for` helper chains the lexer and parser together — lex the source, then create a parser from the tokens. We'll use this in every test.
 
-### Common mistakes
-
-- **Not cloning the token from `advance()`** — if you hold a `&Token` reference while calling other `&mut self` methods, the borrow checker blocks you. Clone early to release the borrow.
-- **Forgetting `ref` in match patterns** — `TokenKind::StringLit(s)` moves the `String` out. If you've cloned the token, this is fine. But if you're matching on a reference, you need `ref s` to borrow instead of move.
-- **Advancing past `Eof`** — our `advance()` guards against this, but if you wrote it differently, you could index out of bounds. The `Eof` sentinel from Act 1 is crucial.
-- **Returning `Expr` instead of `Result<Expr, String>`** — the parser must be able to report errors. Always return `Result`.
+> [!warning] Common Mistakes
+> - **Not cloning the token from `advance()`** — if you hold a `&Token` reference while calling other `&mut self` methods, the borrow checker blocks you. Clone early to release the borrow.
+> - **Forgetting `ref` in match patterns** — `TokenKind::StringLit(s)` moves the `String` out. If you've cloned the token, this is fine. But if you're matching on a reference, you need `ref s` to borrow instead of move.
+> - **Advancing past `Eof`** — our `advance()` guards against this, but if you wrote it differently, you could index out of bounds. The `Eof` sentinel from Act 1 is crucial.
+> - **Returning `Expr` instead of `Result<Expr, String>`** — the parser must be able to report errors. Always return `Result`.
 
 ### Verify it works
 
@@ -680,175 +671,176 @@ Parsed: IntLit(
 
 The parser can read atoms — the simplest building blocks of any expression. But `42` alone isn't very useful. Next comes the hard part: teaching the parser that `*` binds tighter than `+`, so `1 + 2 * 3` builds the right tree.
 
-### Checkpoint
-
-**`src/parser.rs`** — the complete file at this stage:
-
-```rust
-use crate::token::{Token, TokenKind, Span};
-use crate::ast::{Expr, Stmt, BinOp, UnaryOp};
-
-pub struct Parser {
-    tokens: Vec<Token>,
-    pos: usize,
-}
-
-impl Parser {
-    pub fn new(tokens: Vec<Token>) -> Self {
-        Parser { tokens, pos: 0 }
-    }
-
-    fn peek(&self) -> &Token {
-        &self.tokens[self.pos]
-    }
-
-    fn peek_kind(&self) -> &TokenKind {
-        &self.tokens[self.pos].kind
-    }
-
-    fn advance(&mut self) -> &Token {
-        let tok = &self.tokens[self.pos];
-        if self.pos < self.tokens.len() - 1 {
-            self.pos += 1;
-        }
-        tok
-    }
-
-    fn match_kind(&mut self, expected: &TokenKind) -> bool {
-        if self.peek_kind() == expected {
-            self.advance();
-            true
-        } else {
-            false
-        }
-    }
-
-    fn expect(&mut self, expected: &TokenKind, context: &str) -> Result<(), String> {
-        if self.peek_kind() == expected {
-            self.advance();
-            Ok(())
-        } else {
-            let span = &self.peek().span;
-            Err(format!(
-                "[line {}, col {}] Expected {:?} {}, found {:?}",
-                span.line, span.col, expected, context, self.peek_kind()
-            ))
-        }
-    }
-
-    fn current_span(&self) -> Span {
-        self.peek().span.clone()
-    }
-
-    fn parse_primary(&mut self) -> Result<Expr, String> {
-        let token = self.advance().clone();
-
-        match token.kind {
-            TokenKind::IntLit(n) => Ok(Expr::IntLit(n)),
-            TokenKind::StringLit(ref s) => Ok(Expr::StringLit(s.clone())),
-            TokenKind::True => Ok(Expr::BoolLit(true)),
-            TokenKind::False => Ok(Expr::BoolLit(false)),
-            TokenKind::Nil => Ok(Expr::NilLit),
-            TokenKind::Ident(ref name) => Ok(Expr::Ident(name.clone())),
-            _ => Err(format!(
-                "[line {}, col {}] Expected expression, found {:?}",
-                token.span.line, token.span.col, token.kind
-            )),
-        }
-    }
-
-    pub fn parse_expression(&mut self) -> Result<Expr, String> {
-        self.parse_primary()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::lexer::Lexer;
-
-    fn parser_for(source: &str) -> Parser {
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.scan_tokens().unwrap();
-        Parser::new(tokens)
-    }
-
-    #[test]
-    fn parse_int_literal() {
-        let mut p = parser_for("42");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::IntLit(42));
-    }
-
-    #[test]
-    fn parse_string_literal() {
-        let mut p = parser_for(r#""hello""#);
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::StringLit("hello".to_string()));
-    }
-
-    #[test]
-    fn parse_bool_true() {
-        let mut p = parser_for("true");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::BoolLit(true));
-    }
-
-    #[test]
-    fn parse_bool_false() {
-        let mut p = parser_for("false");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::BoolLit(false));
-    }
-
-    #[test]
-    fn parse_nil() {
-        let mut p = parser_for("nil");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::NilLit);
-    }
-
-    #[test]
-    fn parse_identifier() {
-        let mut p = parser_for("hp");
-        let expr = p.parse_expression().unwrap();
-        assert_eq!(expr, Expr::Ident("hp".to_string()));
-    }
-
-    #[test]
-    fn parse_error_on_unexpected_token() {
-        let mut p = parser_for("+");
-        let result = p.parse_expression();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Expected expression"));
-    }
-}
-```
-
-**`src/main.rs`** (updated):
-
-```rust
-mod token;
-mod lexer;
-mod ast;
-mod parser;
-
-use lexer::Lexer;
-use parser::Parser;
-
-fn main() {
-    let source = "42";
-    let mut lex = Lexer::new(source);
-    let tokens = lex.scan_tokens().unwrap();
-    let mut parser = Parser::new(tokens);
-    let expr = parser.parse_expression().unwrap();
-    println!("Parsed: {:#?}", expr);
-}
-```
+> [!check] Checkpoint
+> **`src/parser.rs`** — the complete file at this stage:
+>
+> ```rust
+> use crate::token::{Token, TokenKind, Span};
+> use crate::ast::{Expr, Stmt, BinOp, UnaryOp};
+>
+> pub struct Parser {
+>     tokens: Vec<Token>,
+>     pos: usize,
+> }
+>
+> impl Parser {
+>     pub fn new(tokens: Vec<Token>) -> Self {
+>         Parser { tokens, pos: 0 }
+>     }
+>
+>     fn peek(&self) -> &Token {
+>         &self.tokens[self.pos]
+>     }
+>
+>     fn peek_kind(&self) -> &TokenKind {
+>         &self.tokens[self.pos].kind
+>     }
+>
+>     fn advance(&mut self) -> &Token {
+>         let tok = &self.tokens[self.pos];
+>         if self.pos < self.tokens.len() - 1 {
+>             self.pos += 1;
+>         }
+>         tok
+>     }
+>
+>     fn match_kind(&mut self, expected: &TokenKind) -> bool {
+>         if self.peek_kind() == expected {
+>             self.advance();
+>             true
+>         } else {
+>             false
+>         }
+>     }
+>
+>     fn expect(&mut self, expected: &TokenKind, context: &str) -> Result<(), String> {
+>         if self.peek_kind() == expected {
+>             self.advance();
+>             Ok(())
+>         } else {
+>             let span = &self.peek().span;
+>             Err(format!(
+>                 "[line {}, col {}] Expected {:?} {}, found {:?}",
+>                 span.line, span.col, expected, context, self.peek_kind()
+>             ))
+>         }
+>     }
+>
+>     fn current_span(&self) -> Span {
+>         self.peek().span.clone()
+>     }
+>
+>     fn parse_primary(&mut self) -> Result<Expr, String> {
+>         let token = self.advance().clone();
+>
+>         match token.kind {
+>             TokenKind::IntLit(n) => Ok(Expr::IntLit(n)),
+>             TokenKind::StringLit(ref s) => Ok(Expr::StringLit(s.clone())),
+>             TokenKind::True => Ok(Expr::BoolLit(true)),
+>             TokenKind::False => Ok(Expr::BoolLit(false)),
+>             TokenKind::Nil => Ok(Expr::NilLit),
+>             TokenKind::Ident(ref name) => Ok(Expr::Ident(name.clone())),
+>             _ => Err(format!(
+>                 "[line {}, col {}] Expected expression, found {:?}",
+>                 token.span.line, token.span.col, token.kind
+>             )),
+>         }
+>     }
+>
+>     pub fn parse_expression(&mut self) -> Result<Expr, String> {
+>         self.parse_primary()
+>     }
+> }
+>
+> #[cfg(test)]
+> mod tests {
+>     use super::*;
+>     use crate::lexer::Lexer;
+>
+>     fn parser_for(source: &str) -> Parser {
+>         let mut lexer = Lexer::new(source);
+>         let tokens = lexer.scan_tokens().unwrap();
+>         Parser::new(tokens)
+>     }
+>
+>     #[test]
+>     fn parse_int_literal() {
+>         let mut p = parser_for("42");
+>         let expr = p.parse_expression().unwrap();
+>         assert_eq!(expr, Expr::IntLit(42));
+>     }
+>
+>     #[test]
+>     fn parse_string_literal() {
+>         let mut p = parser_for(r#""hello""#);
+>         let expr = p.parse_expression().unwrap();
+>         assert_eq!(expr, Expr::StringLit("hello".to_string()));
+>     }
+>
+>     #[test]
+>     fn parse_bool_true() {
+>         let mut p = parser_for("true");
+>         let expr = p.parse_expression().unwrap();
+>         assert_eq!(expr, Expr::BoolLit(true));
+>     }
+>
+>     #[test]
+>     fn parse_bool_false() {
+>         let mut p = parser_for("false");
+>         let expr = p.parse_expression().unwrap();
+>         assert_eq!(expr, Expr::BoolLit(false));
+>     }
+>
+>     #[test]
+>     fn parse_nil() {
+>         let mut p = parser_for("nil");
+>         let expr = p.parse_expression().unwrap();
+>         assert_eq!(expr, Expr::NilLit);
+>     }
+>
+>     #[test]
+>     fn parse_identifier() {
+>         let mut p = parser_for("hp");
+>         let expr = p.parse_expression().unwrap();
+>         assert_eq!(expr, Expr::Ident("hp".to_string()));
+>     }
+>
+>     #[test]
+>     fn parse_error_on_unexpected_token() {
+>         let mut p = parser_for("+");
+>         let result = p.parse_expression();
+>         assert!(result.is_err());
+>         assert!(result.unwrap_err().contains("Expected expression"));
+>     }
+> }
+> ```
+>
+> **`src/main.rs`** (updated):
+>
+> ```rust
+> mod token;
+> mod lexer;
+> mod ast;
+> mod parser;
+>
+> use lexer::Lexer;
+> use parser::Parser;
+>
+> fn main() {
+>     let source = "42";
+>     let mut lex = Lexer::new(source);
+>     let tokens = lex.scan_tokens().unwrap();
+>     let mut parser = Parser::new(tokens);
+>     let expr = parser.parse_expression().unwrap();
+>     println!("Parsed: {:#?}", expr);
+> }
+> ```
 
 ---
 
 ## Stage 10: The Binding Power — Hard
+
+*Difficulty: Hard*
 
 **Goal:** Implement Pratt parsing for binary operators so that `1 + 2 * 3` correctly parses as `Add(1, Mul(2, 3))` — respecting the operator precedence table from the spec.
 
@@ -922,7 +914,7 @@ graph TD
 
 The key moment is step 3: when we're parsing the right side of `+` with `min_bp=12`, the `*` operator (left bp=13) is strong enough to steal `IntLit(2)` as its left operand. But if we were parsing `1 * 2 + 3`, the `+` (left bp=11) would NOT be strong enough (11 is not > 14), so `IntLit(2)` would stay with `*`.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def parse_expression(self, min_bp: int = 0) -> Expr:
@@ -1233,12 +1225,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Using `>=` instead of `<` for the binding power check** — the condition is `if left_bp < min_bp { break }`. Using `<=` would break left-associativity: `1 + 2 + 3` would parse as `1 + (2 + 3)` instead of `(1 + 2) + 3`.
-- **Forgetting to clone the operator token** — same borrow issue as in Stage 9. `self.advance()` returns `&Token`, but we need to call `self.parse_expr_bp()` next, which takes `&mut self`. Clone the token first.
-- **Mixing up left_bp and right_bp** — `left_bp` is compared against `min_bp` to decide whether to consume the operator. `right_bp` is passed to the recursive call to set the minimum for the right-hand side.
-- **Not handling `Eq` (assignment) separately** — `=` is an operator in the precedence table, but it produces `Assign` nodes, not `Binary` nodes. If you treat it like other operators, you'll get `Binary(Eq, ...)` which doesn't exist in the AST.
+> [!warning] Common Mistakes
+> - **Using `>=` instead of `<` for the binding power check** — the condition is `if left_bp < min_bp { break }`. Using `<=` would break left-associativity: `1 + 2 + 3` would parse as `1 + (2 + 3)` instead of `(1 + 2) + 3`.
+> - **Forgetting to clone the operator token** — same borrow issue as in Stage 9. `self.advance()` returns `&Token`, but we need to call `self.parse_expr_bp()` next, which takes `&mut self`. Clone the token first.
+> - **Mixing up left_bp and right_bp** — `left_bp` is compared against `min_bp` to decide whether to consume the operator. `right_bp` is passed to the recursive call to set the minimum for the right-hand side.
+> - **Not handling `Eq` (assignment) separately** — `=` is an operator in the precedence table, but it produces `Assign` nodes, not `Binary` nodes. If you treat it like other operators, you'll get `Binary(Eq, ...)` which doesn't exist in the AST.
 
 ### Verify it works
 
@@ -1269,19 +1260,20 @@ You should see the correctly nested tree with `Mul` inside `Add`.
 
 Binary operators obey the precedence table now — the Pratt algorithm handles the binding power dance. But expressions also have prefix operators (`-x`, `!flag`), postfix operators (`print(args)`, `arr[0]`), and grouping (`(1 + 2) * 3`). Next, we complete the expression parser with all of these.
 
-### Checkpoint
-
-Changes to `src/parser.rs`:
-
-1. Add `infix_binding_power()` and `token_to_binop()` associated functions.
-2. Replace `parse_expression()` with the two-method Pratt implementation (`parse_expression` + `parse_expr_bp`).
-3. Add 8 new tests.
-
-The `parse_primary` method is unchanged from Stage 9.
+> [!check] Checkpoint
+> Changes to `src/parser.rs`:
+>
+> 1. Add `infix_binding_power()` and `token_to_binop()` associated functions.
+> 2. Replace `parse_expression()` with the two-method Pratt implementation (`parse_expression` + `parse_expr_bp`).
+> 3. Add 8 new tests.
+>
+> The `parse_primary` method is unchanged from Stage 9.
 
 ---
 
 ## Stage 11: Unary and Grouping — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Parse unary operators (`-x`, `!flag`), parenthesized grouping (`(expr)`), array literals (`[1, 2, 3]`), function calls (`print("hi")`), field access (`hunter.hp`), and index access (`arr[0]`). Complete the expression parser.
 
@@ -1300,7 +1292,7 @@ Stage 10 handled infix binary operators — things that sit *between* two operan
 
 In Pratt parsing, prefix operators are handled in the "prefix" step (before the infix loop). Postfix operators like `.`, `()`, and `[]` are handled as infix operators with very high binding power — they always win.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def parse_prefix(self) -> Expr:
@@ -1684,12 +1676,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Forgetting `continue` after postfix operators** — without it, the code falls through to the infix binding power check, which returns `None` for `(`, `.`, `[`, and breaks the loop. You'd only get one postfix operator instead of allowing chains like `a.b[0](x)`.
-- **Using the wrong binding power for prefix operators** — if prefix bp is too low (say 11, same as `+`), then `-1 + 2` would parse as `-(1 + 2)` instead of `(-1) + 2`. Prefix bp must be higher than all infix operators.
-- **Not resetting binding power inside parentheses** — `parse_expr_bp(0)` inside the `(` handler means "parse any expression." If you passed `min_bp` instead, `(1 + 2)` inside a `*` context would fail because `+` has lower bp than `*`.
-- **Forgetting to expect the closing delimiter** — `self.expect(&TokenKind::RParen, ...)` after parsing inside `()`. Without it, `(1 + 2` would silently succeed.
+> [!warning] Common Mistakes
+> - **Forgetting `continue` after postfix operators** — without it, the code falls through to the infix binding power check, which returns `None` for `(`, `.`, `[`, and breaks the loop. You'd only get one postfix operator instead of allowing chains like `a.b[0](x)`.
+> - **Using the wrong binding power for prefix operators** — if prefix bp is too low (say 11, same as `+`), then `-1 + 2` would parse as `-(1 + 2)` instead of `(-1) + 2`. Prefix bp must be higher than all infix operators.
+> - **Not resetting binding power inside parentheses** — `parse_expr_bp(0)` inside the `(` handler means "parse any expression." If you passed `min_bp` instead, `(1 + 2)` inside a `*` context would fail because `+` has lower bp than `*`.
+> - **Forgetting to expect the closing delimiter** — `self.expect(&TokenKind::RParen, ...)` after parsing inside `()`. Without it, `(1 + 2` would silently succeed.
 
 ### Verify it works
 
@@ -1701,20 +1692,21 @@ Expected: all previous tests pass, plus 13 new tests for unary, grouping, arrays
 
 Every expression the language can produce is now parseable. But expressions alone don't make a program — we need statements: `let` declarations, `fn` definitions, and the glue that sequences them. Next, we add statement-level parsing.
 
-### Checkpoint
-
-The expression parser is now complete. It handles:
-- Literals and identifiers (Stage 9)
-- All binary operators with correct precedence (Stage 10)
-- Unary operators, grouping, arrays (Stage 11)
-- Function calls, field access, index access (Stage 11)
-- Assignment as a right-associative operator (Stage 10)
-
-The `parse_primary`, `parse_expr_bp`, `parse_expression`, `infix_binding_power`, `prefix_binding_power`, `token_to_binop`, `parse_expr_list`, `expect`, `match_kind`, `peek`, `peek_kind`, `advance`, and `current_span` methods are all in `src/parser.rs`.
+> [!check] Checkpoint
+> The expression parser is now complete. It handles:
+> - Literals and identifiers (Stage 9)
+> - All binary operators with correct precedence (Stage 10)
+> - Unary operators, grouping, arrays (Stage 11)
+> - Function calls, field access, index access (Stage 11)
+> - Assignment as a right-associative operator (Stage 10)
+>
+> The `parse_primary`, `parse_expr_bp`, `parse_expression`, `infix_binding_power`, `prefix_binding_power`, `token_to_binop`, `parse_expr_list`, `expect`, `match_kind`, `peek`, `peek_kind`, `advance`, and `current_span` methods are all in `src/parser.rs`.
 
 ---
 
 ## Stage 12: Declarations — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Parse `let` declarations and `fn` declarations. Introduce statement-level parsing with `parse_declaration` as the top-level entry point. Parse a complete program as a list of declarations.
 
@@ -1738,7 +1730,7 @@ This is **recursive descent** at the statement level — each grammar rule becom
 - See `fn`? → parse a function declaration.
 - Anything else? → parse an expression statement.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def parse_declaration(self) -> Stmt:
@@ -2039,12 +2031,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Forgetting to consume the keyword before calling the sub-parser** — `parse_let` expects `let` to already be consumed. If `parse_declaration` doesn't `self.advance()` before calling `parse_let`, the parser sees `let` again and tries to parse it as an identifier.
-- **Infinite loop in `parse_block` without `Eof` check** — if the source is `{ let x = 1` (no closing `}`), the parser loops forever. Always check for `Eof` as a bail-out.
-- **Not handling optional semicolons** — Runescript doesn't require semicolons, but if someone writes `let x = 1;`, the `;` would be parsed as the start of the next statement (an unexpected token). `self.match_kind(&TokenKind::Semicolon)` silently consumes it if present.
-- **Calling `parse_expression` instead of `parse_expr_bp(0)` from statement parsers** — both work, but `parse_expression` is the public API. Internally, statement parsers can call `parse_expr_bp(0)` directly. Just be consistent.
+> [!warning] Common Mistakes
+> - **Forgetting to consume the keyword before calling the sub-parser** — `parse_let` expects `let` to already be consumed. If `parse_declaration` doesn't `self.advance()` before calling `parse_let`, the parser sees `let` again and tries to parse it as an identifier.
+> - **Infinite loop in `parse_block` without `Eof` check** — if the source is `{ let x = 1` (no closing `}`), the parser loops forever. Always check for `Eof` as a bail-out.
+> - **Not handling optional semicolons** — Runescript doesn't require semicolons, but if someone writes `let x = 1;`, the `;` would be parsed as the start of the next statement (an unexpected token). `self.match_kind(&TokenKind::Semicolon)` silently consumes it if present.
+> - **Calling `parse_expression` instead of `parse_expr_bp(0)` from statement parsers** — both work, but `parse_expression` is the public API. Internally, statement parsers can call `parse_expr_bp(0)` directly. Just be consistent.
 
 ### Verify it works
 
@@ -2062,20 +2053,21 @@ You should see three statements: two `Let` nodes and one `ExprStmt` with a `Call
 
 Declarations and expression statements parse cleanly, but the language is still a straight line — no branching, no loops. Next, we add `if`/`else`, `while`, `for-in`, and `return` to give the incantation its power to choose and repeat.
 
-### Checkpoint
-
-New methods added to `src/parser.rs`:
-- `expect_ident()` — extract identifier name or error
-- `parse_let()` — let declaration
-- `parse_fn_decl()` — function declaration with params and body
-- `parse_block()` — `{` declarations `}`
-- `parse_declaration()` — top-level dispatcher
-- `parse_statement()` — expression statement (expanded in Stage 13)
-- `parse_program()` — public entry point, parses until `Eof`
+> [!check] Checkpoint
+> New methods added to `src/parser.rs`:
+> - `expect_ident()` — extract identifier name or error
+> - `parse_let()` — let declaration
+> - `parse_fn_decl()` — function declaration with params and body
+> - `parse_block()` — `{` declarations `}`
+> - `parse_declaration()` — top-level dispatcher
+> - `parse_statement()` — expression statement (expanded in Stage 13)
+> - `parse_program()` — public entry point, parses until `Eof`
 
 ---
 
 ## Stage 13: Control Flow — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Parse `if`/`else`, `while`, `for-in`, `return`, and standalone blocks. Complete the statement parser.
 
@@ -2089,7 +2081,7 @@ Control flow statements follow a predictable pattern: a keyword, some expression
 
 This is pure recursive descent — no Pratt parsing needed. Each statement type has its own function that consumes tokens in the exact order the grammar specifies.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def parse_if(self) -> Stmt:
@@ -2418,12 +2410,11 @@ fn heal(amount) {
     }
 ```
 
-### Common mistakes
-
-- **Forgetting `else if` handling** — without it, `else if` would require the user to write `else { if ... { } }` with explicit nesting. The spec examples (§10.6) use `else if` freely.
-- **Parsing `return` value when next token is `}`** — `return }` would try to parse `}` as an expression and fail. The `match self.peek_kind()` check for `RBrace` and `Eof` prevents this.
-- **Not consuming the keyword before calling the sub-parser** — each `parse_*` method assumes its keyword has already been consumed. If `parse_statement` doesn't `self.advance()` before calling `parse_if()`, the parser sees `if` and tries to parse it as an expression.
-- **Missing `Eof` guard in `parse_block`** — already handled in Stage 12, but worth repeating. Without it, an unclosed `{` causes an infinite loop.
+> [!warning] Common Mistakes
+> - **Forgetting `else if` handling** — without it, `else if` would require the user to write `else { if ... { } }` with explicit nesting. The spec examples (§10.6) use `else if` freely.
+> - **Parsing `return` value when next token is `}`** — `return }` would try to parse `}` as an expression and fail. The `match self.peek_kind()` check for `RBrace` and `Eof` prevents this.
+> - **Not consuming the keyword before calling the sub-parser** — each `parse_*` method assumes its keyword has already been consumed. If `parse_statement` doesn't `self.advance()` before calling `parse_if()`, the parser sees `if` and tries to parse it as an expression.
+> - **Missing `Eof` guard in `parse_block`** — already handled in Stage 12, but worth repeating. Without it, an unclosed `{` causes an infinite loop.
 
 ### Verify it works
 
@@ -2441,23 +2432,24 @@ Try the spec example from §10.2 as the source string. You should see a clean AS
 
 The parser handles every construct in the Runescript grammar — but it stops at the first error. A single misplaced rune and the entire deciphering halts. Next, we add panic-mode error recovery so the parser reports *all* the errors it finds, not just the first.
 
-### Checkpoint
-
-New/modified methods in `src/parser.rs`:
-- `expect_ident()` — extract identifier or error
-- `parse_if()` — if/else/else-if
-- `parse_while()` — while loop
-- `parse_for()` — for-in loop
-- `parse_return()` — return with optional value
-- `parse_statement()` — updated to dispatch all statement types
-- `parse_declaration()` — unchanged from Stage 12
-- `parse_program()` — unchanged from Stage 12
-
-The parser can now handle every construct in the Runescript language. The only thing missing is graceful error recovery — Stage 14.
+> [!check] Checkpoint
+> New/modified methods in `src/parser.rs`:
+> - `expect_ident()` — extract identifier or error
+> - `parse_if()` — if/else/else-if
+> - `parse_while()` — while loop
+> - `parse_for()` — for-in loop
+> - `parse_return()` — return with optional value
+> - `parse_statement()` — updated to dispatch all statement types
+> - `parse_declaration()` — unchanged from Stage 12
+> - `parse_program()` — unchanged from Stage 12
+>
+> The parser can now handle every construct in the Runescript language. The only thing missing is graceful error recovery — Stage 14.
 
 ---
 
 ## Stage 14: Error Recovery — Hard
+
+*Difficulty: Hard*
 
 **Goal:** Implement panic-mode error recovery so the parser reports *multiple* errors per file instead of stopping at the first one. On a parse error, synchronize by advancing to the next statement boundary, then continue parsing.
 
@@ -2484,7 +2476,7 @@ Synchronization points for Runescript:
 - `}` — end of a block
 - `Eof` — end of input
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 def parse_program(self) -> tuple[list[Stmt], list[str]]:
@@ -2754,12 +2746,11 @@ while round <= 5 && boss_hp > 0 {
     }
 ```
 
-### Common mistakes
-
-- **Synchronizing past the recovery point** — if `synchronize` consumes the keyword token (e.g., advances past `let`), the next `parse_declaration` call misses it. The method should stop *at* the synchronization token, not *after* it.
-- **Cascading errors** — after a syntax error, the parser might be in a confusing state where the next few tokens produce false errors. Panic mode helps by skipping to a clean boundary, but some false positives are inevitable. This is why compilers say "fix the first error and recompile."
-- **Returning `Result<Vec<Stmt>, String>` instead of `Result<Vec<Stmt>, Vec<String>>`** — the whole point is to collect multiple errors. A single `String` can only hold one.
-- **Infinite loop if synchronize doesn't advance** — if the current token is already a synchronization point (like `let`), `synchronize` returns immediately without advancing. Then `parse_declaration` tries again, fails again, synchronizes again... infinite loop. This is handled because `parse_declaration` consumes the `let` keyword before calling `parse_let`, so even if `parse_let` fails, we've moved past `let`.
+> [!warning] Common Mistakes
+> - **Synchronizing past the recovery point** — if `synchronize` consumes the keyword token (e.g., advances past `let`), the next `parse_declaration` call misses it. The method should stop *at* the synchronization token, not *after* it.
+> - **Cascading errors** — after a syntax error, the parser might be in a confusing state where the next few tokens produce false errors. Panic mode helps by skipping to a clean boundary, but some false positives are inevitable. This is why compilers say "fix the first error and recompile."
+> - **Returning `Result<Vec<Stmt>, String>` instead of `Result<Vec<Stmt>, Vec<String>>`** — the whole point is to collect multiple errors. A single `String` can only hold one.
+> - **Infinite loop if synchronize doesn't advance** — if the current token is already a synchronization point (like `let`), `synchronize` returns immediately without advancing. Then `parse_declaration` tries again, fails again, synchronizes again... infinite loop. This is handled because `parse_declaration` consumes the `let` keyword before calling `parse_let`, so even if `parse_let` fails, we've moved past `let`.
 
 ### Verify it works
 
@@ -2775,14 +2766,13 @@ cargo run
 
 With the error-containing source, you should see multiple error messages — proof that the parser recovers and continues.
 
-### Checkpoint
-
-Changes to `src/parser.rs`:
-- Add `synchronize()` method
-- Change `parse_program()` return type to `Result<Vec<Stmt>, Vec<String>>` and add recovery loop
-- 6 new tests including full spec example validation
-
-The parser is now complete.
+> [!check] Checkpoint
+> Changes to `src/parser.rs`:
+> - Add `synchronize()` method
+> - Change `parse_program()` return type to `Result<Vec<Stmt>, Vec<String>>` and add recovery loop
+> - 6 new tests including full spec example validation
+>
+> The parser is now complete.
 
 ---
 

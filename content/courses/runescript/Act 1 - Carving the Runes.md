@@ -13,13 +13,14 @@ Source text (.rune file)
       → Evaluator (AST → side effects + return values)
 ```
 
-**Prerequisites:** Rust installed (`rustup`), a terminal, a text editor. No prior Rust experience needed — every concept is introduced when you first need it. You should be comfortable with Python or TypeScript.
+**Prerequisites:** Rust installed (`rustup`), a terminal, a text editor. No prior Rust experience needed — every concept is introduced when you first need it. You should be comfortable with Python.
 
-**What you'll learn:**
-- Rust enums, structs, pattern matching, `impl` blocks, `Vec`, `String` vs `&str`
-- Ownership and borrowing (introduced gently, when the compiler first complains)
-- Character-by-character scanning — why hand-written lexers beat regex
-- The two fundamental lexer operations: **peek** (look at the current character without consuming it) and **advance** (consume it and move forward)
+> [!tip] What You'll Learn
+> - Rust enums, structs, pattern matching, `impl` blocks, `Vec`, `String` vs `&str`
+> - Ownership and borrowing (introduced gently, when the compiler first complains)
+> - Character-by-character scanning — why hand-written lexers beat regex
+> - The two fundamental lexer operations: **peek** (look at the current character without consuming it) and **advance** (consume it and move forward)
+
 
 **Estimated time:** 3–5 hours across all 7 stages.
 
@@ -28,6 +29,8 @@ Source text (.rune file)
 ---
 
 ## Stage 1: The First Rune — Very Easy
+
+*Difficulty: Very Easy*
 
 **Goal:** Create the project, define the `Token` and `Span` types, and print a hardcoded token to prove everything compiles.
 
@@ -39,9 +42,9 @@ Source text (.rune file)
 
 Every journey starts with a single step — or in our case, a single rune. Before we can scan anything, we need types to represent what we'll produce. This stage gets the project compiling and introduces Rust's most important feature for interpreter work: **enums with data**.
 
-In Python you'd probably use a string tag or a dataclass. In TypeScript, a discriminated union. Rust's enums are the same idea but enforced by the compiler — you literally cannot forget to handle a case.
+In Python you'd probably use a string tag or a dataclass. Rust's enums are the same idea but enforced by the compiler — you literally cannot forget to handle a case.
 
-### Python/TS equivalent
+### Python equivalent
 
 Python:
 ```python
@@ -59,7 +62,7 @@ class Token:
     col: int
 ```
 
-The problem: Python enums can't carry data per-variant. You'd need a separate `value` field and cast it. TypeScript discriminated unions are closer, but still rely on runtime checks.
+The problem: Python enums can't carry data per-variant. You'd need a separate `value` field and cast it.
 
 Rust enums carry data *inside* each variant — `IntLit(i64)` means "this variant always has an `i64` inside it." The compiler enforces you extract it correctly.
 
@@ -115,7 +118,7 @@ Let's unpack what's new here:
   - `Clone` — lets you copy the struct with `.clone()`
   - `PartialEq` — lets you compare two `Span`s with `==`
 - `pub` means "public" — other files can use this type. Without `pub`, it's private to this file.
-- `struct Span { ... }` defines a named struct with named fields. Like a Python `@dataclass` or a TS `interface`.
+- `struct Span { ... }` defines a named struct with named fields. Like a Python `@dataclass`.
 - `usize` is Rust's unsigned pointer-sized integer — think of it as a non-negative `int`. It's the standard type for indices and counts.
 
 Now the token kind enum — the heart of the lexer's output (§3):
@@ -225,12 +228,11 @@ New concepts:
 - `TokenKind::IntLit(42)` — creates the `IntLit` variant of the enum, carrying the value `42` inside it.
 - `println!("...", tok)` — the `!` means it's a **macro**, not a function. `println!` is special because it parses the format string at compile time. `{:?}` is the Debug format specifier.
 
-### Common mistakes
-
-- **Forgetting `mod token;` in `main.rs`** — Rust won't find your file. Every `.rs` file must be declared as a module somewhere.
-- **Forgetting `pub` on struct fields** — without `pub`, fields are private and `main.rs` can't access them. You'll get: `field 'kind' of struct 'Token' is private`.
-- **Using `{}` instead of `{:?}` in println** — `{}` requires the `Display` trait (human-readable output). `{:?}` uses `Debug` (programmer-readable). We derived `Debug` but not `Display`.
-- **Edition not set to 2024** — check `Cargo.toml`. The 2024 edition has slightly different module resolution rules.
+> [!warning] Common Mistakes
+> - **Forgetting `mod token;` in `main.rs`** — Rust won't find your file. Every `.rs` file must be declared as a module somewhere.
+> - **Forgetting `pub` on struct fields** — without `pub`, fields are private and `main.rs` can't access them. You'll get: `field 'kind' of struct 'Token' is private`.
+> - **Using `{}` instead of `{:?}` in println** — `{}` requires the `Display` trait (human-readable output). `{:?}` uses `Debug` (programmer-readable). We derived `Debug` but not `Display`.
+> - **Edition not set to 2024** — check `Cargo.toml`. The 2024 edition has slightly different module resolution rules.
 
 ### Verify it works
 
@@ -249,94 +251,95 @@ If you see that, your types are defined correctly and the module system is wired
 
 The types are defined, but they're inert — we created them by hand. In the next stage, we'll build the `Lexer` struct that *produces* these tokens automatically by scanning source text character by character.
 
-### Checkpoint
-
-Your project should have these files:
-
-**`Cargo.toml`**
-```toml
-[package]
-name = "runescript"
-version = "0.1.0"
-edition = "2024"
-```
-
-**`src/token.rs`**
-```rust
-#[derive(Debug, Clone, PartialEq)]
-pub struct Span {
-    pub line: usize,
-    pub col: usize,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TokenKind {
-    IntLit(i64),
-    StringLit(String),
-    True,
-    False,
-    Ident(String),
-    Let,
-    Fn,
-    If,
-    Else,
-    While,
-    For,
-    In,
-    Return,
-    Nil,
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    Percent,
-    Eq,
-    EqEq,
-    BangEq,
-    Lt,
-    LtEq,
-    Gt,
-    GtEq,
-    And,
-    Or,
-    Bang,
-    Dot,
-    LParen,
-    RParen,
-    LBrace,
-    RBrace,
-    LBracket,
-    RBracket,
-    Comma,
-    Semicolon,
-    Eof,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub span: Span,
-}
-```
-
-**`src/main.rs`**
-```rust
-mod token;
-
-use token::{Token, TokenKind, Span};
-
-fn main() {
-    let tok = Token {
-        kind: TokenKind::IntLit(42),
-        span: Span { line: 1, col: 1 },
-    };
-    println!("Our first rune: {:?}", tok);
-}
-```
+> [!check] Checkpoint
+> Your project should have these files:
+>
+> **`Cargo.toml`**
+> ```toml
+> [package]
+> name = "runescript"
+> version = "0.1.0"
+> edition = "2024"
+> ```
+>
+> **`src/token.rs`**
+> ```rust
+> #[derive(Debug, Clone, PartialEq)]
+> pub struct Span {
+>     pub line: usize,
+>     pub col: usize,
+> }
+>
+> #[derive(Debug, Clone, PartialEq)]
+> pub enum TokenKind {
+>     IntLit(i64),
+>     StringLit(String),
+>     True,
+>     False,
+>     Ident(String),
+>     Let,
+>     Fn,
+>     If,
+>     Else,
+>     While,
+>     For,
+>     In,
+>     Return,
+>     Nil,
+>     Plus,
+>     Minus,
+>     Star,
+>     Slash,
+>     Percent,
+>     Eq,
+>     EqEq,
+>     BangEq,
+>     Lt,
+>     LtEq,
+>     Gt,
+>     GtEq,
+>     And,
+>     Or,
+>     Bang,
+>     Dot,
+>     LParen,
+>     RParen,
+>     LBrace,
+>     RBrace,
+>     LBracket,
+>     RBracket,
+>     Comma,
+>     Semicolon,
+>     Eof,
+> }
+>
+> #[derive(Debug, Clone, PartialEq)]
+> pub struct Token {
+>     pub kind: TokenKind,
+>     pub span: Span,
+> }
+> ```
+>
+> **`src/main.rs`**
+> ```rust
+> mod token;
+>
+> use token::{Token, TokenKind, Span};
+>
+> fn main() {
+>     let tok = Token {
+>         kind: TokenKind::IntLit(42),
+>         span: Span { line: 1, col: 1 },
+>     };
+>     println!("Our first rune: {:?}", tok);
+> }
+> ```
 
 ---
 
 ## Stage 2: Single-Character Runes — Easy
+
+*Difficulty: Easy*
 
 **Goal:** Build a `Lexer` struct that scans source text character-by-character and produces a `Vec<Token>` for single-character operators and delimiters.
 
@@ -350,7 +353,7 @@ A lexer's job is simple: walk through the source text one character at a time an
 
 We also introduce the lexer's core architecture: a struct that holds the source text and a cursor position, with `peek()` and `advance()` methods. Every future stage builds on this skeleton.
 
-### Python/TS equivalent
+### Python equivalent
 
 In Python you might write:
 
@@ -422,7 +425,7 @@ impl Lexer {
     }
 ```
 
-- `impl Lexer { ... }` — an **implementation block**. All methods for `Lexer` go here. Like a class body in Python/TS, but separated from the struct definition.
+- `impl Lexer { ... }` — an **implementation block**. All methods for `Lexer` go here. Like a class body in Python, but separated from the struct definition.
 - `pub fn new(source: &str) -> Self` — a constructor by convention. Rust doesn't have a `__init__` — `new` is just a regular function that returns `Self` (an alias for `Lexer`).
 - `source: &str` — a **borrowed string slice**. The `&` means "I'm borrowing this data, not taking ownership." The caller keeps their string; we just read it. `.chars().collect()` iterates over the characters and collects them into a `Vec<char>`, which the lexer *owns*.
 - `source.chars()` — returns an iterator over the Unicode characters. `.collect()` consumes the iterator and builds a `Vec<char>`.
@@ -537,7 +540,7 @@ Now the main scanning method:
 - `loop { ... }` — infinite loop. We `break` when we hit end of input.
 - `match ch { ... }` — **pattern matching** on the character. This is Rust's `switch` statement, but exhaustive — the compiler warns if you don't cover all cases. The `_` arm is the catch-all (like `default` in a switch).
 - `'+'` — character literals use single quotes. String literals use double quotes. This is different from Python (which uses either) and important in Rust.
-- `tokens.push(Token { kind, span: sp })` — push a new token onto the vector. `kind` is shorthand for `kind: kind` when the variable name matches the field name (like JS object shorthand).
+- `tokens.push(Token { kind, span: sp })` — push a new token onto the vector. `kind` is shorthand for `kind: kind` when the variable name matches the field name.
 - `_ => continue` — for now, we skip any character we don't recognize. We'll handle errors properly in Stage 7.
 
 Now update `main.rs` to use the lexer:
@@ -615,12 +618,11 @@ mod tests {
 - `assert_eq!(a, b)` — panics (fails the test) if `a != b`. This is why we derived `PartialEq` on our types.
 - `tokens.iter().map(|t| &t.kind).collect()` — iterator chain. `.iter()` borrows each element, `.map(|t| &t.kind)` transforms each token into a reference to its kind, `.collect()` gathers results into a `Vec`. The `|t|` is a **closure** (anonymous function) — like Python's `lambda t: t.kind`.
 
-### Common mistakes
-
-- **Forgetting `mut` on the lexer** — `scan_tokens` takes `&mut self`, so the variable must be `let mut lex`. The compiler error is clear: "cannot borrow `lex` as mutable, as it is not declared as mutable."
-- **Using `source[i]` on a `&str`** — Rust strings aren't indexable by position. That's why we convert to `Vec<char>`. If you try `source[0]`, you'll get: "the type `str` cannot be indexed by `usize`."
-- **Forgetting `&` in `for tok in &tokens`** — without the `&`, the loop *moves* each token out of the vector, consuming it. If you try to use `tokens` afterward, the compiler says "value used after move."
-- **Missing `mod lexer;` in `main.rs`** — the file exists but Rust doesn't know about it. You'll get "unresolved import."
+> [!warning] Common Mistakes
+> - **Forgetting `mut` on the lexer** — `scan_tokens` takes `&mut self`, so the variable must be `let mut lex`. The compiler error is clear: "cannot borrow `lex` as mutable, as it is not declared as mutable."
+> - **Using `source[i]` on a `&str`** — Rust strings aren't indexable by position. That's why we convert to `Vec<char>`. If you try `source[0]`, you'll get: "the type `str` cannot be indexed by `usize`."
+> - **Forgetting `&` in `for tok in &tokens`** — without the `&`, the loop *moves* each token out of the vector, consuming it. If you try to use `tokens` afterward, the compiler says "value used after move."
+> - **Missing `mod lexer;` in `main.rs`** — the file exists but Rust doesn't know about it. You'll get "unresolved import."
 
 ### Verify it works
 
@@ -647,167 +649,168 @@ Expected: all 3 tests pass.
 
 The lexer can now scan single-character tokens and skip whitespace — but it treats `==` as two separate `Eq` tokens. Next, we teach it to peek ahead and recognize two-character runes.
 
-### Checkpoint
-
-**`src/lexer.rs`** (complete):
-
-```rust
-use crate::token::{Token, TokenKind, Span};
-
-pub struct Lexer {
-    chars: Vec<char>,
-    pos: usize,
-    line: usize,
-    col: usize,
-}
-
-impl Lexer {
-    pub fn new(source: &str) -> Self {
-        Lexer {
-            chars: source.chars().collect(),
-            pos: 0,
-            line: 1,
-            col: 1,
-        }
-    }
-
-    fn peek(&self) -> Option<char> {
-        self.chars.get(self.pos).copied()
-    }
-
-    fn advance(&mut self) -> Option<char> {
-        let ch = self.chars.get(self.pos).copied();
-        if let Some(c) = ch {
-            self.pos += 1;
-            if c == '\n' {
-                self.line += 1;
-                self.col = 1;
-            } else {
-                self.col += 1;
-            }
-        }
-        ch
-    }
-
-    fn span(&self) -> Span {
-        Span { line: self.line, col: self.col }
-    }
-
-    fn skip_whitespace(&mut self) {
-        while let Some(c) = self.peek() {
-            if c.is_ascii_whitespace() {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-    }
-
-    pub fn scan_tokens(&mut self) -> Vec<Token> {
-        let mut tokens = Vec::new();
-
-        loop {
-            self.skip_whitespace();
-            let sp = self.span();
-
-            let ch = match self.advance() {
-                Some(c) => c,
-                None => break,
-            };
-
-            let kind = match ch {
-                '+' => TokenKind::Plus,
-                '-' => TokenKind::Minus,
-                '*' => TokenKind::Star,
-                '/' => TokenKind::Slash,
-                '%' => TokenKind::Percent,
-                '=' => TokenKind::Eq,
-                '<' => TokenKind::Lt,
-                '>' => TokenKind::Gt,
-                '!' => TokenKind::Bang,
-                '.' => TokenKind::Dot,
-                '(' => TokenKind::LParen,
-                ')' => TokenKind::RParen,
-                '{' => TokenKind::LBrace,
-                '}' => TokenKind::RBrace,
-                '[' => TokenKind::LBracket,
-                ']' => TokenKind::RBracket,
-                ',' => TokenKind::Comma,
-                ';' => TokenKind::Semicolon,
-                _ => continue,
-            };
-
-            tokens.push(Token { kind, span: sp });
-        }
-
-        tokens
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn scan_single_char_tokens() {
-        let mut lexer = Lexer::new("+ - * ( )");
-        let tokens = lexer.scan_tokens();
-        let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
-        assert_eq!(
-            kinds,
-            vec![
-                &TokenKind::Plus,
-                &TokenKind::Minus,
-                &TokenKind::Star,
-                &TokenKind::LParen,
-                &TokenKind::RParen,
-            ]
-        );
-    }
-
-    #[test]
-    fn skips_whitespace() {
-        let mut lexer = Lexer::new("  +   -  ");
-        let tokens = lexer.scan_tokens();
-        assert_eq!(tokens.len(), 2);
-        assert_eq!(tokens[0].kind, TokenKind::Plus);
-        assert_eq!(tokens[1].kind, TokenKind::Minus);
-    }
-
-    #[test]
-    fn tracks_line_and_col() {
-        let mut lexer = Lexer::new("+\n  -");
-        let tokens = lexer.scan_tokens();
-        assert_eq!(tokens[0].span.line, 1);
-        assert_eq!(tokens[0].span.col, 1);
-        assert_eq!(tokens[1].span.line, 2);
-        assert_eq!(tokens[1].span.col, 3);
-    }
-}
-```
-
-**`src/main.rs`** (updated):
-
-```rust
-mod token;
-mod lexer;
-
-use lexer::Lexer;
-
-fn main() {
-    let source = "( + - ) * { }";
-    let mut lex = Lexer::new(source);
-    let tokens = lex.scan_tokens();
-
-    for tok in &tokens {
-        println!("{:?}", tok);
-    }
-}
-```
+> [!check] Checkpoint
+> **`src/lexer.rs`** (complete):
+>
+> ```rust
+> use crate::token::{Token, TokenKind, Span};
+>
+> pub struct Lexer {
+>     chars: Vec<char>,
+>     pos: usize,
+>     line: usize,
+>     col: usize,
+> }
+>
+> impl Lexer {
+>     pub fn new(source: &str) -> Self {
+>         Lexer {
+>             chars: source.chars().collect(),
+>             pos: 0,
+>             line: 1,
+>             col: 1,
+>         }
+>     }
+>
+>     fn peek(&self) -> Option<char> {
+>         self.chars.get(self.pos).copied()
+>     }
+>
+>     fn advance(&mut self) -> Option<char> {
+>         let ch = self.chars.get(self.pos).copied();
+>         if let Some(c) = ch {
+>             self.pos += 1;
+>             if c == '\n' {
+>                 self.line += 1;
+>                 self.col = 1;
+>             } else {
+>                 self.col += 1;
+>             }
+>         }
+>         ch
+>     }
+>
+>     fn span(&self) -> Span {
+>         Span { line: self.line, col: self.col }
+>     }
+>
+>     fn skip_whitespace(&mut self) {
+>         while let Some(c) = self.peek() {
+>             if c.is_ascii_whitespace() {
+>                 self.advance();
+>             } else {
+>                 break;
+>             }
+>         }
+>     }
+>
+>     pub fn scan_tokens(&mut self) -> Vec<Token> {
+>         let mut tokens = Vec::new();
+>
+>         loop {
+>             self.skip_whitespace();
+>             let sp = self.span();
+>
+>             let ch = match self.advance() {
+>                 Some(c) => c,
+>                 None => break,
+>             };
+>
+>             let kind = match ch {
+>                 '+' => TokenKind::Plus,
+>                 '-' => TokenKind::Minus,
+>                 '*' => TokenKind::Star,
+>                 '/' => TokenKind::Slash,
+>                 '%' => TokenKind::Percent,
+>                 '=' => TokenKind::Eq,
+>                 '<' => TokenKind::Lt,
+>                 '>' => TokenKind::Gt,
+>                 '!' => TokenKind::Bang,
+>                 '.' => TokenKind::Dot,
+>                 '(' => TokenKind::LParen,
+>                 ')' => TokenKind::RParen,
+>                 '{' => TokenKind::LBrace,
+>                 '}' => TokenKind::RBrace,
+>                 '[' => TokenKind::LBracket,
+>                 ']' => TokenKind::RBracket,
+>                 ',' => TokenKind::Comma,
+>                 ';' => TokenKind::Semicolon,
+>                 _ => continue,
+>             };
+>
+>             tokens.push(Token { kind, span: sp });
+>         }
+>
+>         tokens
+>     }
+> }
+>
+> #[cfg(test)]
+> mod tests {
+>     use super::*;
+>
+>     #[test]
+>     fn scan_single_char_tokens() {
+>         let mut lexer = Lexer::new("+ - * ( )");
+>         let tokens = lexer.scan_tokens();
+>         let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
+>         assert_eq!(
+>             kinds,
+>             vec![
+>                 &TokenKind::Plus,
+>                 &TokenKind::Minus,
+>                 &TokenKind::Star,
+>                 &TokenKind::LParen,
+>                 &TokenKind::RParen,
+>             ]
+>         );
+>     }
+>
+>     #[test]
+>     fn skips_whitespace() {
+>         let mut lexer = Lexer::new("  +   -  ");
+>         let tokens = lexer.scan_tokens();
+>         assert_eq!(tokens.len(), 2);
+>         assert_eq!(tokens[0].kind, TokenKind::Plus);
+>         assert_eq!(tokens[1].kind, TokenKind::Minus);
+>     }
+>
+>     #[test]
+>     fn tracks_line_and_col() {
+>         let mut lexer = Lexer::new("+\n  -");
+>         let tokens = lexer.scan_tokens();
+>         assert_eq!(tokens[0].span.line, 1);
+>         assert_eq!(tokens[0].span.col, 1);
+>         assert_eq!(tokens[1].span.line, 2);
+>         assert_eq!(tokens[1].span.col, 3);
+>     }
+> }
+> ```
+>
+> **`src/main.rs`** (updated):
+>
+> ```rust
+> mod token;
+> mod lexer;
+>
+> use lexer::Lexer;
+>
+> fn main() {
+>     let source = "( + - ) * { }";
+>     let mut lex = Lexer::new(source);
+>     let tokens = lex.scan_tokens();
+>
+>     for tok in &tokens {
+>         println!("{:?}", tok);
+>     }
+> }
+> ```
 
 ---
 
 ## Stage 3: Two-Character Runes — Easy
+
+*Difficulty: Easy*
 
 **Goal:** Handle two-character operators (`==`, `!=`, `<=`, `>=`, `&&`, `||`) using peek-ahead logic, while still falling back to single-character versions (`=`, `!`, `<`, `>`) when the second character doesn't match.
 
@@ -821,7 +824,7 @@ This is where lexing gets interesting. When you see `=`, you can't immediately e
 
 The pattern is always the same: consume the first character, peek at the next, and decide. This two-step dance is the core of every hand-written lexer.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 if ch == '=':
@@ -980,12 +983,11 @@ Add tests at the bottom of the `mod tests` block:
     }
 ```
 
-### Common mistakes
-
-- **Forgetting to add `match_char` before using it** — Rust methods must be defined before they're called within the same `impl` block... actually, no — Rust doesn't care about declaration order within an `impl` block. But if you put it in a *different* `impl` block, make sure it's for the same type.
-- **Missing the `else` branch** — in Rust, `if` used as an expression *must* have an `else` branch (unless the `if` arm diverges with `return`/`break`/`continue`). The compiler says: "expected `TokenKind`, found `()`."
-- **Adding a semicolon after the `if/else` expression** — `if x { A } else { B };` with a trailing semicolon turns the expression into a statement that returns `()` (unit/void). The match arm then has the wrong type.
-- **Confusing `&` (reference) with `&&` (logical AND token)** — in Rust code, `&` creates a reference and `&&` is a double-reference or logical AND. In Runescript source, `&&` is the logical AND operator. Don't mix up the language you're *writing* with the language you're *lexing*.
+> [!warning] Common Mistakes
+> - **Forgetting to add `match_char` before using it** — Rust methods must be defined before they're called within the same `impl` block... actually, no — Rust doesn't care about declaration order within an `impl` block. But if you put it in a *different* `impl` block, make sure it's for the same type.
+> - **Missing the `else` branch** — in Rust, `if` used as an expression *must* have an `else` branch (unless the `if` arm diverges with `return`/`break`/`continue`). The compiler says: "expected `TokenKind`, found `()`."
+> - **Adding a semicolon after the `if/else` expression** — `if x { A } else { B };` with a trailing semicolon turns the expression into a statement that returns `()` (unit/void). The match arm then has the wrong type.
+> - **Confusing `&` (reference) with `&&` (logical AND token)** — in Rust code, `&` creates a reference and `&&` is a double-reference or logical AND. In Runescript source, `&&` is the logical AND operator. Don't mix up the language you're *writing* with the language you're *lexing*.
 
 ### Verify it works
 
@@ -1017,19 +1019,20 @@ You should see `EqEq`, `BangEq`, `LtEq`, `GtEq` in the output.
 
 Operators are handled — both single and double-character. But the lexer still skips over digits and letters. Next, we teach it to consume multi-character sequences: numbers.
 
-### Checkpoint
-
-**`src/lexer.rs`** — only the changed/added parts are shown. The full file is the Stage 2 checkpoint with these modifications:
-
-1. Add `match_char` method after `skip_whitespace`.
-2. Replace the `match ch` block in `scan_tokens` with the expanded version above.
-3. Add the three new tests.
-
-The full `scan_tokens` match block is shown in The Code section above. The rest of the file (struct, `new`, `peek`, `advance`, `span`, `skip_whitespace`) is unchanged from Stage 2.
+> [!check] Checkpoint
+> **`src/lexer.rs`** — only the changed/added parts are shown. The full file is the Stage 2 checkpoint with these modifications:
+>
+> 1. Add `match_char` method after `skip_whitespace`.
+> 2. Replace the `match ch` block in `scan_tokens` with the expanded version above.
+> 3. Add the three new tests.
+>
+> The full `scan_tokens` match block is shown in The Code section above. The rest of the file (struct, `new`, `peek`, `advance`, `span`, `skip_whitespace`) is unchanged from Stage 2.
 
 ---
 
 ## Stage 4: Numbers and the Void — Easy
+
+*Difficulty: Easy*
 
 **Goal:** Scan integer literals (`42`, `0`, `1000`) into `IntLit(i64)` tokens. Understand that negative numbers like `-7` are handled by the parser (unary minus on `7`), not the lexer.
 
@@ -1043,7 +1046,7 @@ Tokens aren't always single characters. A number like `42` is *two* characters t
 
 A design note from the spec (§3): `IntLit(i64)` stores the parsed integer value directly in the token. The lexer does the string-to-number conversion so the parser and evaluator don't have to.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 if ch.isdigit():
@@ -1124,12 +1127,11 @@ Add tests:
     }
 ```
 
-### Common mistakes
-
-- **Trying to handle `-7` in the lexer** — don't. `-` is always `Minus`. The parser combines `Minus` + `IntLit(7)` into a negation expression. If you try to handle it in the lexer, you'll break subtraction: `10 - 7` would lex as `IntLit(10)`, `IntLit(-7)` instead of `IntLit(10)`, `Minus`, `IntLit(7)`.
-- **Forgetting `mut` on `num_str`** — `push` mutates the string, so it must be `let mut num_str`.
-- **Putting the digit arm after `_ => continue`** — match arms are checked top to bottom. The `_` catch-all matches everything, so nothing below it runs. Always put `_` last.
-- **Using `num_str.parse::<i64>()` without the type annotation** — either annotate the variable (`let value: i64 = ...`) or use the turbofish syntax (`.parse::<i64>()`). Without either, Rust can't infer what type to parse into.
+> [!warning] Common Mistakes
+> - **Trying to handle `-7` in the lexer** — don't. `-` is always `Minus`. The parser combines `Minus` + `IntLit(7)` into a negation expression. If you try to handle it in the lexer, you'll break subtraction: `10 - 7` would lex as `IntLit(10)`, `IntLit(-7)` instead of `IntLit(10)`, `Minus`, `IntLit(7)`.
+> - **Forgetting `mut` on `num_str`** — `push` mutates the string, so it must be `let mut num_str`.
+> - **Putting the digit arm after `_ => continue`** — match arms are checked top to bottom. The `_` catch-all matches everything, so nothing below it runs. Always put `_` last.
+> - **Using `num_str.parse::<i64>()` without the type annotation** — either annotate the variable (`let value: i64 = ...`) or use the turbofish syntax (`.parse::<i64>()`). Without either, Rust can't infer what type to parse into.
 
 ### Verify it works
 
@@ -1161,19 +1163,20 @@ Expected output includes `IntLit(42)`, `Plus`, `IntLit(7)`, `EqEq`, `IntLit(49)`
 
 Numbers flow through the carver now, but words are still invisible — `let`, `hp`, `if` all vanish into the `_ => continue` void. Next, we teach the lexer to read identifiers and distinguish them from keywords.
 
-### Checkpoint
-
-Add to `src/lexer.rs`:
-
-1. The `scan_number` method in the `impl Lexer` block.
-2. The `c if c.is_ascii_digit() => self.scan_number(c)` arm in the match block (before `_ => continue`).
-3. The two new tests.
-
-Everything else is unchanged from Stage 3.
+> [!check] Checkpoint
+> Add to `src/lexer.rs`:
+>
+> 1. The `scan_number` method in the `impl Lexer` block.
+> 2. The `c if c.is_ascii_digit() => self.scan_number(c)` arm in the match block (before `_ => continue`).
+> 3. The two new tests.
+>
+> Everything else is unchanged from Stage 3.
 
 ---
 
 ## Stage 5: Words of Power — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Scan identifiers (`hp`, `trap_armed`, `hunter`) and keywords (`let`, `fn`, `if`, `else`, `while`, `for`, `in`, `return`, `true`, `false`, `nil`). Build the keyword lookup table from the spec.
 
@@ -1187,7 +1190,7 @@ Identifiers and keywords look the same to the lexer at first — they're both se
 
 This is the **keyword lookup** pattern, and it's how virtually every hand-written lexer works. We'll use a `HashMap` for O(1) lookups, though for only 11 keywords a simple `match` would also work.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 KEYWORDS = {
@@ -1216,7 +1219,7 @@ First, we need `HashMap`. Add this import at the top of `src/lexer.rs`:
 use std::collections::HashMap;
 ```
 
-`std::collections::HashMap` is Rust's built-in hash map — like Python's `dict` or JS's `Map`. It's in the standard library but not in the prelude (the set of things automatically imported), so you must import it explicitly.
+`std::collections::HashMap` is Rust's built-in hash map — like Python's `dict`. It's in the standard library but not in the prelude (the set of things automatically imported), so you must import it explicitly.
 
 Add a method that builds the keyword table:
 
@@ -1240,7 +1243,7 @@ Add a method that builds the keyword table:
     }
 ```
 
-- `fn keywords()` — no `&self` parameter, so this is an **associated function** (like a static method in Python/TS). You call it as `Lexer::keywords()`, not `self.keywords()`.
+- `fn keywords()` — no `&self` parameter, so this is an **associated function** (like a static method in Python). You call it as `Lexer::keywords()`, not `self.keywords()`.
 - `HashMap<&'static str, TokenKind>` — the keys are string slices with a `'static` lifetime, meaning they live for the entire program. String literals like `"let"` are baked into the binary and are always `'static`. The values are `TokenKind` variants.
 - **Lifetime `'static`** — this is your first encounter with Rust lifetimes. Don't panic. A lifetime tells the compiler "this reference is valid for at least this long." `'static` means "forever" — it's the simplest lifetime. String literals are always `'static` because they're embedded in the compiled binary. We'll see more complex lifetimes in later acts.
 
@@ -1347,12 +1350,11 @@ Add tests:
 
 The last test is a milestone — `let hp = 100` is the first real Runescript statement we can fully tokenize! It produces exactly the token stream the parser will expect in Act 2.
 
-### Common mistakes
-
-- **Forgetting `use std::collections::HashMap;`** — you'll get "cannot find type `HashMap` in this scope."
-- **Checking `keywords.get(&word)` instead of `keywords.get(word.as_str())`** — `&word` is `&String`, but the HashMap keys are `&str`. Rust *can* auto-deref `&String` to `&str` in many contexts, but `.get()` on a `HashMap<&str, _>` expects `&str`. Using `.as_str()` is explicit and always works.
-- **Forgetting `.clone()` on the keyword lookup result** — the HashMap gives you a reference. You need an owned value to return. Without `.clone()`, you'd be trying to return a reference to data owned by the local `keywords` variable, which gets dropped at the end of the function. The compiler catches this: "cannot return reference to local variable."
-- **Starting identifiers with digits** — `3hp` should lex as `IntLit(3)` then `Ident("hp")`, not `Ident("3hp")`. Our match order handles this: the digit arm comes before the identifier arm, so `3` is consumed as a number first.
+> [!warning] Common Mistakes
+> - **Forgetting `use std::collections::HashMap;`** — you'll get "cannot find type `HashMap` in this scope."
+> - **Checking `keywords.get(&word)` instead of `keywords.get(word.as_str())`** — `&word` is `&String`, but the HashMap keys are `&str`. Rust *can* auto-deref `&String` to `&str` in many contexts, but `.get()` on a `HashMap<&str, _>` expects `&str`. Using `.as_str()` is explicit and always works.
+> - **Forgetting `.clone()` on the keyword lookup result** — the HashMap gives you a reference. You need an owned value to return. Without `.clone()`, you'd be trying to return a reference to data owned by the local `keywords` variable, which gets dropped at the end of the function. The compiler catches this: "cannot return reference to local variable."
+> - **Starting identifiers with digits** — `3hp` should lex as `IntLit(3)` then `Ident("hp")`, not `Ident("3hp")`. Our match order handles this: the digit arm comes before the identifier arm, so `3` is consumed as a number first.
 
 ### Verify it works
 
@@ -1377,19 +1379,20 @@ Token { kind: IntLit(100), span: Span { line: 1, col: 10 } }
 
 The carver speaks the language's words now — `let hp = 100` produces exactly the token stream the parser will expect. But one token type remains: the spoken word, the string literal. Next, we handle `"hello"` with its escape sequences and interpolation markers.
 
-### Checkpoint
-
-Add to `src/lexer.rs`:
-
-1. `use std::collections::HashMap;` at the top.
-2. `fn keywords()` associated function in the `impl Lexer` block.
-3. `fn scan_identifier()` method in the `impl Lexer` block.
-4. The `c if c.is_ascii_alphabetic() || c == '_'` arm in the match block (before `_ => continue`).
-5. Four new tests.
+> [!check] Checkpoint
+> Add to `src/lexer.rs`:
+>
+> 1. `use std::collections::HashMap;` at the top.
+> 2. `fn keywords()` associated function in the `impl Lexer` block.
+> 3. `fn scan_identifier()` method in the `impl Lexer` block.
+> 4. The `c if c.is_ascii_alphabetic() || c == '_'` arm in the match block (before `_ => continue`).
+> 5. Four new tests.
 
 ---
 
 ## Stage 6: The Spoken Word — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Scan string literals with escape characters (`\n`, `\\`, `\"`). Emit the raw string including `{}` interpolation markers — the evaluator handles interpolation at runtime (§3.2).
 
@@ -1408,7 +1411,7 @@ Strings are the most complex token to scan. You have to handle:
 
 The spec (§3.2) makes an important design decision: the lexer does NOT resolve `{hp}` interpolation. It emits the raw string `"The hunter has {hp} health"` as-is. The evaluator splits on `{`/`}` at runtime. This keeps the lexer simple.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 if ch == '"':
@@ -1630,12 +1633,11 @@ Add string-specific tests:
     }
 ```
 
-### Common mistakes
-
-- **Forgetting to update ALL existing tests to use `.unwrap()`** — once `scan_tokens` returns `Result`, every call site must handle it. The compiler will tell you: "expected `Vec<Token>`, found `Result<Vec<Token>, String>`."
-- **Not handling `\{` and `\}` escapes** — if someone writes `"literal \{braces\}"`, the backslash should escape the brace. Without this, the evaluator would try to interpolate `braces\` as a variable name.
-- **Consuming the closing `"` twice** — the `Some('"')` arm in the match already consumed it via `advance()`. Don't call `advance()` again.
-- **Forgetting `return` in the error cases** — `Err(...)` creates an error value but doesn't return it. You need `return Err(...)` to exit the function. Without `return`, the error value is created and immediately dropped, and execution continues.
+> [!warning] Common Mistakes
+> - **Forgetting to update ALL existing tests to use `.unwrap()`** — once `scan_tokens` returns `Result`, every call site must handle it. The compiler will tell you: "expected `Vec<Token>`, found `Result<Vec<Token>, String>`."
+> - **Not handling `\{` and `\}` escapes** — if someone writes `"literal \{braces\}"`, the backslash should escape the brace. Without this, the evaluator would try to interpolate `braces\` as a variable name.
+> - **Consuming the closing `"` twice** — the `Some('"')` arm in the match already consumed it via `advance()`. Don't call `advance()` again.
+> - **Forgetting `return` in the error cases** — `Err(...)` creates an error value but doesn't return it. You need `return Err(...)` to exit the function. Without `return`, the error value is created and immediately dropped, and execution continues.
 
 ### Verify it works
 
@@ -1653,20 +1655,21 @@ With the `r#"let greeting = "Hello, {name}!""#` source, you should see `Let`, `I
 
 Strings are carved, escapes resolved, interpolation markers preserved for the evaluator. One final stage remains: comments, the `Eof` sentinel, and proper error reporting to polish the carver into a production-quality component.
 
-### Checkpoint
-
-Changes to `src/lexer.rs`:
-
-1. Add `scan_string` method.
-2. Change `scan_tokens` return type to `Result<Vec<Token>, String>`.
-3. Add `'"' => self.scan_string()?` arm in the match block.
-4. Change `tokens` at the end to `Ok(tokens)`.
-5. Add `.unwrap()` to all existing test calls to `scan_tokens()`.
-6. Add 5 new string tests.
+> [!check] Checkpoint
+> Changes to `src/lexer.rs`:
+>
+> 1. Add `scan_string` method.
+> 2. Change `scan_tokens` return type to `Result<Vec<Token>, String>`.
+> 3. Add `'"' => self.scan_string()?` arm in the match block.
+> 4. Change `tokens` at the end to `Ok(tokens)`.
+> 5. Add `.unwrap()` to all existing test calls to `scan_tokens()`.
+> 6. Add 5 new string tests.
 
 ---
 
 ## Stage 7: The Complete Carver — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Handle line comments (`//`), emit `Eof` at the end of input, report errors on unknown characters with line and column, and write comprehensive tests against the spec examples. The lexer is now complete.
 
@@ -1680,7 +1683,7 @@ A lexer that silently skips unknown characters is useless for debugging. A lexer
 
 We also change the error strategy: instead of stopping at the first error, we collect all errors and report them together. This matches the spec's design (§8.3) — the parser does the same with panic-mode recovery.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 # Comments in Python — skip to end of line
@@ -2042,12 +2045,11 @@ Add the final round of tests:
     }
 ```
 
-### Common mistakes
-
-- **Consuming the newline in the comment handler** — if you `advance()` past `\n`, the line counter gets incremented inside `advance`, but then `skip_whitespace` won't see the newline. It works either way, but leaving the `\n` for `skip_whitespace` is cleaner.
-- **Forgetting `continue` after skipping a comment** — without it, the code falls through to `tokens.push(...)` and tries to push a token with no `kind` set.
-- **Not updating previous tests for `Eof`** — tests that check `tokens.len()` will be off by one now that every token stream ends with `Eof`. For example, `skips_whitespace` expected 2 tokens but now gets 3 (Plus, Minus, Eof). Update length checks or switch to checking specific indices.
-- **Lone `&` and `|` now error instead of being silently skipped** — the `mixed_operators` test and any test with lone `&`/`|` will now fail. Update them.
+> [!warning] Common Mistakes
+> - **Consuming the newline in the comment handler** — if you `advance()` past `\n`, the line counter gets incremented inside `advance`, but then `skip_whitespace` won't see the newline. It works either way, but leaving the `\n` for `skip_whitespace` is cleaner.
+> - **Forgetting `continue` after skipping a comment** — without it, the code falls through to `tokens.push(...)` and tries to push a token with no `kind` set.
+> - **Not updating previous tests for `Eof`** — tests that check `tokens.len()` will be off by one now that every token stream ends with `Eof`. For example, `skips_whitespace` expected 2 tokens but now gets 3 (Plus, Minus, Eof). Update length checks or switch to checking specific indices.
+> - **Lone `&` and `|` now error instead of being silently skipped** — the `mixed_operators` test and any test with lone `&`/`|` will now fail. Update them.
 
 ### Verify it works
 
@@ -2097,789 +2099,788 @@ cargo run
 You should see a clean stream of tokens: `Let`, `Ident("hp")`, `Eq`, `IntLit(100)`, `Let`, `Ident("trap_armed")`, `Eq`, `True`, `If`, `Ident("trap_armed")`, `LBrace`, ... ending with `Eof`. The comment line produces no tokens.
 
 
-### Checkpoint — The Complete Rune Carver
-
-Here is the final, complete code for every file. This is the lexer you'll carry into Act 2.
-
-**`Cargo.toml`**
-
-```toml
-[package]
-name = "runescript"
-version = "0.1.0"
-edition = "2024"
-```
-
-**`src/token.rs`** (unchanged from Stage 1)
-
-```rust
-#[derive(Debug, Clone, PartialEq)]
-pub struct Span {
-    pub line: usize,
-    pub col: usize,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum TokenKind {
-    // Literals
-    IntLit(i64),
-    StringLit(String),
-    True,
-    False,
-
-    // Identifiers & keywords
-    Ident(String),
-    Let,
-    Fn,
-    If,
-    Else,
-    While,
-    For,
-    In,
-    Return,
-    Nil,
-
-    // Operators
-    Plus,
-    Minus,
-    Star,
-    Slash,
-    Percent,
-    Eq,
-    EqEq,
-    BangEq,
-    Lt,
-    LtEq,
-    Gt,
-    GtEq,
-    And,
-    Or,
-    Bang,
-    Dot,
-
-    // Delimiters
-    LParen,
-    RParen,
-    LBrace,
-    RBrace,
-    LBracket,
-    RBracket,
-    Comma,
-    Semicolon,
-
-    // Special
-    Eof,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub struct Token {
-    pub kind: TokenKind,
-    pub span: Span,
-}
-```
-
-
-**`src/lexer.rs`** (complete)
-
-```rust
-use std::collections::HashMap;
-
-use crate::token::{Token, TokenKind, Span};
-
-pub struct Lexer {
-    chars: Vec<char>,
-    pos: usize,
-    line: usize,
-    col: usize,
-}
-
-impl Lexer {
-    pub fn new(source: &str) -> Self {
-        Lexer {
-            chars: source.chars().collect(),
-            pos: 0,
-            line: 1,
-            col: 1,
-        }
-    }
-
-    fn peek(&self) -> Option<char> {
-        self.chars.get(self.pos).copied()
-    }
-
-    fn advance(&mut self) -> Option<char> {
-        let ch = self.chars.get(self.pos).copied();
-        if let Some(c) = ch {
-            self.pos += 1;
-            if c == '\n' {
-                self.line += 1;
-                self.col = 1;
-            } else {
-                self.col += 1;
-            }
-        }
-        ch
-    }
-
-    fn span(&self) -> Span {
-        Span { line: self.line, col: self.col }
-    }
-
-    fn skip_whitespace(&mut self) {
-        while let Some(c) = self.peek() {
-            if c.is_ascii_whitespace() {
-                self.advance();
-            } else {
-                break;
-            }
-        }
-    }
-
-    fn match_char(&mut self, expected: char) -> bool {
-        if self.peek() == Some(expected) {
-            self.advance();
-            true
-        } else {
-            false
-        }
-    }
-
-    fn keywords() -> HashMap<&'static str, TokenKind> {
-        let mut map = HashMap::new();
-        map.insert("let", TokenKind::Let);
-        map.insert("fn", TokenKind::Fn);
-        map.insert("if", TokenKind::If);
-        map.insert("else", TokenKind::Else);
-        map.insert("while", TokenKind::While);
-        map.insert("for", TokenKind::For);
-        map.insert("in", TokenKind::In);
-        map.insert("return", TokenKind::Return);
-        map.insert("true", TokenKind::True);
-        map.insert("false", TokenKind::False);
-        map.insert("nil", TokenKind::Nil);
-        map
-    }
-
-    fn scan_number(&mut self, first_char: char) -> TokenKind {
-        let mut num_str = String::new();
-        num_str.push(first_char);
-
-        while let Some(c) = self.peek() {
-            if c.is_ascii_digit() {
-                self.advance();
-                num_str.push(c);
-            } else {
-                break;
-            }
-        }
-
-        let value: i64 = num_str.parse().unwrap();
-        TokenKind::IntLit(value)
-    }
-
-    fn scan_identifier(&mut self, first_char: char) -> TokenKind {
-        let mut word = String::new();
-        word.push(first_char);
-
-        while let Some(c) = self.peek() {
-            if c.is_ascii_alphanumeric() || c == '_' {
-                self.advance();
-                word.push(c);
-            } else {
-                break;
-            }
-        }
-
-        let keywords = Self::keywords();
-        match keywords.get(word.as_str()) {
-            Some(kind) => kind.clone(),
-            None => TokenKind::Ident(word),
-        }
-    }
-
-    fn scan_string(&mut self) -> Result<TokenKind, String> {
-        let mut content = String::new();
-        let start_line = self.line;
-        let start_col = self.col - 1;
-
-        loop {
-            match self.advance() {
-                None => {
-                    return Err(format!(
-                        "[line {}, col {}] Unterminated string literal",
-                        start_line, start_col
-                    ));
-                }
-                Some('"') => {
-                    return Ok(TokenKind::StringLit(content));
-                }
-                Some('\\') => {
-                    match self.advance() {
-                        Some('n') => content.push('\n'),
-                        Some('t') => content.push('\t'),
-                        Some('\\') => content.push('\\'),
-                        Some('"') => content.push('"'),
-                        Some('{') => content.push('{'),
-                        Some('}') => content.push('}'),
-                        Some(c) => {
-                            return Err(format!(
-                                "[line {}, col {}] Unknown escape sequence '\\{}'",
-                                self.line, self.col - 1, c
-                            ));
-                        }
-                        None => {
-                            return Err(format!(
-                                "[line {}, col {}] Unterminated escape sequence",
-                                self.line, self.col
-                            ));
-                        }
-                    }
-                }
-                Some(c) => {
-                    content.push(c);
-                }
-            }
-        }
-    }
-
-    pub fn scan_tokens(&mut self) -> Result<Vec<Token>, String> {
-        let mut tokens = Vec::new();
-
-        loop {
-            self.skip_whitespace();
-            let sp = self.span();
-
-            let ch = match self.advance() {
-                Some(c) => c,
-                None => break,
-            };
-
-            let kind = match ch {
-                '+' => TokenKind::Plus,
-                '-' => TokenKind::Minus,
-                '*' => TokenKind::Star,
-                '%' => TokenKind::Percent,
-
-                '/' => {
-                    if self.match_char('/') {
-                        while let Some(c) = self.peek() {
-                            if c == '\n' {
-                                break;
-                            }
-                            self.advance();
-                        }
-                        continue;
-                    } else {
-                        TokenKind::Slash
-                    }
-                }
-
-                '=' => {
-                    if self.match_char('=') {
-                        TokenKind::EqEq
-                    } else {
-                        TokenKind::Eq
-                    }
-                }
-                '!' => {
-                    if self.match_char('=') {
-                        TokenKind::BangEq
-                    } else {
-                        TokenKind::Bang
-                    }
-                }
-                '<' => {
-                    if self.match_char('=') {
-                        TokenKind::LtEq
-                    } else {
-                        TokenKind::Lt
-                    }
-                }
-                '>' => {
-                    if self.match_char('=') {
-                        TokenKind::GtEq
-                    } else {
-                        TokenKind::Gt
-                    }
-                }
-                '&' => {
-                    if self.match_char('&') {
-                        TokenKind::And
-                    } else {
-                        return Err(format!(
-                            "[line {}, col {}] Unexpected character '&'",
-                            sp.line, sp.col
-                        ));
-                    }
-                }
-                '|' => {
-                    if self.match_char('|') {
-                        TokenKind::Or
-                    } else {
-                        return Err(format!(
-                            "[line {}, col {}] Unexpected character '|'",
-                            sp.line, sp.col
-                        ));
-                    }
-                }
-
-                '.' => TokenKind::Dot,
-                '(' => TokenKind::LParen,
-                ')' => TokenKind::RParen,
-                '{' => TokenKind::LBrace,
-                '}' => TokenKind::RBrace,
-                '[' => TokenKind::LBracket,
-                ']' => TokenKind::RBracket,
-                ',' => TokenKind::Comma,
-                ';' => TokenKind::Semicolon,
-
-                '"' => self.scan_string()?,
-
-                c if c.is_ascii_alphabetic() || c == '_' => self.scan_identifier(c),
-                c if c.is_ascii_digit() => self.scan_number(c),
-
-                _ => {
-                    return Err(format!(
-                        "[line {}, col {}] Unexpected character '{}'",
-                        sp.line, sp.col, ch
-                    ));
-                }
-            };
-
-            tokens.push(Token { kind, span: sp });
-        }
-
-        tokens.push(Token {
-            kind: TokenKind::Eof,
-            span: self.span(),
-        });
-
-        Ok(tokens)
-    }
-}
-```
-
-
-Tests (append to the bottom of `src/lexer.rs`):
-
-```rust
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    // --- Stage 2: Single-character tokens ---
-
-    #[test]
-    fn scan_single_char_tokens() {
-        let mut lexer = Lexer::new("+ - * ( )");
-        let tokens = lexer.scan_tokens().unwrap();
-        let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
-        assert_eq!(
-            kinds,
-            vec![
-                &TokenKind::Plus,
-                &TokenKind::Minus,
-                &TokenKind::Star,
-                &TokenKind::LParen,
-                &TokenKind::RParen,
-                &TokenKind::Eof,
-            ]
-        );
-    }
-
-    #[test]
-    fn skips_whitespace() {
-        let mut lexer = Lexer::new("  +   -  ");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens.len(), 3); // Plus, Minus, Eof
-        assert_eq!(tokens[0].kind, TokenKind::Plus);
-        assert_eq!(tokens[1].kind, TokenKind::Minus);
-        assert_eq!(tokens[2].kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn tracks_line_and_col() {
-        let mut lexer = Lexer::new("+\n  -");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].span.line, 1);
-        assert_eq!(tokens[0].span.col, 1);
-        assert_eq!(tokens[1].span.line, 2);
-        assert_eq!(tokens[1].span.col, 3);
-    }
-
-    // --- Stage 3: Two-character operators ---
-
-    #[test]
-    fn scan_two_char_operators() {
-        let mut lexer = Lexer::new("== != <= >= && ||");
-        let tokens = lexer.scan_tokens().unwrap();
-        let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
-        assert_eq!(
-            kinds,
-            vec![
-                &TokenKind::EqEq,
-                &TokenKind::BangEq,
-                &TokenKind::LtEq,
-                &TokenKind::GtEq,
-                &TokenKind::And,
-                &TokenKind::Or,
-                &TokenKind::Eof,
-            ]
-        );
-    }
-
-    #[test]
-    fn single_char_fallback() {
-        let mut lexer = Lexer::new("= ! < >");
-        let tokens = lexer.scan_tokens().unwrap();
-        let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
-        assert_eq!(
-            kinds,
-            vec![
-                &TokenKind::Eq,
-                &TokenKind::Bang,
-                &TokenKind::Lt,
-                &TokenKind::Gt,
-                &TokenKind::Eof,
-            ]
-        );
-    }
-
-    #[test]
-    fn mixed_operators() {
-        let mut lexer = Lexer::new("= == !=");
-        let tokens = lexer.scan_tokens().unwrap();
-        let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
-        assert_eq!(
-            kinds,
-            vec![&TokenKind::Eq, &TokenKind::EqEq, &TokenKind::BangEq, &TokenKind::Eof]
-        );
-    }
-
-    // --- Stage 4: Numbers ---
-
-    #[test]
-    fn scan_integers() {
-        let mut lexer = Lexer::new("42 0 1000");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::IntLit(42));
-        assert_eq!(tokens[1].kind, TokenKind::IntLit(0));
-        assert_eq!(tokens[2].kind, TokenKind::IntLit(1000));
-    }
-
-    #[test]
-    fn number_followed_by_operator() {
-        let mut lexer = Lexer::new("42+7");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::IntLit(42));
-        assert_eq!(tokens[1].kind, TokenKind::Plus);
-        assert_eq!(tokens[2].kind, TokenKind::IntLit(7));
-    }
-
-    // --- Stage 5: Identifiers and keywords ---
-
-    #[test]
-    fn scan_keywords() {
-        let mut lexer = Lexer::new("let fn if else while for in return true false nil");
-        let tokens = lexer.scan_tokens().unwrap();
-        let kinds: Vec<_> = tokens.iter()
-            .filter(|t| t.kind != TokenKind::Eof)
-            .map(|t| &t.kind)
-            .collect();
-        assert_eq!(
-            kinds,
-            vec![
-                &TokenKind::Let,
-                &TokenKind::Fn,
-                &TokenKind::If,
-                &TokenKind::Else,
-                &TokenKind::While,
-                &TokenKind::For,
-                &TokenKind::In,
-                &TokenKind::Return,
-                &TokenKind::True,
-                &TokenKind::False,
-                &TokenKind::Nil,
-            ]
-        );
-    }
-
-    #[test]
-    fn scan_identifiers() {
-        let mut lexer = Lexer::new("hp trap_armed x1 _private");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Ident("hp".to_string()));
-        assert_eq!(tokens[1].kind, TokenKind::Ident("trap_armed".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::Ident("x1".to_string()));
-        assert_eq!(tokens[3].kind, TokenKind::Ident("_private".to_string()));
-    }
-
-    #[test]
-    fn keyword_vs_identifier() {
-        let mut lexer = Lexer::new("let letter");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Let);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("letter".to_string()));
-    }
-
-    #[test]
-    fn scan_let_statement() {
-        let mut lexer = Lexer::new("let hp = 100");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Let);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("hp".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::Eq);
-        assert_eq!(tokens[3].kind, TokenKind::IntLit(100));
-    }
-
-    // --- Stage 6: Strings ---
-
-    #[test]
-    fn scan_simple_string() {
-        let mut lexer = Lexer::new(r#""hello""#);
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::StringLit("hello".to_string()));
-    }
-
-    #[test]
-    fn scan_string_with_escapes() {
-        let mut lexer = Lexer::new(r#""line1\nline2""#);
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(
-            tokens[0].kind,
-            TokenKind::StringLit("line1\nline2".to_string())
-        );
-    }
-
-    #[test]
-    fn scan_string_with_interpolation_markers() {
-        let mut lexer = Lexer::new(r#""HP: {hp}/{max_hp}""#);
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(
-            tokens[0].kind,
-            TokenKind::StringLit("HP: {hp}/{max_hp}".to_string())
-        );
-    }
-
-    #[test]
-    fn unterminated_string_error() {
-        let mut lexer = Lexer::new(r#""oops"#);
-        let result = lexer.scan_tokens();
-        assert!(result.is_err());
-        assert!(result.unwrap_err().contains("Unterminated string"));
-    }
-
-    #[test]
-    fn scan_escaped_quote() {
-        let mut lexer = Lexer::new(r#""say \"hello\"""#);
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(
-            tokens[0].kind,
-            TokenKind::StringLit("say \"hello\"".to_string())
-        );
-    }
-
-    // --- Stage 7: Comments, Eof, errors, spec examples ---
-
-    #[test]
-    fn skips_line_comments() {
-        let mut lexer = Lexer::new("+ // this is a comment\n-");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Plus);
-        assert_eq!(tokens[1].kind, TokenKind::Minus);
-        assert_eq!(tokens[2].kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn comment_only_line() {
-        let mut lexer = Lexer::new("// nothing here");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens.len(), 1);
-        assert_eq!(tokens[0].kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn eof_token_appended() {
-        let mut lexer = Lexer::new("+");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens.len(), 2);
-        assert_eq!(tokens.last().unwrap().kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn unknown_character_error() {
-        let mut lexer = Lexer::new("~");
-        let result = lexer.scan_tokens();
-        assert!(result.is_err());
-        let err = result.unwrap_err();
-        assert!(err.contains("Unexpected character '~'"));
-        assert!(err.contains("line 1"));
-    }
-
-    #[test]
-    fn lex_hello_world_example() {
-        let mut lexer = Lexer::new(r#"print("A voice echoes through the dungeon...")"#);
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Ident("print".to_string()));
-        assert_eq!(tokens[1].kind, TokenKind::LParen);
-        assert_eq!(
-            tokens[2].kind,
-            TokenKind::StringLit("A voice echoes through the dungeon...".to_string())
-        );
-        assert_eq!(tokens[3].kind, TokenKind::RParen);
-        assert_eq!(tokens[4].kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn lex_variable_declaration() {
-        let mut lexer = Lexer::new("let weapon_damage = 25");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Let);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("weapon_damage".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::Eq);
-        assert_eq!(tokens[3].kind, TokenKind::IntLit(25));
-        assert_eq!(tokens[4].kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn lex_if_statement() {
-        let mut lexer = Lexer::new("if enemy_hp <= 0 { }");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::If);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("enemy_hp".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::LtEq);
-        assert_eq!(tokens[3].kind, TokenKind::IntLit(0));
-        assert_eq!(tokens[4].kind, TokenKind::LBrace);
-        assert_eq!(tokens[5].kind, TokenKind::RBrace);
-        assert_eq!(tokens[6].kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn lex_function_declaration() {
-        let mut lexer = Lexer::new("fn heal(amount) { return 0 }");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::Fn);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("heal".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::LParen);
-        assert_eq!(tokens[3].kind, TokenKind::Ident("amount".to_string()));
-        assert_eq!(tokens[4].kind, TokenKind::RParen);
-        assert_eq!(tokens[5].kind, TokenKind::LBrace);
-        assert_eq!(tokens[6].kind, TokenKind::Return);
-        assert_eq!(tokens[7].kind, TokenKind::IntLit(0));
-        assert_eq!(tokens[8].kind, TokenKind::RBrace);
-        assert_eq!(tokens[9].kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn lex_string_interpolation() {
-        let mut lexer = Lexer::new(r#""The hunter has {hp} health""#);
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(
-            tokens[0].kind,
-            TokenKind::StringLit("The hunter has {hp} health".to_string())
-        );
-    }
-
-    #[test]
-    fn lex_multiline_snippet() {
-        let source = "let hp = 100\nlet max_hp = 100\n// combat stats\nlet weapon_damage = 25";
-        let mut lexer = Lexer::new(source);
-        let tokens = lexer.scan_tokens().unwrap();
-
-        let non_eof: Vec<_> = tokens.iter().filter(|t| t.kind != TokenKind::Eof).collect();
-        assert_eq!(non_eof.len(), 12);
-
-        assert_eq!(tokens[0].span.line, 1);
-        assert_eq!(tokens[4].span.line, 2);
-        assert_eq!(tokens[8].span.line, 4);
-    }
-
-    #[test]
-    fn lex_for_in_loop() {
-        let mut lexer = Lexer::new("for i in [0, 1, 2] { }");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::For);
-        assert_eq!(tokens[1].kind, TokenKind::Ident("i".to_string()));
-        assert_eq!(tokens[2].kind, TokenKind::In);
-        assert_eq!(tokens[3].kind, TokenKind::LBracket);
-        assert_eq!(tokens[4].kind, TokenKind::IntLit(0));
-        assert_eq!(tokens[5].kind, TokenKind::Comma);
-        assert_eq!(tokens[6].kind, TokenKind::IntLit(1));
-        assert_eq!(tokens[7].kind, TokenKind::Comma);
-        assert_eq!(tokens[8].kind, TokenKind::IntLit(2));
-        assert_eq!(tokens[9].kind, TokenKind::RBracket);
-        assert_eq!(tokens[10].kind, TokenKind::LBrace);
-        assert_eq!(tokens[11].kind, TokenKind::RBrace);
-        assert_eq!(tokens[12].kind, TokenKind::Eof);
-    }
-
-    #[test]
-    fn lex_boolean_and_nil() {
-        let mut lexer = Lexer::new("true false nil");
-        let tokens = lexer.scan_tokens().unwrap();
-        assert_eq!(tokens[0].kind, TokenKind::True);
-        assert_eq!(tokens[1].kind, TokenKind::False);
-        assert_eq!(tokens[2].kind, TokenKind::Nil);
-    }
-
-    #[test]
-    fn lex_complex_expression() {
-        let mut lexer = Lexer::new("hp + 10 * 2 >= max_hp && !dead");
-        let tokens = lexer.scan_tokens().unwrap();
-        let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
-        assert_eq!(
-            kinds,
-            vec![
-                &TokenKind::Ident("hp".to_string()),
-                &TokenKind::Plus,
-                &TokenKind::IntLit(10),
-                &TokenKind::Star,
-                &TokenKind::IntLit(2),
-                &TokenKind::GtEq,
-                &TokenKind::Ident("max_hp".to_string()),
-                &TokenKind::And,
-                &TokenKind::Bang,
-                &TokenKind::Ident("dead".to_string()),
-                &TokenKind::Eof,
-            ]
-        );
-    }
-}
-```
-
-
-**`src/main.rs`** (final)
-
-```rust
-mod token;
-mod lexer;
-
-use lexer::Lexer;
-
-fn main() {
-    let source = r#"
-// A dungeon trap room
-let hp = 100
-let trap_armed = true
-
-if trap_armed {
-    hp = hp - 15
-    print("Ouch! HP: {hp}")
-}
-"#;
-
-    let mut lex = Lexer::new(source);
-    match lex.scan_tokens() {
-        Ok(tokens) => {
-            for tok in &tokens {
-                println!("{:?}", tok);
-            }
-            println!("\n--- {} runes carved ---", tokens.len());
-        }
-        Err(e) => eprintln!("Miscast spell: {}", e),
-    }
-}
-```
+> [!check] Checkpoint
+> Here is the final, complete code for every file. This is the lexer you'll carry into Act 2.
+>
+> **`Cargo.toml`**
+>
+> ```toml
+> [package]
+> name = "runescript"
+> version = "0.1.0"
+> edition = "2024"
+> ```
+>
+> **`src/token.rs`** (unchanged from Stage 1)
+>
+> ```rust
+> #[derive(Debug, Clone, PartialEq)]
+> pub struct Span {
+>     pub line: usize,
+>     pub col: usize,
+> }
+>
+> #[derive(Debug, Clone, PartialEq)]
+> pub enum TokenKind {
+>     // Literals
+>     IntLit(i64),
+>     StringLit(String),
+>     True,
+>     False,
+>
+>     // Identifiers & keywords
+>     Ident(String),
+>     Let,
+>     Fn,
+>     If,
+>     Else,
+>     While,
+>     For,
+>     In,
+>     Return,
+>     Nil,
+>
+>     // Operators
+>     Plus,
+>     Minus,
+>     Star,
+>     Slash,
+>     Percent,
+>     Eq,
+>     EqEq,
+>     BangEq,
+>     Lt,
+>     LtEq,
+>     Gt,
+>     GtEq,
+>     And,
+>     Or,
+>     Bang,
+>     Dot,
+>
+>     // Delimiters
+>     LParen,
+>     RParen,
+>     LBrace,
+>     RBrace,
+>     LBracket,
+>     RBracket,
+>     Comma,
+>     Semicolon,
+>
+>     // Special
+>     Eof,
+> }
+>
+> #[derive(Debug, Clone, PartialEq)]
+> pub struct Token {
+>     pub kind: TokenKind,
+>     pub span: Span,
+> }
+> ```
+>
+>
+> **`src/lexer.rs`** (complete)
+>
+> ```rust
+> use std::collections::HashMap;
+>
+> use crate::token::{Token, TokenKind, Span};
+>
+> pub struct Lexer {
+>     chars: Vec<char>,
+>     pos: usize,
+>     line: usize,
+>     col: usize,
+> }
+>
+> impl Lexer {
+>     pub fn new(source: &str) -> Self {
+>         Lexer {
+>             chars: source.chars().collect(),
+>             pos: 0,
+>             line: 1,
+>             col: 1,
+>         }
+>     }
+>
+>     fn peek(&self) -> Option<char> {
+>         self.chars.get(self.pos).copied()
+>     }
+>
+>     fn advance(&mut self) -> Option<char> {
+>         let ch = self.chars.get(self.pos).copied();
+>         if let Some(c) = ch {
+>             self.pos += 1;
+>             if c == '\n' {
+>                 self.line += 1;
+>                 self.col = 1;
+>             } else {
+>                 self.col += 1;
+>             }
+>         }
+>         ch
+>     }
+>
+>     fn span(&self) -> Span {
+>         Span { line: self.line, col: self.col }
+>     }
+>
+>     fn skip_whitespace(&mut self) {
+>         while let Some(c) = self.peek() {
+>             if c.is_ascii_whitespace() {
+>                 self.advance();
+>             } else {
+>                 break;
+>             }
+>         }
+>     }
+>
+>     fn match_char(&mut self, expected: char) -> bool {
+>         if self.peek() == Some(expected) {
+>             self.advance();
+>             true
+>         } else {
+>             false
+>         }
+>     }
+>
+>     fn keywords() -> HashMap<&'static str, TokenKind> {
+>         let mut map = HashMap::new();
+>         map.insert("let", TokenKind::Let);
+>         map.insert("fn", TokenKind::Fn);
+>         map.insert("if", TokenKind::If);
+>         map.insert("else", TokenKind::Else);
+>         map.insert("while", TokenKind::While);
+>         map.insert("for", TokenKind::For);
+>         map.insert("in", TokenKind::In);
+>         map.insert("return", TokenKind::Return);
+>         map.insert("true", TokenKind::True);
+>         map.insert("false", TokenKind::False);
+>         map.insert("nil", TokenKind::Nil);
+>         map
+>     }
+>
+>     fn scan_number(&mut self, first_char: char) -> TokenKind {
+>         let mut num_str = String::new();
+>         num_str.push(first_char);
+>
+>         while let Some(c) = self.peek() {
+>             if c.is_ascii_digit() {
+>                 self.advance();
+>                 num_str.push(c);
+>             } else {
+>                 break;
+>             }
+>         }
+>
+>         let value: i64 = num_str.parse().unwrap();
+>         TokenKind::IntLit(value)
+>     }
+>
+>     fn scan_identifier(&mut self, first_char: char) -> TokenKind {
+>         let mut word = String::new();
+>         word.push(first_char);
+>
+>         while let Some(c) = self.peek() {
+>             if c.is_ascii_alphanumeric() || c == '_' {
+>                 self.advance();
+>                 word.push(c);
+>             } else {
+>                 break;
+>             }
+>         }
+>
+>         let keywords = Self::keywords();
+>         match keywords.get(word.as_str()) {
+>             Some(kind) => kind.clone(),
+>             None => TokenKind::Ident(word),
+>         }
+>     }
+>
+>     fn scan_string(&mut self) -> Result<TokenKind, String> {
+>         let mut content = String::new();
+>         let start_line = self.line;
+>         let start_col = self.col - 1;
+>
+>         loop {
+>             match self.advance() {
+>                 None => {
+>                     return Err(format!(
+>                         "[line {}, col {}] Unterminated string literal",
+>                         start_line, start_col
+>                     ));
+>                 }
+>                 Some('"') => {
+>                     return Ok(TokenKind::StringLit(content));
+>                 }
+>                 Some('\\') => {
+>                     match self.advance() {
+>                         Some('n') => content.push('\n'),
+>                         Some('t') => content.push('\t'),
+>                         Some('\\') => content.push('\\'),
+>                         Some('"') => content.push('"'),
+>                         Some('{') => content.push('{'),
+>                         Some('}') => content.push('}'),
+>                         Some(c) => {
+>                             return Err(format!(
+>                                 "[line {}, col {}] Unknown escape sequence '\\{}'",
+>                                 self.line, self.col - 1, c
+>                             ));
+>                         }
+>                         None => {
+>                             return Err(format!(
+>                                 "[line {}, col {}] Unterminated escape sequence",
+>                                 self.line, self.col
+>                             ));
+>                         }
+>                     }
+>                 }
+>                 Some(c) => {
+>                     content.push(c);
+>                 }
+>             }
+>         }
+>     }
+>
+>     pub fn scan_tokens(&mut self) -> Result<Vec<Token>, String> {
+>         let mut tokens = Vec::new();
+>
+>         loop {
+>             self.skip_whitespace();
+>             let sp = self.span();
+>
+>             let ch = match self.advance() {
+>                 Some(c) => c,
+>                 None => break,
+>             };
+>
+>             let kind = match ch {
+>                 '+' => TokenKind::Plus,
+>                 '-' => TokenKind::Minus,
+>                 '*' => TokenKind::Star,
+>                 '%' => TokenKind::Percent,
+>
+>                 '/' => {
+>                     if self.match_char('/') {
+>                         while let Some(c) = self.peek() {
+>                             if c == '\n' {
+>                                 break;
+>                             }
+>                             self.advance();
+>                         }
+>                         continue;
+>                     } else {
+>                         TokenKind::Slash
+>                     }
+>                 }
+>
+>                 '=' => {
+>                     if self.match_char('=') {
+>                         TokenKind::EqEq
+>                     } else {
+>                         TokenKind::Eq
+>                     }
+>                 }
+>                 '!' => {
+>                     if self.match_char('=') {
+>                         TokenKind::BangEq
+>                     } else {
+>                         TokenKind::Bang
+>                     }
+>                 }
+>                 '<' => {
+>                     if self.match_char('=') {
+>                         TokenKind::LtEq
+>                     } else {
+>                         TokenKind::Lt
+>                     }
+>                 }
+>                 '>' => {
+>                     if self.match_char('=') {
+>                         TokenKind::GtEq
+>                     } else {
+>                         TokenKind::Gt
+>                     }
+>                 }
+>                 '&' => {
+>                     if self.match_char('&') {
+>                         TokenKind::And
+>                     } else {
+>                         return Err(format!(
+>                             "[line {}, col {}] Unexpected character '&'",
+>                             sp.line, sp.col
+>                         ));
+>                     }
+>                 }
+>                 '|' => {
+>                     if self.match_char('|') {
+>                         TokenKind::Or
+>                     } else {
+>                         return Err(format!(
+>                             "[line {}, col {}] Unexpected character '|'",
+>                             sp.line, sp.col
+>                         ));
+>                     }
+>                 }
+>
+>                 '.' => TokenKind::Dot,
+>                 '(' => TokenKind::LParen,
+>                 ')' => TokenKind::RParen,
+>                 '{' => TokenKind::LBrace,
+>                 '}' => TokenKind::RBrace,
+>                 '[' => TokenKind::LBracket,
+>                 ']' => TokenKind::RBracket,
+>                 ',' => TokenKind::Comma,
+>                 ';' => TokenKind::Semicolon,
+>
+>                 '"' => self.scan_string()?,
+>
+>                 c if c.is_ascii_alphabetic() || c == '_' => self.scan_identifier(c),
+>                 c if c.is_ascii_digit() => self.scan_number(c),
+>
+>                 _ => {
+>                     return Err(format!(
+>                         "[line {}, col {}] Unexpected character '{}'",
+>                         sp.line, sp.col, ch
+>                     ));
+>                 }
+>             };
+>
+>             tokens.push(Token { kind, span: sp });
+>         }
+>
+>         tokens.push(Token {
+>             kind: TokenKind::Eof,
+>             span: self.span(),
+>         });
+>
+>         Ok(tokens)
+>     }
+> }
+> ```
+>
+>
+> Tests (append to the bottom of `src/lexer.rs`):
+>
+> ```rust
+> #[cfg(test)]
+> mod tests {
+>     use super::*;
+>
+>     // --- Stage 2: Single-character tokens ---
+>
+>     #[test]
+>     fn scan_single_char_tokens() {
+>         let mut lexer = Lexer::new("+ - * ( )");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
+>         assert_eq!(
+>             kinds,
+>             vec![
+>                 &TokenKind::Plus,
+>                 &TokenKind::Minus,
+>                 &TokenKind::Star,
+>                 &TokenKind::LParen,
+>                 &TokenKind::RParen,
+>                 &TokenKind::Eof,
+>             ]
+>         );
+>     }
+>
+>     #[test]
+>     fn skips_whitespace() {
+>         let mut lexer = Lexer::new("  +   -  ");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens.len(), 3); // Plus, Minus, Eof
+>         assert_eq!(tokens[0].kind, TokenKind::Plus);
+>         assert_eq!(tokens[1].kind, TokenKind::Minus);
+>         assert_eq!(tokens[2].kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn tracks_line_and_col() {
+>         let mut lexer = Lexer::new("+\n  -");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].span.line, 1);
+>         assert_eq!(tokens[0].span.col, 1);
+>         assert_eq!(tokens[1].span.line, 2);
+>         assert_eq!(tokens[1].span.col, 3);
+>     }
+>
+>     // --- Stage 3: Two-character operators ---
+>
+>     #[test]
+>     fn scan_two_char_operators() {
+>         let mut lexer = Lexer::new("== != <= >= && ||");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
+>         assert_eq!(
+>             kinds,
+>             vec![
+>                 &TokenKind::EqEq,
+>                 &TokenKind::BangEq,
+>                 &TokenKind::LtEq,
+>                 &TokenKind::GtEq,
+>                 &TokenKind::And,
+>                 &TokenKind::Or,
+>                 &TokenKind::Eof,
+>             ]
+>         );
+>     }
+>
+>     #[test]
+>     fn single_char_fallback() {
+>         let mut lexer = Lexer::new("= ! < >");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
+>         assert_eq!(
+>             kinds,
+>             vec![
+>                 &TokenKind::Eq,
+>                 &TokenKind::Bang,
+>                 &TokenKind::Lt,
+>                 &TokenKind::Gt,
+>                 &TokenKind::Eof,
+>             ]
+>         );
+>     }
+>
+>     #[test]
+>     fn mixed_operators() {
+>         let mut lexer = Lexer::new("= == !=");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
+>         assert_eq!(
+>             kinds,
+>             vec![&TokenKind::Eq, &TokenKind::EqEq, &TokenKind::BangEq, &TokenKind::Eof]
+>         );
+>     }
+>
+>     // --- Stage 4: Numbers ---
+>
+>     #[test]
+>     fn scan_integers() {
+>         let mut lexer = Lexer::new("42 0 1000");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::IntLit(42));
+>         assert_eq!(tokens[1].kind, TokenKind::IntLit(0));
+>         assert_eq!(tokens[2].kind, TokenKind::IntLit(1000));
+>     }
+>
+>     #[test]
+>     fn number_followed_by_operator() {
+>         let mut lexer = Lexer::new("42+7");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::IntLit(42));
+>         assert_eq!(tokens[1].kind, TokenKind::Plus);
+>         assert_eq!(tokens[2].kind, TokenKind::IntLit(7));
+>     }
+>
+>     // --- Stage 5: Identifiers and keywords ---
+>
+>     #[test]
+>     fn scan_keywords() {
+>         let mut lexer = Lexer::new("let fn if else while for in return true false nil");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         let kinds: Vec<_> = tokens.iter()
+>             .filter(|t| t.kind != TokenKind::Eof)
+>             .map(|t| &t.kind)
+>             .collect();
+>         assert_eq!(
+>             kinds,
+>             vec![
+>                 &TokenKind::Let,
+>                 &TokenKind::Fn,
+>                 &TokenKind::If,
+>                 &TokenKind::Else,
+>                 &TokenKind::While,
+>                 &TokenKind::For,
+>                 &TokenKind::In,
+>                 &TokenKind::Return,
+>                 &TokenKind::True,
+>                 &TokenKind::False,
+>                 &TokenKind::Nil,
+>             ]
+>         );
+>     }
+>
+>     #[test]
+>     fn scan_identifiers() {
+>         let mut lexer = Lexer::new("hp trap_armed x1 _private");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::Ident("hp".to_string()));
+>         assert_eq!(tokens[1].kind, TokenKind::Ident("trap_armed".to_string()));
+>         assert_eq!(tokens[2].kind, TokenKind::Ident("x1".to_string()));
+>         assert_eq!(tokens[3].kind, TokenKind::Ident("_private".to_string()));
+>     }
+>
+>     #[test]
+>     fn keyword_vs_identifier() {
+>         let mut lexer = Lexer::new("let letter");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::Let);
+>         assert_eq!(tokens[1].kind, TokenKind::Ident("letter".to_string()));
+>     }
+>
+>     #[test]
+>     fn scan_let_statement() {
+>         let mut lexer = Lexer::new("let hp = 100");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::Let);
+>         assert_eq!(tokens[1].kind, TokenKind::Ident("hp".to_string()));
+>         assert_eq!(tokens[2].kind, TokenKind::Eq);
+>         assert_eq!(tokens[3].kind, TokenKind::IntLit(100));
+>     }
+>
+>     // --- Stage 6: Strings ---
+>
+>     #[test]
+>     fn scan_simple_string() {
+>         let mut lexer = Lexer::new(r#""hello""#);
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::StringLit("hello".to_string()));
+>     }
+>
+>     #[test]
+>     fn scan_string_with_escapes() {
+>         let mut lexer = Lexer::new(r#""line1\nline2""#);
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(
+>             tokens[0].kind,
+>             TokenKind::StringLit("line1\nline2".to_string())
+>         );
+>     }
+>
+>     #[test]
+>     fn scan_string_with_interpolation_markers() {
+>         let mut lexer = Lexer::new(r#""HP: {hp}/{max_hp}""#);
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(
+>             tokens[0].kind,
+>             TokenKind::StringLit("HP: {hp}/{max_hp}".to_string())
+>         );
+>     }
+>
+>     #[test]
+>     fn unterminated_string_error() {
+>         let mut lexer = Lexer::new(r#""oops"#);
+>         let result = lexer.scan_tokens();
+>         assert!(result.is_err());
+>         assert!(result.unwrap_err().contains("Unterminated string"));
+>     }
+>
+>     #[test]
+>     fn scan_escaped_quote() {
+>         let mut lexer = Lexer::new(r#""say \"hello\"""#);
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(
+>             tokens[0].kind,
+>             TokenKind::StringLit("say \"hello\"".to_string())
+>         );
+>     }
+>
+>     // --- Stage 7: Comments, Eof, errors, spec examples ---
+>
+>     #[test]
+>     fn skips_line_comments() {
+>         let mut lexer = Lexer::new("+ // this is a comment\n-");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::Plus);
+>         assert_eq!(tokens[1].kind, TokenKind::Minus);
+>         assert_eq!(tokens[2].kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn comment_only_line() {
+>         let mut lexer = Lexer::new("// nothing here");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens.len(), 1);
+>         assert_eq!(tokens[0].kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn eof_token_appended() {
+>         let mut lexer = Lexer::new("+");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens.len(), 2);
+>         assert_eq!(tokens.last().unwrap().kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn unknown_character_error() {
+>         let mut lexer = Lexer::new("~");
+>         let result = lexer.scan_tokens();
+>         assert!(result.is_err());
+>         let err = result.unwrap_err();
+>         assert!(err.contains("Unexpected character '~'"));
+>         assert!(err.contains("line 1"));
+>     }
+>
+>     #[test]
+>     fn lex_hello_world_example() {
+>         let mut lexer = Lexer::new(r#"print("A voice echoes through the dungeon...")"#);
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::Ident("print".to_string()));
+>         assert_eq!(tokens[1].kind, TokenKind::LParen);
+>         assert_eq!(
+>             tokens[2].kind,
+>             TokenKind::StringLit("A voice echoes through the dungeon...".to_string())
+>         );
+>         assert_eq!(tokens[3].kind, TokenKind::RParen);
+>         assert_eq!(tokens[4].kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn lex_variable_declaration() {
+>         let mut lexer = Lexer::new("let weapon_damage = 25");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::Let);
+>         assert_eq!(tokens[1].kind, TokenKind::Ident("weapon_damage".to_string()));
+>         assert_eq!(tokens[2].kind, TokenKind::Eq);
+>         assert_eq!(tokens[3].kind, TokenKind::IntLit(25));
+>         assert_eq!(tokens[4].kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn lex_if_statement() {
+>         let mut lexer = Lexer::new("if enemy_hp <= 0 { }");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::If);
+>         assert_eq!(tokens[1].kind, TokenKind::Ident("enemy_hp".to_string()));
+>         assert_eq!(tokens[2].kind, TokenKind::LtEq);
+>         assert_eq!(tokens[3].kind, TokenKind::IntLit(0));
+>         assert_eq!(tokens[4].kind, TokenKind::LBrace);
+>         assert_eq!(tokens[5].kind, TokenKind::RBrace);
+>         assert_eq!(tokens[6].kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn lex_function_declaration() {
+>         let mut lexer = Lexer::new("fn heal(amount) { return 0 }");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::Fn);
+>         assert_eq!(tokens[1].kind, TokenKind::Ident("heal".to_string()));
+>         assert_eq!(tokens[2].kind, TokenKind::LParen);
+>         assert_eq!(tokens[3].kind, TokenKind::Ident("amount".to_string()));
+>         assert_eq!(tokens[4].kind, TokenKind::RParen);
+>         assert_eq!(tokens[5].kind, TokenKind::LBrace);
+>         assert_eq!(tokens[6].kind, TokenKind::Return);
+>         assert_eq!(tokens[7].kind, TokenKind::IntLit(0));
+>         assert_eq!(tokens[8].kind, TokenKind::RBrace);
+>         assert_eq!(tokens[9].kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn lex_string_interpolation() {
+>         let mut lexer = Lexer::new(r#""The hunter has {hp} health""#);
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(
+>             tokens[0].kind,
+>             TokenKind::StringLit("The hunter has {hp} health".to_string())
+>         );
+>     }
+>
+>     #[test]
+>     fn lex_multiline_snippet() {
+>         let source = "let hp = 100\nlet max_hp = 100\n// combat stats\nlet weapon_damage = 25";
+>         let mut lexer = Lexer::new(source);
+>         let tokens = lexer.scan_tokens().unwrap();
+>
+>         let non_eof: Vec<_> = tokens.iter().filter(|t| t.kind != TokenKind::Eof).collect();
+>         assert_eq!(non_eof.len(), 12);
+>
+>         assert_eq!(tokens[0].span.line, 1);
+>         assert_eq!(tokens[4].span.line, 2);
+>         assert_eq!(tokens[8].span.line, 4);
+>     }
+>
+>     #[test]
+>     fn lex_for_in_loop() {
+>         let mut lexer = Lexer::new("for i in [0, 1, 2] { }");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::For);
+>         assert_eq!(tokens[1].kind, TokenKind::Ident("i".to_string()));
+>         assert_eq!(tokens[2].kind, TokenKind::In);
+>         assert_eq!(tokens[3].kind, TokenKind::LBracket);
+>         assert_eq!(tokens[4].kind, TokenKind::IntLit(0));
+>         assert_eq!(tokens[5].kind, TokenKind::Comma);
+>         assert_eq!(tokens[6].kind, TokenKind::IntLit(1));
+>         assert_eq!(tokens[7].kind, TokenKind::Comma);
+>         assert_eq!(tokens[8].kind, TokenKind::IntLit(2));
+>         assert_eq!(tokens[9].kind, TokenKind::RBracket);
+>         assert_eq!(tokens[10].kind, TokenKind::LBrace);
+>         assert_eq!(tokens[11].kind, TokenKind::RBrace);
+>         assert_eq!(tokens[12].kind, TokenKind::Eof);
+>     }
+>
+>     #[test]
+>     fn lex_boolean_and_nil() {
+>         let mut lexer = Lexer::new("true false nil");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         assert_eq!(tokens[0].kind, TokenKind::True);
+>         assert_eq!(tokens[1].kind, TokenKind::False);
+>         assert_eq!(tokens[2].kind, TokenKind::Nil);
+>     }
+>
+>     #[test]
+>     fn lex_complex_expression() {
+>         let mut lexer = Lexer::new("hp + 10 * 2 >= max_hp && !dead");
+>         let tokens = lexer.scan_tokens().unwrap();
+>         let kinds: Vec<_> = tokens.iter().map(|t| &t.kind).collect();
+>         assert_eq!(
+>             kinds,
+>             vec![
+>                 &TokenKind::Ident("hp".to_string()),
+>                 &TokenKind::Plus,
+>                 &TokenKind::IntLit(10),
+>                 &TokenKind::Star,
+>                 &TokenKind::IntLit(2),
+>                 &TokenKind::GtEq,
+>                 &TokenKind::Ident("max_hp".to_string()),
+>                 &TokenKind::And,
+>                 &TokenKind::Bang,
+>                 &TokenKind::Ident("dead".to_string()),
+>                 &TokenKind::Eof,
+>             ]
+>         );
+>     }
+> }
+> ```
+>
+>
+> **`src/main.rs`** (final)
+>
+> ```rust
+> mod token;
+> mod lexer;
+>
+> use lexer::Lexer;
+>
+> fn main() {
+>     let source = r#"
+> // A dungeon trap room
+> let hp = 100
+> let trap_armed = true
+>
+> if trap_armed {
+>     hp = hp - 15
+>     print("Ouch! HP: {hp}")
+> }
+> "#;
+>
+>     let mut lex = Lexer::new(source);
+>     match lex.scan_tokens() {
+>         Ok(tokens) => {
+>             for tok in &tokens {
+>                 println!("{:?}", tok);
+>             }
+>             println!("\n--- {} runes carved ---", tokens.len());
+>         }
+>         Err(e) => eprintln!("Miscast spell: {}", e),
+>     }
+> }
+> ```
 
 ---
 

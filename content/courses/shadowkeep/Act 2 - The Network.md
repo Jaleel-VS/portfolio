@@ -2,6 +2,8 @@
 
 > *You thought you were alone in Shadowkeep. You were wrong.*
 
+Act 1 gave you a working single-player game. Now we're going to transform it into a multiplayer server. The game logic you built — rooms, items, monsters, combat — all survives. What changes is *how players connect*. Instead of stdin, they'll connect over TCP. Think of Act 1 as building the engine; Act 2 is building the chassis around it.
+
 In Act 1, you built a single-player text adventure — one brave soul exploring a haunted castle. But horror is better shared. In this act, you'll transform Shadowkeep into a **multiplayer server**. Multiple players will connect over TCP, explore the same world, see each other, and communicate in real time.
 
 By the end of this act, you'll understand:
@@ -33,7 +35,8 @@ All code in this act uses **only the Rust standard library** (`std::net`, `std::
 
 Your Act 1 server handles one connection, then stops — useless for a multiplayer game. OS threads are the simplest way to handle multiple connections simultaneously, and understanding them is essential before you can appreciate why async (Act 3) exists. Every player gets their own thread, their own execution context, their own line into the darkness.
 
-**Difficulty:** Medium (30min–1h)
+*Difficulty: Medium (30min–1h)*
+
 
 ### Story Beat
 
@@ -213,94 +216,90 @@ Type `quit` in either terminal to disconnect cleanly.
 
 **Python comparison:** Python has threads too (`threading.Thread`), but the GIL (Global Interpreter Lock) means only one thread runs Python code at a time. Rust threads are real OS threads with true parallelism — no GIL.
 
-**TypeScript comparison:** Node.js is single-threaded with an event loop. You'd use `async/await` to handle multiple connections. Rust can do async too (with `tokio`), but OS threads are simpler to understand and perfectly fine for our scale.
-
 **When to use threads vs async in Rust:**
 - Threads: simpler code, fine for dozens to hundreds of connections
 - Async (`tokio`): better for thousands of connections, but more complex
 - We're building a horror game, not AWS — threads are perfect
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> **Forgetting `move`:**
+> ```rust
+> // WON'T COMPILE:
+> thread::spawn(|| {
+>     handle_haunting(stream); // error: closure may outlive the current function
+> });
+> ```
+> The compiler tells you exactly what's wrong. Add `move`.
+>
+> **Not cloning the stream for read/write:**
+> ```rust
+> // WON'T WORK — can't read and write the same stream without two handles:
+> let reader = BufReader::new(&stream); // borrows stream
+> stream.write_all(b"hello"); // can't write — stream is borrowed by reader
+> ```
+> Use `try_clone()` to get a second handle to the same socket.
+>
+> Each thread now handles its own player, but they're all strangers in separate rooms — no shared world, no awareness of each other. The castle needs a single truth that every thread can see and modify.
 
-**Forgetting `move`:**
-```rust
-// WON'T COMPILE:
-thread::spawn(|| {
-    handle_haunting(stream); // error: closure may outlive the current function
-});
-```
-The compiler tells you exactly what's wrong. Add `move`.
-
-**Not cloning the stream for read/write:**
-```rust
-// WON'T WORK — can't read and write the same stream without two handles:
-let reader = BufReader::new(&stream); // borrows stream
-stream.write_all(b"hello"); // can't write — stream is borrowed by reader
-```
-Use `try_clone()` to get a second handle to the same socket.
-
-Each thread now handles its own player, but they're all strangers in separate rooms — no shared world, no awareness of each other. The castle needs a single truth that every thread can see and modify.
-
-### Checkpoint Code
-
-```rust
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::thread;
-
-fn handle_haunting(stream: TcpStream) {
-    let peer = stream.peer_addr().unwrap();
-    println!("[server] A soul arrives from {}", peer);
-
-    let mut writer = stream.try_clone().unwrap();
-    let reader = BufReader::new(stream);
-
-    let _ = writer.write_all(b"You push open the heavy door of Shadowkeep...\r\n");
-    let _ = writer.write_all(b"The air is thick with dread.\r\n");
-    let _ = writer.write_all(b"> ");
-    let _ = writer.flush();
-
-    for line in reader.lines() {
-        match line {
-            Ok(input) => {
-                let input = input.trim().to_string();
-                if input.is_empty() {
-                    let _ = writer.write_all(b"> ");
-                    let _ = writer.flush();
-                    continue;
-                }
-                if input == "quit" {
-                    let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
-                    let _ = writer.flush();
-                    break;
-                }
-                let response = format!("The walls whisper back: \"{}\"\r\n> ", input);
-                let _ = writer.write_all(response.as_bytes());
-                let _ = writer.flush();
-            }
-            Err(_) => break,
-        }
-    }
-
-    println!("[server] The soul from {} has departed", peer);
-}
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Shadowkeep awaits on port 7878...");
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                thread::spawn(move || {
-                    handle_haunting(stream);
-                });
-            }
-            Err(e) => eprintln!("[server] Failed to accept connection: {}", e),
-        }
-    }
-}
-```
+> [!check] Checkpoint
+> ```rust
+> use std::io::{BufRead, BufReader, Write};
+> use std::net::{TcpListener, TcpStream};
+> use std::thread;
+>
+> fn handle_haunting(stream: TcpStream) {
+>     let peer = stream.peer_addr().unwrap();
+>     println!("[server] A soul arrives from {}", peer);
+>
+>     let mut writer = stream.try_clone().unwrap();
+>     let reader = BufReader::new(stream);
+>
+>     let _ = writer.write_all(b"You push open the heavy door of Shadowkeep...\r\n");
+>     let _ = writer.write_all(b"The air is thick with dread.\r\n");
+>     let _ = writer.write_all(b"> ");
+>     let _ = writer.flush();
+>
+>     for line in reader.lines() {
+>         match line {
+>             Ok(input) => {
+>                 let input = input.trim().to_string();
+>                 if input.is_empty() {
+>                     let _ = writer.write_all(b"> ");
+>                     let _ = writer.flush();
+>                     continue;
+>                 }
+>                 if input == "quit" {
+>                     let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
+>                     let _ = writer.flush();
+>                     break;
+>                 }
+>                 let response = format!("The walls whisper back: \"{}\"\r\n> ", input);
+>                 let _ = writer.write_all(response.as_bytes());
+>                 let _ = writer.flush();
+>             }
+>             Err(_) => break,
+>         }
+>     }
+>
+>     println!("[server] The soul from {} has departed", peer);
+> }
+>
+> fn main() {
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     for stream in listener.incoming() {
+>         match stream {
+>             Ok(stream) => {
+>                 thread::spawn(move || {
+>                     handle_haunting(stream);
+>                 });
+>             }
+>             Err(e) => eprintln!("[server] Failed to accept connection: {}", e),
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -308,7 +307,8 @@ fn main() {
 
 Threads without shared state are just parallel echo servers — each player trapped in their own private castle. The moment you want players to see each other, you need shared mutable state, and that's where most languages let you shoot yourself in the foot. Rust's `Arc<Mutex<T>>` pattern makes shared state explicit and safe — the compiler won't let two threads corrupt the same data.
 
-**Difficulty:** Medium (30min–1h)
+*Difficulty: Medium (30min–1h)*
+
 
 ### Story Beat
 
@@ -573,185 +573,180 @@ Souls present: 1
 
 The count updates because both threads share the same `GameState` through `Arc<Mutex<>>`.
 
-### Rust Aside: `Arc<Mutex<T>>` vs Python/TS
+### Rust Aside: `Arc<Mutex<T>>` vs Python
 
 **Python:** You'd use `threading.Lock()` with a global variable. Python's GIL already prevents true data races, but you still need locks for logical consistency. Rust's compiler *forces* you to use `Mutex` — you literally cannot share mutable data across threads without it.
 
-**TypeScript:** Node.js is single-threaded, so you never need locks. If you use Worker Threads, you'd use `SharedArrayBuffer` + `Atomics`. Rust's approach is safer — the type system prevents you from forgetting the lock.
-
 **Why `Arc` and not `Rc`?** `Rc` (Reference Counted) is single-threaded — it uses non-atomic operations for speed. `Arc` (Atomically Reference Counted) uses atomic CPU instructions, making it safe across threads but slightly slower. The compiler won't let you send `Rc` to another thread.
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> **Holding the lock too long (deadlock risk):**
+> ```rust
+> // BAD — lock held during slow network I/O:
+> let game = state.lock().unwrap();
+> writer.write_all(format!("{}", game.describe_room("crypt")).as_bytes()); // slow!
+> // Other threads are blocked the entire time the write is happening
+> ```
+>
+> ```rust
+> // GOOD — copy what you need, then drop the lock:
+> let description = {
+>     let game = state.lock().unwrap();
+>     game.describe_room("crypt").unwrap_or("").to_string()
+> }; // lock dropped here
+> writer.write_all(description.as_bytes()); // other threads aren't blocked
+> ```
+>
+> **Forgetting that `lock()` can fail:**
+> `lock()` returns `Result` because it fails if another thread panicked while holding the lock (a "poisoned" mutex). In a game server, `.unwrap()` is fine — if a thread panics, something is seriously wrong and crashing is reasonable.
+>
+> Players can see occupancy counts change in real time. But seeing a number tick up isn't the same as hearing another soul scream — you need a way to send messages to *all* connected players at once.
 
-**Holding the lock too long (deadlock risk):**
-```rust
-// BAD — lock held during slow network I/O:
-let game = state.lock().unwrap();
-writer.write_all(format!("{}", game.describe_room("crypt")).as_bytes()); // slow!
-// Other threads are blocked the entire time the write is happening
-```
-
-```rust
-// GOOD — copy what you need, then drop the lock:
-let description = {
-    let game = state.lock().unwrap();
-    game.describe_room("crypt").unwrap_or("").to_string()
-}; // lock dropped here
-writer.write_all(description.as_bytes()); // other threads aren't blocked
-```
-
-**Forgetting that `lock()` can fail:**
-`lock()` returns `Result` because it fails if another thread panicked while holding the lock (a "poisoned" mutex). In a game server, `.unwrap()` is fine — if a thread panics, something is seriously wrong and crashing is reasonable.
-
-Players can see occupancy counts change in real time. But seeing a number tick up isn't the same as hearing another soul scream — you need a way to send messages to *all* connected players at once.
-
-### Checkpoint Code
-
-```rust
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::{Arc, Mutex};
-use std::thread;
-
-struct GameState {
-    rooms: HashMap<String, String>,
-    occupancy: HashMap<String, usize>,
-}
-
-impl GameState {
-    fn new() -> Self {
-        let mut rooms = HashMap::new();
-        rooms.insert(
-            "entrance_hall".to_string(),
-            "A vast hall lit by flickering torches. Shadows dance on the walls.".to_string(),
-        );
-        rooms.insert(
-            "crypt".to_string(),
-            "Cold stone tombs line the walls. Something scratches from inside.".to_string(),
-        );
-        rooms.insert(
-            "library".to_string(),
-            "Dusty tomes fill the shelves. Pages turn by themselves.".to_string(),
-        );
-        rooms.insert(
-            "dungeon".to_string(),
-            "Chains hang from the ceiling. The floor is sticky.".to_string(),
-        );
-        rooms.insert(
-            "tower".to_string(),
-            "A spiral staircase leads to a room with a view of endless fog.".to_string(),
-        );
-
-        let mut occupancy = HashMap::new();
-        for room_name in rooms.keys() {
-            occupancy.insert(room_name.clone(), 0);
-        }
-
-        GameState { rooms, occupancy }
-    }
-
-    fn describe_room(&self, room: &str) -> Option<&str> {
-        self.rooms.get(room).map(|s| s.as_str())
-    }
-
-    fn player_enters(&mut self, room: &str) -> usize {
-        let count = self.occupancy.entry(room.to_string()).or_insert(0);
-        *count += 1;
-        *count
-    }
-
-    fn player_leaves(&mut self, room: &str) -> usize {
-        let count = self.occupancy.entry(room.to_string()).or_insert(0);
-        if *count > 0 {
-            *count -= 1;
-        }
-        *count
-    }
-}
-
-fn handle_haunting(stream: TcpStream, state: Arc<Mutex<GameState>>) {
-    let peer = stream.peer_addr().unwrap();
-    println!("[server] A soul arrives from {}", peer);
-
-    let mut writer = stream.try_clone().unwrap();
-    let reader = BufReader::new(stream);
-
-    let current_room = "entrance_hall".to_string();
-
-    {
-        let mut game = state.lock().unwrap();
-        let count = game.player_enters(&current_room);
-        let desc = game.describe_room(&current_room).unwrap_or("Void.");
-        let welcome = format!(
-            "You push open the heavy door of Shadowkeep...\r\n\
-             {}\r\n\
-             There are {} soul(s) in this room.\r\n> ",
-            desc, count
-        );
-        let _ = writer.write_all(welcome.as_bytes());
-        let _ = writer.flush();
-    }
-
-    for line in reader.lines() {
-        match line {
-            Ok(input) => {
-                let input = input.trim().to_string();
-                if input.is_empty() {
-                    let _ = writer.write_all(b"> ");
-                    let _ = writer.flush();
-                    continue;
-                }
-                if input == "quit" {
-                    let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
-                    let _ = writer.flush();
-                    break;
-                }
-                if input == "look" {
-                    let game = state.lock().unwrap();
-                    let desc = game.describe_room(&current_room).unwrap_or("Void.");
-                    let count = game.occupancy.get(&current_room).copied().unwrap_or(0);
-                    let msg = format!("{}\r\nSouls present: {}\r\n> ", desc, count);
-                    let _ = writer.write_all(msg.as_bytes());
-                    let _ = writer.flush();
-                } else {
-                    let response = format!("The walls whisper back: \"{}\"\r\n> ", input);
-                    let _ = writer.write_all(response.as_bytes());
-                    let _ = writer.flush();
-                }
-            }
-            Err(_) => break,
-        }
-    }
-
-    {
-        let mut game = state.lock().unwrap();
-        game.player_leaves(&current_room);
-    }
-
-    println!("[server] The soul from {} has departed", peer);
-}
-
-fn main() {
-    let state = Arc::new(Mutex::new(GameState::new()));
-
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Shadowkeep awaits on port 7878...");
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                let state = Arc::clone(&state);
-                thread::spawn(move || {
-                    handle_haunting(stream, state);
-                });
-            }
-            Err(e) => eprintln!("[server] Failed to accept connection: {}", e),
-        }
-    }
-}
-```
-
+> [!check] Checkpoint
+> ```rust
+> use std::collections::HashMap;
+> use std::io::{BufRead, BufReader, Write};
+> use std::net::{TcpListener, TcpStream};
+> use std::sync::{Arc, Mutex};
+> use std::thread;
+>
+> struct GameState {
+>     rooms: HashMap<String, String>,
+>     occupancy: HashMap<String, usize>,
+> }
+>
+> impl GameState {
+>     fn new() -> Self {
+>         let mut rooms = HashMap::new();
+>         rooms.insert(
+>             "entrance_hall".to_string(),
+>             "A vast hall lit by flickering torches. Shadows dance on the walls.".to_string(),
+>         );
+>         rooms.insert(
+>             "crypt".to_string(),
+>             "Cold stone tombs line the walls. Something scratches from inside.".to_string(),
+>         );
+>         rooms.insert(
+>             "library".to_string(),
+>             "Dusty tomes fill the shelves. Pages turn by themselves.".to_string(),
+>         );
+>         rooms.insert(
+>             "dungeon".to_string(),
+>             "Chains hang from the ceiling. The floor is sticky.".to_string(),
+>         );
+>         rooms.insert(
+>             "tower".to_string(),
+>             "A spiral staircase leads to a room with a view of endless fog.".to_string(),
+>         );
+>
+>         let mut occupancy = HashMap::new();
+>         for room_name in rooms.keys() {
+>             occupancy.insert(room_name.clone(), 0);
+>         }
+>
+>         GameState { rooms, occupancy }
+>     }
+>
+>     fn describe_room(&self, room: &str) -> Option<&str> {
+>         self.rooms.get(room).map(|s| s.as_str())
+>     }
+>
+>     fn player_enters(&mut self, room: &str) -> usize {
+>         let count = self.occupancy.entry(room.to_string()).or_insert(0);
+>         *count += 1;
+>         *count
+>     }
+>
+>     fn player_leaves(&mut self, room: &str) -> usize {
+>         let count = self.occupancy.entry(room.to_string()).or_insert(0);
+>         if *count > 0 {
+>             *count -= 1;
+>         }
+>         *count
+>     }
+> }
+>
+> fn handle_haunting(stream: TcpStream, state: Arc<Mutex<GameState>>) {
+>     let peer = stream.peer_addr().unwrap();
+>     println!("[server] A soul arrives from {}", peer);
+>
+>     let mut writer = stream.try_clone().unwrap();
+>     let reader = BufReader::new(stream);
+>
+>     let current_room = "entrance_hall".to_string();
+>
+>     {
+>         let mut game = state.lock().unwrap();
+>         let count = game.player_enters(&current_room);
+>         let desc = game.describe_room(&current_room).unwrap_or("Void.");
+>         let welcome = format!(
+>             "You push open the heavy door of Shadowkeep...\r\n\
+>              {}\r\n\
+>              There are {} soul(s) in this room.\r\n> ",
+>             desc, count
+>         );
+>         let _ = writer.write_all(welcome.as_bytes());
+>         let _ = writer.flush();
+>     }
+>
+>     for line in reader.lines() {
+>         match line {
+>             Ok(input) => {
+>                 let input = input.trim().to_string();
+>                 if input.is_empty() {
+>                     let _ = writer.write_all(b"> ");
+>                     let _ = writer.flush();
+>                     continue;
+>                 }
+>                 if input == "quit" {
+>                     let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
+>                     let _ = writer.flush();
+>                     break;
+>                 }
+>                 if input == "look" {
+>                     let game = state.lock().unwrap();
+>                     let desc = game.describe_room(&current_room).unwrap_or("Void.");
+>                     let count = game.occupancy.get(&current_room).copied().unwrap_or(0);
+>                     let msg = format!("{}\r\nSouls present: {}\r\n> ", desc, count);
+>                     let _ = writer.write_all(msg.as_bytes());
+>                     let _ = writer.flush();
+>                 } else {
+>                     let response = format!("The walls whisper back: \"{}\"\r\n> ", input);
+>                     let _ = writer.write_all(response.as_bytes());
+>                     let _ = writer.flush();
+>                 }
+>             }
+>             Err(_) => break,
+>         }
+>     }
+>
+>     {
+>         let mut game = state.lock().unwrap();
+>         game.player_leaves(&current_room);
+>     }
+>
+>     println!("[server] The soul from {} has departed", peer);
+> }
+>
+> fn main() {
+>     let state = Arc::new(Mutex::new(GameState::new()));
+>
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     for stream in listener.incoming() {
+>         match stream {
+>             Ok(stream) => {
+>                 let state = Arc::clone(&state);
+>                 thread::spawn(move || {
+>                     handle_haunting(stream, state);
+>                 });
+>             }
+>             Err(e) => eprintln!("[server] Failed to accept connection: {}", e),
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -759,7 +754,8 @@ fn main() {
 
 Players share a world, but they can't talk to each other. Broadcasting — sending a message to every connected player — is the fundamental operation of any multiplayer server. You're building the nervous system of the castle: when something happens, every soul must know. This pattern (a registry of write handles, iterated on events) is the same one used by chat servers, game lobbies, and notification systems everywhere.
 
-**Difficulty:** Medium (30min–1h)
+*Difficulty: Medium (30min–1h)*
+
 
 ### Story Beat
 
@@ -1025,235 +1021,233 @@ Disconnect Terminal 3 (Ctrl+C). Terminal 2 sees:
 
 Rust has `std::sync::mpsc` channels for message passing between threads. You *could* use channels instead of shared `Vec<TcpStream>` — each thread would have a receiver, and broadcasting would send to all channels. That's a valid design (and arguably more "Rustic"), but for a small game server, the `Arc<Mutex<HashMap<id, TcpStream>>>` approach is simpler and more direct. We'll keep it.
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> **Deadlock from nested locks:**
+> ```rust
+> // DEADLOCK — same thread tries to lock twice:
+> let game = state.lock().unwrap();
+> // ... some code that calls another function ...
+> let game2 = state.lock().unwrap(); // BLOCKS FOREVER — we already hold the lock!
+> ```
+> `Mutex` in Rust is not reentrant. If the same thread calls `lock()` while already holding the lock, it deadlocks. Always ensure you drop the guard before locking again.
+>
+> **Broadcasting while holding a personal writer:**
+> The broadcast writes to all streams including the sender's. This is fine — `TcpStream` writes are independent of reads, and `try_clone()` handles give us separate write access.
+>
+> Players can shout into the void and be heard. But "Soul #3" is a cold way to address someone in a haunted castle — the next step is giving these souls names.
 
-**Deadlock from nested locks:**
-```rust
-// DEADLOCK — same thread tries to lock twice:
-let game = state.lock().unwrap();
-// ... some code that calls another function ...
-let game2 = state.lock().unwrap(); // BLOCKS FOREVER — we already hold the lock!
-```
-`Mutex` in Rust is not reentrant. If the same thread calls `lock()` while already holding the lock, it deadlocks. Always ensure you drop the guard before locking again.
-
-**Broadcasting while holding a personal writer:**
-The broadcast writes to all streams including the sender's. This is fine — `TcpStream` writes are independent of reads, and `try_clone()` handles give us separate write access.
-
-Players can shout into the void and be heard. But "Soul #3" is a cold way to address someone in a haunted castle — the next step is giving these souls names.
-
-### Checkpoint Code
-
-```rust
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
-
-static NEXT_SOUL_ID: AtomicUsize = AtomicUsize::new(1);
-
-struct GameState {
-    rooms: HashMap<String, String>,
-    occupancy: HashMap<String, usize>,
-    writers: HashMap<usize, TcpStream>,
-}
-
-impl GameState {
-    fn new() -> Self {
-        let mut rooms = HashMap::new();
-        rooms.insert(
-            "entrance_hall".to_string(),
-            "A vast hall lit by flickering torches. Shadows dance on the walls.".to_string(),
-        );
-        rooms.insert(
-            "crypt".to_string(),
-            "Cold stone tombs line the walls. Something scratches from inside.".to_string(),
-        );
-        rooms.insert(
-            "library".to_string(),
-            "Dusty tomes fill the shelves. Pages turn by themselves.".to_string(),
-        );
-        rooms.insert(
-            "dungeon".to_string(),
-            "Chains hang from the ceiling. The floor is sticky.".to_string(),
-        );
-        rooms.insert(
-            "tower".to_string(),
-            "A spiral staircase leads to a room with a view of endless fog.".to_string(),
-        );
-
-        let mut occupancy = HashMap::new();
-        for room_name in rooms.keys() {
-            occupancy.insert(room_name.clone(), 0);
-        }
-
-        GameState {
-            rooms,
-            occupancy,
-            writers: HashMap::new(),
-        }
-    }
-
-    fn describe_room(&self, room: &str) -> Option<&str> {
-        self.rooms.get(room).map(|s| s.as_str())
-    }
-
-    fn player_enters(&mut self, room: &str) -> usize {
-        let count = self.occupancy.entry(room.to_string()).or_insert(0);
-        *count += 1;
-        *count
-    }
-
-    fn player_leaves(&mut self, room: &str) -> usize {
-        let count = self.occupancy.entry(room.to_string()).or_insert(0);
-        if *count > 0 {
-            *count -= 1;
-        }
-        *count
-    }
-
-    fn add_writer(&mut self, soul_id: usize, writer: TcpStream) {
-        self.writers.insert(soul_id, writer);
-    }
-
-    fn remove_writer(&mut self, soul_id: usize) {
-        self.writers.remove(&soul_id);
-    }
-
-    fn broadcast(&mut self, message: &str) {
-        let mut dead_souls: Vec<usize> = Vec::new();
-        for (&soul_id, writer) in self.writers.iter_mut() {
-            if writer.write_all(message.as_bytes()).is_err()
-                || writer.flush().is_err()
-            {
-                dead_souls.push(soul_id);
-            }
-        }
-        for soul_id in dead_souls {
-            self.writers.remove(&soul_id);
-        }
-    }
-
-    fn broadcast_except(&mut self, exclude_id: usize, message: &str) {
-        let mut dead_souls: Vec<usize> = Vec::new();
-        for (&soul_id, writer) in self.writers.iter_mut() {
-            if soul_id == exclude_id {
-                continue;
-            }
-            if writer.write_all(message.as_bytes()).is_err()
-                || writer.flush().is_err()
-            {
-                dead_souls.push(soul_id);
-            }
-        }
-        for soul_id in dead_souls {
-            self.writers.remove(&soul_id);
-        }
-    }
-}
-
-fn handle_haunting(stream: TcpStream, state: Arc<Mutex<GameState>>) {
-    let peer = stream.peer_addr().unwrap();
-    let soul_id = NEXT_SOUL_ID.fetch_add(1, Ordering::Relaxed);
-    println!("[server] Soul #{} arrives from {}", soul_id, peer);
-
-    let personal_writer = stream.try_clone().unwrap();
-    let broadcast_writer = stream.try_clone().unwrap();
-    let reader = BufReader::new(stream);
-
-    let mut writer = personal_writer;
-    let current_room = "entrance_hall".to_string();
-
-    {
-        let mut game = state.lock().unwrap();
-        game.add_writer(soul_id, broadcast_writer);
-        let count = game.player_enters(&current_room);
-        let desc = game.describe_room(&current_room).unwrap_or("Void.");
-        game.broadcast_except(
-            soul_id,
-            &format!("\r\n[A new soul (#{}) has entered Shadowkeep...]\r\n> ", soul_id),
-        );
-        let welcome = format!(
-            "You are Soul #{}.\r\n\
-             You push open the heavy door of Shadowkeep...\r\n\
-             {}\r\n\
-             There are {} soul(s) in this room.\r\n> ",
-            soul_id, desc, count
-        );
-        let _ = writer.write_all(welcome.as_bytes());
-        let _ = writer.flush();
-    }
-
-    for line in reader.lines() {
-        match line {
-            Ok(input) => {
-                let input = input.trim().to_string();
-                if input.is_empty() {
-                    let _ = writer.write_all(b"> ");
-                    let _ = writer.flush();
-                    continue;
-                }
-                if input == "quit" {
-                    let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
-                    let _ = writer.flush();
-                    break;
-                }
-                if input == "look" {
-                    let game = state.lock().unwrap();
-                    let desc = game.describe_room(&current_room).unwrap_or("Void.");
-                    let count = game.occupancy.get(&current_room).copied().unwrap_or(0);
-                    let msg = format!("{}\r\nSouls present: {}\r\n> ", desc, count);
-                    let _ = writer.write_all(msg.as_bytes());
-                    let _ = writer.flush();
-                } else if input.starts_with("shout ") {
-                    let message = &input[6..];
-                    let mut game = state.lock().unwrap();
-                    game.broadcast(&format!(
-                        "\r\n[Soul #{} shouts: \"{}\"]\r\n> ",
-                        soul_id, message
-                    ));
-                } else {
-                    let response = format!("The walls whisper back: \"{}\"\r\n> ", input);
-                    let _ = writer.write_all(response.as_bytes());
-                    let _ = writer.flush();
-                }
-            }
-            Err(_) => break,
-        }
-    }
-
-    {
-        let mut game = state.lock().unwrap();
-        game.player_leaves(&current_room);
-        game.remove_writer(soul_id);
-        game.broadcast(&format!(
-            "\r\n[Soul #{} has been claimed by the darkness...]\r\n> ",
-            soul_id,
-        ));
-    }
-
-    println!("[server] Soul #{} has departed", soul_id);
-}
-
-fn main() {
-    let state = Arc::new(Mutex::new(GameState::new()));
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Shadowkeep awaits on port 7878...");
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                let state = Arc::clone(&state);
-                thread::spawn(move || {
-                    handle_haunting(stream, state);
-                });
-            }
-            Err(e) => eprintln!("[server] Failed to accept connection: {}", e),
-        }
-    }
-}
-```
+> [!check] Checkpoint
+> ```rust
+> use std::collections::HashMap;
+> use std::io::{BufRead, BufReader, Write};
+> use std::net::{TcpListener, TcpStream};
+> use std::sync::atomic::{AtomicUsize, Ordering};
+> use std::sync::{Arc, Mutex};
+> use std::thread;
+>
+> static NEXT_SOUL_ID: AtomicUsize = AtomicUsize::new(1);
+>
+> struct GameState {
+>     rooms: HashMap<String, String>,
+>     occupancy: HashMap<String, usize>,
+>     writers: HashMap<usize, TcpStream>,
+> }
+>
+> impl GameState {
+>     fn new() -> Self {
+>         let mut rooms = HashMap::new();
+>         rooms.insert(
+>             "entrance_hall".to_string(),
+>             "A vast hall lit by flickering torches. Shadows dance on the walls.".to_string(),
+>         );
+>         rooms.insert(
+>             "crypt".to_string(),
+>             "Cold stone tombs line the walls. Something scratches from inside.".to_string(),
+>         );
+>         rooms.insert(
+>             "library".to_string(),
+>             "Dusty tomes fill the shelves. Pages turn by themselves.".to_string(),
+>         );
+>         rooms.insert(
+>             "dungeon".to_string(),
+>             "Chains hang from the ceiling. The floor is sticky.".to_string(),
+>         );
+>         rooms.insert(
+>             "tower".to_string(),
+>             "A spiral staircase leads to a room with a view of endless fog.".to_string(),
+>         );
+>
+>         let mut occupancy = HashMap::new();
+>         for room_name in rooms.keys() {
+>             occupancy.insert(room_name.clone(), 0);
+>         }
+>
+>         GameState {
+>             rooms,
+>             occupancy,
+>             writers: HashMap::new(),
+>         }
+>     }
+>
+>     fn describe_room(&self, room: &str) -> Option<&str> {
+>         self.rooms.get(room).map(|s| s.as_str())
+>     }
+>
+>     fn player_enters(&mut self, room: &str) -> usize {
+>         let count = self.occupancy.entry(room.to_string()).or_insert(0);
+>         *count += 1;
+>         *count
+>     }
+>
+>     fn player_leaves(&mut self, room: &str) -> usize {
+>         let count = self.occupancy.entry(room.to_string()).or_insert(0);
+>         if *count > 0 {
+>             *count -= 1;
+>         }
+>         *count
+>     }
+>
+>     fn add_writer(&mut self, soul_id: usize, writer: TcpStream) {
+>         self.writers.insert(soul_id, writer);
+>     }
+>
+>     fn remove_writer(&mut self, soul_id: usize) {
+>         self.writers.remove(&soul_id);
+>     }
+>
+>     fn broadcast(&mut self, message: &str) {
+>         let mut dead_souls: Vec<usize> = Vec::new();
+>         for (&soul_id, writer) in self.writers.iter_mut() {
+>             if writer.write_all(message.as_bytes()).is_err()
+>                 || writer.flush().is_err()
+>             {
+>                 dead_souls.push(soul_id);
+>             }
+>         }
+>         for soul_id in dead_souls {
+>             self.writers.remove(&soul_id);
+>         }
+>     }
+>
+>     fn broadcast_except(&mut self, exclude_id: usize, message: &str) {
+>         let mut dead_souls: Vec<usize> = Vec::new();
+>         for (&soul_id, writer) in self.writers.iter_mut() {
+>             if soul_id == exclude_id {
+>                 continue;
+>             }
+>             if writer.write_all(message.as_bytes()).is_err()
+>                 || writer.flush().is_err()
+>             {
+>                 dead_souls.push(soul_id);
+>             }
+>         }
+>         for soul_id in dead_souls {
+>             self.writers.remove(&soul_id);
+>         }
+>     }
+> }
+>
+> fn handle_haunting(stream: TcpStream, state: Arc<Mutex<GameState>>) {
+>     let peer = stream.peer_addr().unwrap();
+>     let soul_id = NEXT_SOUL_ID.fetch_add(1, Ordering::Relaxed);
+>     println!("[server] Soul #{} arrives from {}", soul_id, peer);
+>
+>     let personal_writer = stream.try_clone().unwrap();
+>     let broadcast_writer = stream.try_clone().unwrap();
+>     let reader = BufReader::new(stream);
+>
+>     let mut writer = personal_writer;
+>     let current_room = "entrance_hall".to_string();
+>
+>     {
+>         let mut game = state.lock().unwrap();
+>         game.add_writer(soul_id, broadcast_writer);
+>         let count = game.player_enters(&current_room);
+>         let desc = game.describe_room(&current_room).unwrap_or("Void.");
+>         game.broadcast_except(
+>             soul_id,
+>             &format!("\r\n[A new soul (#{}) has entered Shadowkeep...]\r\n> ", soul_id),
+>         );
+>         let welcome = format!(
+>             "You are Soul #{}.\r\n\
+>              You push open the heavy door of Shadowkeep...\r\n\
+>              {}\r\n\
+>              There are {} soul(s) in this room.\r\n> ",
+>             soul_id, desc, count
+>         );
+>         let _ = writer.write_all(welcome.as_bytes());
+>         let _ = writer.flush();
+>     }
+>
+>     for line in reader.lines() {
+>         match line {
+>             Ok(input) => {
+>                 let input = input.trim().to_string();
+>                 if input.is_empty() {
+>                     let _ = writer.write_all(b"> ");
+>                     let _ = writer.flush();
+>                     continue;
+>                 }
+>                 if input == "quit" {
+>                     let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
+>                     let _ = writer.flush();
+>                     break;
+>                 }
+>                 if input == "look" {
+>                     let game = state.lock().unwrap();
+>                     let desc = game.describe_room(&current_room).unwrap_or("Void.");
+>                     let count = game.occupancy.get(&current_room).copied().unwrap_or(0);
+>                     let msg = format!("{}\r\nSouls present: {}\r\n> ", desc, count);
+>                     let _ = writer.write_all(msg.as_bytes());
+>                     let _ = writer.flush();
+>                 } else if input.starts_with("shout ") {
+>                     let message = &input[6..];
+>                     let mut game = state.lock().unwrap();
+>                     game.broadcast(&format!(
+>                         "\r\n[Soul #{} shouts: \"{}\"]\r\n> ",
+>                         soul_id, message
+>                     ));
+>                 } else {
+>                     let response = format!("The walls whisper back: \"{}\"\r\n> ", input);
+>                     let _ = writer.write_all(response.as_bytes());
+>                     let _ = writer.flush();
+>                 }
+>             }
+>             Err(_) => break,
+>         }
+>     }
+>
+>     {
+>         let mut game = state.lock().unwrap();
+>         game.player_leaves(&current_room);
+>         game.remove_writer(soul_id);
+>         game.broadcast(&format!(
+>             "\r\n[Soul #{} has been claimed by the darkness...]\r\n> ",
+>             soul_id,
+>         ));
+>     }
+>
+>     println!("[server] Soul #{} has departed", soul_id);
+> }
+>
+> fn main() {
+>     let state = Arc::new(Mutex::new(GameState::new()));
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     for stream in listener.incoming() {
+>         match stream {
+>             Ok(stream) => {
+>                 let state = Arc::clone(&state);
+>                 thread::spawn(move || {
+>                     handle_haunting(stream, state);
+>                 });
+>             }
+>             Err(e) => eprintln!("[server] Failed to accept connection: {}", e),
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -1261,7 +1255,8 @@ fn main() {
 
 Anonymous soul IDs are impersonal — horror is more effective when you know the name of the person screaming. A login flow is also your first taste of a multi-step TCP protocol: prompt, read, validate, then enter the main loop. This pattern — a handshake before the session — appears in every networked application from SSH to HTTP.
 
-**Difficulty:** Easy (5–10min)
+*Difficulty: Easy (5–10min)*
+
 
 ### Story Beat
 
@@ -1536,15 +1531,267 @@ We use `read_line` for the login prompt (one line), then `lines()` for the game 
 
 Named players can see each other, but their shouts echo through the entire castle. Sometimes you want to whisper — to speak only to those standing beside you in the same dark room.
 
-### Checkpoint Code
-
-The full checkpoint is the Stage 13 checkpoint with these additions:
-- `PlayerInfo` struct
-- `players: HashMap<usize, PlayerInfo>` in `GameState`
-- `add_player`, `remove_player`, `player_name`, `souls_in_room` methods
-- Login flow at the start of `handle_haunting`
-- Player names in broadcast messages and `look` output
-
+> [!check] Checkpoint
+> ```rust
+> use std::collections::HashMap;
+> use std::io::{BufRead, BufReader, Write};
+> use std::net::{TcpListener, TcpStream};
+> use std::sync::atomic::{AtomicUsize, Ordering};
+> use std::sync::{Arc, Mutex};
+> use std::thread;
+>
+> static NEXT_SOUL_ID: AtomicUsize = AtomicUsize::new(1);
+>
+> struct PlayerInfo {
+>     name: String,
+>     current_room: String,
+> }
+>
+> struct GameState {
+>     rooms: HashMap<String, String>,
+>     occupancy: HashMap<String, usize>,
+>     writers: HashMap<usize, TcpStream>,
+>     players: HashMap<usize, PlayerInfo>,
+> }
+>
+> impl GameState {
+>     fn new() -> Self {
+>         let mut rooms = HashMap::new();
+>         rooms.insert(
+>             "entrance_hall".to_string(),
+>             "A vast hall lit by flickering torches. Shadows dance on the walls.".to_string(),
+>         );
+>         rooms.insert(
+>             "crypt".to_string(),
+>             "Cold stone tombs line the walls. Something scratches from inside.".to_string(),
+>         );
+>         rooms.insert(
+>             "library".to_string(),
+>             "Dusty tomes fill the shelves. Pages turn by themselves.".to_string(),
+>         );
+>         rooms.insert(
+>             "dungeon".to_string(),
+>             "Chains hang from the ceiling. The floor is sticky.".to_string(),
+>         );
+>         rooms.insert(
+>             "tower".to_string(),
+>             "A spiral staircase leads to a room with a view of endless fog.".to_string(),
+>         );
+>
+>         let mut occupancy = HashMap::new();
+>         for room_name in rooms.keys() {
+>             occupancy.insert(room_name.clone(), 0);
+>         }
+>
+>         GameState {
+>             rooms,
+>             occupancy,
+>             writers: HashMap::new(),
+>             players: HashMap::new(),
+>         }
+>     }
+>
+>     fn describe_room(&self, room: &str) -> Option<&str> {
+>         self.rooms.get(room).map(|s| s.as_str())
+>     }
+>
+>     fn player_enters(&mut self, room: &str) -> usize {
+>         let count = self.occupancy.entry(room.to_string()).or_insert(0);
+>         *count += 1;
+>         *count
+>     }
+>
+>     fn player_leaves(&mut self, room: &str) -> usize {
+>         let count = self.occupancy.entry(room.to_string()).or_insert(0);
+>         if *count > 0 { *count -= 1; }
+>         *count
+>     }
+>
+>     fn add_writer(&mut self, soul_id: usize, writer: TcpStream) {
+>         self.writers.insert(soul_id, writer);
+>     }
+>
+>     fn remove_writer(&mut self, soul_id: usize) { self.writers.remove(&soul_id); }
+>
+>     fn add_player(&mut self, soul_id: usize, name: String, room: String) {
+>         self.players.insert(soul_id, PlayerInfo { name, current_room: room });
+>     }
+>
+>     fn remove_player(&mut self, soul_id: usize) { self.players.remove(&soul_id); }
+>
+>     fn player_name(&self, soul_id: usize) -> &str {
+>         self.players.get(&soul_id).map(|p| p.name.as_str()).unwrap_or("Unknown")
+>     }
+>
+>     fn souls_in_room(&self, room: &str) -> Vec<(usize, String)> {
+>         self.players.iter()
+>             .filter(|(_, info)| info.current_room == room)
+>             .map(|(&id, info)| (id, info.name.clone()))
+>             .collect()
+>     }
+>
+>     fn broadcast(&mut self, message: &str) {
+>         let mut dead: Vec<usize> = Vec::new();
+>         for (&id, w) in self.writers.iter_mut() {
+>             if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
+>                 dead.push(id);
+>             }
+>         }
+>         for id in dead { self.writers.remove(&id); }
+>     }
+>
+>     fn broadcast_except(&mut self, exclude_id: usize, message: &str) {
+>         let mut dead: Vec<usize> = Vec::new();
+>         for (&id, w) in self.writers.iter_mut() {
+>             if id == exclude_id { continue; }
+>             if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
+>                 dead.push(id);
+>             }
+>         }
+>         for id in dead { self.writers.remove(&id); }
+>     }
+> }
+>
+> fn handle_haunting(stream: TcpStream, state: Arc<Mutex<GameState>>) {
+>     let peer = stream.peer_addr().unwrap();
+>     let soul_id = NEXT_SOUL_ID.fetch_add(1, Ordering::Relaxed);
+>     println!("[server] Soul #{} arrives from {}", soul_id, peer);
+>
+>     let personal_writer = stream.try_clone().unwrap();
+>     let broadcast_writer = stream.try_clone().unwrap();
+>     let mut reader = BufReader::new(stream);
+>     let mut writer = personal_writer;
+>
+>     // Login
+>     let _ = writer.write_all(b"The gates of Shadowkeep creak open...\r\n");
+>     let _ = writer.write_all(b"What is your name, wanderer? ");
+>     let _ = writer.flush();
+>
+>     let mut name_buf = String::new();
+>     match reader.read_line(&mut name_buf) {
+>         Ok(0) | Err(_) => {
+>             println!("[server] Soul #{} disconnected during login", soul_id);
+>             return;
+>         }
+>         Ok(_) => {}
+>     }
+>
+>     let player_name = name_buf.trim().to_string();
+>     if player_name.is_empty() {
+>         let _ = writer.write_all(b"The castle rejects the nameless.\r\n");
+>         let _ = writer.flush();
+>         return;
+>     }
+>
+>     let current_room = "entrance_hall".to_string();
+>
+>     {
+>         let mut game = state.lock().unwrap();
+>         game.add_writer(soul_id, broadcast_writer);
+>         game.add_player(soul_id, player_name.clone(), current_room.clone());
+>         let count = game.player_enters(&current_room);
+>         let desc = game.describe_room(&current_room).unwrap_or("Void.");
+>         game.broadcast_except(
+>             soul_id,
+>             &format!("\r\n[{} has entered Shadowkeep...]\r\n> ", player_name),
+>         );
+>         let others = game.souls_in_room(&current_room);
+>         let others_msg = if others.len() <= 1 {
+>             "You are alone.".to_string()
+>         } else {
+>             let names: Vec<&str> = others.iter()
+>                 .filter(|(id, _)| *id != soul_id)
+>                 .map(|(_, n)| n.as_str()).collect();
+>             format!("Also here: {}", names.join(", "))
+>         };
+>         let welcome = format!(
+>             "Welcome, {}.\r\n{}\r\n{}\r\n> ",
+>             player_name, desc, others_msg
+>         );
+>         let _ = writer.write_all(welcome.as_bytes());
+>         let _ = writer.flush();
+>     }
+>
+>     for line in reader.lines() {
+>         match line {
+>             Ok(input) => {
+>                 let input = input.trim().to_string();
+>                 if input.is_empty() {
+>                     let _ = writer.write_all(b"> ");
+>                     let _ = writer.flush();
+>                     continue;
+>                 }
+>                 if input == "quit" {
+>                     let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
+>                     let _ = writer.flush();
+>                     break;
+>                 }
+>                 if input == "look" {
+>                     let game = state.lock().unwrap();
+>                     let desc = game.describe_room(&current_room).unwrap_or("Void.");
+>                     let others = game.souls_in_room(&current_room);
+>                     let names: Vec<&str> = others.iter()
+>                         .filter(|(id, _)| *id != soul_id)
+>                         .map(|(_, n)| n.as_str()).collect();
+>                     let who = if names.is_empty() {
+>                         "You are alone.".to_string()
+>                     } else {
+>                         format!("Also here: {}", names.join(", "))
+>                     };
+>                     let msg = format!("{}\r\n{}\r\n> ", desc, who);
+>                     drop(game);
+>                     let _ = writer.write_all(msg.as_bytes());
+>                     let _ = writer.flush();
+>                 } else if input.starts_with("shout ") {
+>                     let message = &input[6..];
+>                     let mut game = state.lock().unwrap();
+>                     game.broadcast(&format!(
+>                         "\r\n[{} shouts: \"{}\"]\r\n> ",
+>                         player_name, message
+>                     ));
+>                 } else {
+>                     let response = format!(
+>                         "The walls whisper back: \"{}\"\r\n> ", input
+>                     );
+>                     let _ = writer.write_all(response.as_bytes());
+>                     let _ = writer.flush();
+>                 }
+>             }
+>             Err(_) => break,
+>         }
+>     }
+>
+>     {
+>         let mut game = state.lock().unwrap();
+>         game.player_leaves(&current_room);
+>         game.remove_writer(soul_id);
+>         game.remove_player(soul_id);
+>         game.broadcast(&format!(
+>             "\r\n[{} has been claimed by the darkness...]\r\n> ",
+>             player_name,
+>         ));
+>     }
+>     println!("[server] {} (#{}) has departed", player_name, soul_id);
+> }
+>
+> fn main() {
+>     let state = Arc::new(Mutex::new(GameState::new()));
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Shadowkeep awaits on port 7878...");
+>
+>     for stream in listener.incoming() {
+>         match stream {
+>             Ok(stream) => {
+>                 let state = Arc::clone(&state);
+>                 thread::spawn(move || {
+>                     handle_haunting(stream, state);
+>                 });
+>             }
+>             Err(e) => eprintln!("[server] Failed to accept connection: {}", e),
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -1552,7 +1799,8 @@ The full checkpoint is the Stage 13 checkpoint with these additions:
 
 Global shouts are useful for panic, but most communication should be local — whispers in the crypt shouldn't reach the tower. Room-scoped messaging is the foundation of spatial awareness in multiplayer games. It also forces you to think about filtering: not every message is for every player, and the server must decide who hears what.
 
-**Difficulty:** Medium (30min–1h)
+*Difficulty: Medium (30min–1h)*
+
 
 ### Story Beat
 
@@ -1733,23 +1981,21 @@ pub fn drop<T>(_x: T) {}
 
 It takes ownership of the value (moving it into the function), and since the function body is empty, the value is dropped immediately when the function returns. It's a zero-cost way to say "I'm done with this."
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> **Sending to the wrong scope:**
+> ```rust
+> // BUG — "say" should be room-only, not global:
+> game.broadcast(&format!("{} says: ...", name)); // everyone hears it!
+> ```
+> Use `broadcast_to_room` for `say`, `broadcast` for `shout`.
+>
+> Players can whisper and shout, but they're all trapped in the entrance hall. The castle has many rooms — it's time to let them wander through the darkness and see each other come and go.
 
-**Sending to the wrong scope:**
-```rust
-// BUG — "say" should be room-only, not global:
-game.broadcast(&format!("{} says: ...", name)); // everyone hears it!
-```
-Use `broadcast_to_room` for `say`, `broadcast` for `shout`.
-
-Players can whisper and shout, but they're all trapped in the entrance hall. The castle has many rooms — it's time to let them wander through the darkness and see each other come and go.
-
-### Checkpoint Code
-
-Same as Stage 13 checkpoint, plus:
-- `broadcast_to_room` and `broadcast_to_room_except` methods on `GameState`
-- `say` command handler in the game loop
-- `who` command handler in the game loop
+> [!check] Checkpoint
+> Same as Stage 13 checkpoint, plus:
+> - `broadcast_to_room` and `broadcast_to_room_except` methods on `GameState`
+> - `say` command handler in the game loop
+> - `who` command handler in the game loop
 
 ---
 
@@ -1757,7 +2003,8 @@ Same as Stage 13 checkpoint, plus:
 
 A multiplayer game where everyone is stuck in the same room is a chat room, not a dungeon. Movement is the first command that mutates shared state in a way that affects *other* players — when you leave, they see you vanish; when you arrive, they see you emerge. This is the most complex state mutation so far because it touches two rooms, two sets of observers, and the player's own view simultaneously.
 
-**Difficulty:** Medium (30min–1h)
+*Difficulty: Medium (30min–1h)*
+
 
 ### Story Beat
 
@@ -2125,34 +2372,29 @@ We used `Result<String, String>` for `move_player` — `Ok(new_room)` on success
 
 **Python comparison:** You might raise an exception or return `None`. Rust's `Result` forces you to handle both cases — the compiler won't let you ignore a possible error.
 
-**TypeScript comparison:** You might return `string | null` or throw. Rust's `match` on `Result` is exhaustive — you must handle both `Ok` and `Err`.
+> [!warning] Common Mistakes
+> **Forgetting to update `current_room` locally:**
+> ```rust
+> // BUG — player moved in GameState but local variable still says "entrance_hall":
+> game.move_player(soul_id, "north"); // updates GameState
+> // current_room is still "entrance_hall"!
+> // Next "say" goes to the wrong room
+> ```
+> Always update the local `current_room` variable after a successful move.
+>
+> **Broadcasting to the wrong room after a move:**
+> The player's room in `GameState` is already updated by `move_player`. So `broadcast_to_room_except(&old_room, ...)` correctly targets the room they *left*, and `broadcast_to_room_except(&new_room, ...)` targets the room they *entered*. The order matters — save `old_room` before the move updates it.
+>
+> Players roam the castle, talk, and see each other. But the command handling is a tangled mess of string slicing — one typo from a panic. Before adding more features, you need to tame the input into something the compiler can reason about.
 
-### Common Mistakes
-
-**Forgetting to update `current_room` locally:**
-```rust
-// BUG — player moved in GameState but local variable still says "entrance_hall":
-game.move_player(soul_id, "north"); // updates GameState
-// current_room is still "entrance_hall"!
-// Next "say" goes to the wrong room
-```
-Always update the local `current_room` variable after a successful move.
-
-**Broadcasting to the wrong room after a move:**
-The player's room in `GameState` is already updated by `move_player`. So `broadcast_to_room_except(&old_room, ...)` correctly targets the room they *left*, and `broadcast_to_room_except(&new_room, ...)` targets the room they *entered*. The order matters — save `old_room` before the move updates it.
-
-Players roam the castle, talk, and see each other. But the command handling is a tangled mess of string slicing — one typo from a panic. Before adding more features, you need to tame the input into something the compiler can reason about.
-
-### Checkpoint Code
-
-The full code is the Stage 13 checkpoint with all additions from Stages 14-16:
-- `Room` struct with `exits: HashMap<String, String>`
-- `PlayerInfo` struct with `name` and `current_room`
-- `players` map in `GameState`
-- `move_player`, `broadcast_to_room`, `broadcast_to_room_except` methods
-- Login flow, `go`, `say`, `shout`, `look`, `who`, `quit` commands
-- Movement broadcasts to old and new rooms
-
+> [!check] Checkpoint
+> The full code is the Stage 13 checkpoint with all additions from Stages 14-16:
+> - `Room` struct with `exits: HashMap<String, String>`
+> - `PlayerInfo` struct with `name` and `current_room`
+> - `players` map in `GameState`
+> - `move_player`, `broadcast_to_room`, `broadcast_to_room_except` methods
+> - Login flow, `go`, `say`, `shout`, `look`, `who`, `quit` commands
+> - Movement broadcasts to old and new rooms
 
 ---
 
@@ -2160,7 +2402,8 @@ The full code is the Stage 13 checkpoint with all additions from Stages 14-16:
 
 Your `if/else if` chain of string checks is a ticking time bomb — fragile slicing, no validation, impossible to extend cleanly. A proper parser converts messy human input into clean, typed data that the compiler can verify. This is the same principle behind every protocol parser, every CLI tool, every API endpoint: turn unstructured input into structured types as early as possible, then work only with the types.
 
-**Difficulty:** Medium (30min–1h)
+*Difficulty: Medium (30min–1h)*
+
 
 ### Story Beat
 
@@ -2583,11 +2826,9 @@ Test that `say` preserves casing:
 You say: "Hello World!"
 ```
 
-### Rust Aside: Enums with Data vs Python/TS
+### Rust Aside: Enums with Data vs Python
 
 **Python:** You'd probably use a dataclass or named tuple: `Command("go", direction="north")`. No exhaustiveness checking — you can forget a case in your `if/elif` chain.
-
-**TypeScript:** You'd use a discriminated union: `{ type: "go", direction: string } | { type: "look" }`. TypeScript's `switch` with `never` gives exhaustiveness, but it's opt-in. Rust's `match` is exhaustive by default.
 
 **Rust enums are algebraic data types** — each variant can carry different data. `Command::Go { direction: String }` is fundamentally different from `Command::Look` (no data). The compiler knows the exact shape of each variant.
 
@@ -2600,37 +2841,34 @@ match command {
 }
 ```
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> **Slicing UTF-8 strings by byte index:**
+> ```rust
+> // DANGEROUS — panics if input contains multi-byte UTF-8:
+> let rest = &input[4..]; // "say " is 4 bytes, but what if someone types emoji?
+> ```
+> Using `splitn(2, ' ')` is safer — it splits on character boundaries.
+>
+> **Forgetting to preserve original casing for messages:**
+> ```rust
+> // BUG — player types "say Hello World", but we lowercased it:
+> let lower = input.to_lowercase();
+> // ... parse from lower ...
+> Command::Say { message: rest.to_string() } // "hello world" — wrong!
+> ```
+> We lowercase for verb matching but use the original input for message content.
+>
+> Commands are clean and extensible. But the castle is still purely reactive — nothing happens unless a player types. It's time to give Shadowkeep a heartbeat: a background loop that moves monsters, flickers torches, and reminds every soul that the darkness is alive.
 
-**Slicing UTF-8 strings by byte index:**
-```rust
-// DANGEROUS — panics if input contains multi-byte UTF-8:
-let rest = &input[4..]; // "say " is 4 bytes, but what if someone types emoji?
-```
-Using `splitn(2, ' ')` is safer — it splits on character boundaries.
-
-**Forgetting to preserve original casing for messages:**
-```rust
-// BUG — player types "say Hello World", but we lowercased it:
-let lower = input.to_lowercase();
-// ... parse from lower ...
-Command::Say { message: rest.to_string() } // "hello world" — wrong!
-```
-We lowercase for verb matching but use the original input for message content.
-
-Commands are clean and extensible. But the castle is still purely reactive — nothing happens unless a player types. It's time to give Shadowkeep a heartbeat: a background loop that moves monsters, flickers torches, and reminds every soul that the darkness is alive.
-
-### Checkpoint Code
-
-The checkpoint is the same as Stage 16, with these changes:
-- `Command` enum with all variants
-- `Command::parse()` method
-- Game loop rewritten as `match Command::parse(&input) { ... }`
-- Directional shortcuts (n/s/e/w/u/d)
-- Command aliases (l, q, i, ?)
-- `help` command with command listing
-- Placeholder `take`, `drop`, `inventory` handlers
-
+> [!check] Checkpoint
+> The checkpoint is the same as Stage 16, with these changes:
+> - `Command` enum with all variants
+> - `Command::parse()` method
+> - Game loop rewritten as `match Command::parse(&input) { ... }`
+> - Directional shortcuts (n/s/e/w/u/d)
+> - Command aliases (l, q, i, ?)
+> - `help` command with command listing
+> - Placeholder `take`, `drop`, `inventory` handlers
 
 ---
 
@@ -2638,7 +2876,15 @@ The checkpoint is the same as Stage 16, with these changes:
 
 A purely reactive server — one that only does things when players type — feels dead. Real game worlds have a heartbeat: monsters patrol, torches flicker, time passes whether you act or not. The tick-based game loop is the standard pattern for this, used by everything from Minecraft to MMOs. It also teaches you the critical discipline of "lock briefly, release before I/O" — the rule that prevents your server from freezing under load.
 
-**Difficulty:** Hard (>1h)
+*Difficulty: Hard (>1h)*
+
+> [!tip] What You'll Learn
+> - main
+> - look
+> - time
+> - Mutex
+> - Elara
+
 
 ### Story Beat
 
@@ -2972,8 +3218,6 @@ Connect a second player in Terminal 3. Both players see the same monster events 
 
 **Python comparison:** You'd use `time.sleep()` in a `while True:` loop, probably with `threading.Lock()`. The GIL means your game loop and player threads take turns — not true parallelism. In Rust, the game loop thread runs on a real CPU core in parallel with player threads.
 
-**TypeScript comparison:** You'd use `setInterval()` — Node's event loop handles the timing. But if your tick handler is slow, it blocks all I/O. Rust's thread-per-player model means a slow tick only blocks the game state lock briefly, not the entire server.
-
 **The sleep-lock-update-unlock pattern** is the simplest game loop. More sophisticated servers use:
 - Fixed timestep with accumulator (for physics)
 - Double buffering (read from old state, write to new state)
@@ -2981,632 +3225,629 @@ Connect a second player in Terminal 3. Both players see the same monster events 
 
 For Shadowkeep, sleep + mutex is perfect.
 
-### Common Mistakes
+> [!warning] Common Mistakes
+> **Holding the lock during sleep:**
+> ```rust
+> // CATASTROPHIC — locks the entire game for 5 seconds:
+> fn game_loop(state: Arc<Mutex<GameState>>) {
+>     loop {
+>         let mut game = state.lock().unwrap();
+>         game.tick();
+>         thread::sleep(Duration::from_secs(5)); // NO! Lock held during sleep!
+>     }
+> }
+> ```
+> Always sleep *outside* the lock. Lock, do work, unlock, then sleep.
+>
+> **Tick function doing I/O:**
+> ```rust
+> // BAD — tick() writes to sockets while holding the lock:
+> fn tick(&mut self) {
+>     for writer in self.writers.values_mut() {
+>         writer.write_all(b"tick!"); // slow I/O while locked!
+>     }
+> }
+> ```
+> Instead, `tick()` returns events (data), and the caller broadcasts them after releasing the lock. This is the **command pattern** — separate "what happened" from "tell everyone."
+>
+> **Monster patrol index overflow:**
+> We use modulo (`%`) to wrap the patrol index. Without it, the index would grow forever and eventually panic on out-of-bounds access. Always use modulo for cyclic iteration.
+>
+> The castle breathes. Monsters patrol. Players explore, talk, and fight. But each thread costs real memory and OS resources — and the `Mutex` is a bottleneck every thread must pass through. In Act 3, you'll replace this architecture with something lighter, faster, and far more scalable.
 
-**Holding the lock during sleep:**
-```rust
-// CATASTROPHIC — locks the entire game for 5 seconds:
-fn game_loop(state: Arc<Mutex<GameState>>) {
-    loop {
-        let mut game = state.lock().unwrap();
-        game.tick();
-        thread::sleep(Duration::from_secs(5)); // NO! Lock held during sleep!
-    }
-}
-```
-Always sleep *outside* the lock. Lock, do work, unlock, then sleep.
-
-**Tick function doing I/O:**
-```rust
-// BAD — tick() writes to sockets while holding the lock:
-fn tick(&mut self) {
-    for writer in self.writers.values_mut() {
-        writer.write_all(b"tick!"); // slow I/O while locked!
-    }
-}
-```
-Instead, `tick()` returns events (data), and the caller broadcasts them after releasing the lock. This is the **command pattern** — separate "what happened" from "tell everyone."
-
-**Monster patrol index overflow:**
-We use modulo (`%`) to wrap the patrol index. Without it, the index would grow forever and eventually panic on out-of-bounds access. Always use modulo for cyclic iteration.
-
-The castle breathes. Monsters patrol. Players explore, talk, and fight. But each thread costs real memory and OS resources — and the `Mutex` is a bottleneck every thread must pass through. In Act 3, you'll replace this architecture with something lighter, faster, and far more scalable.
-
-### Checkpoint Code
-
-The complete Stage 18 code combines everything from this act. Here is the full `src/main.rs`:
-
-```rust
-use std::collections::HashMap;
-use std::io::{BufRead, BufReader, Write};
-use std::net::{TcpListener, TcpStream};
-use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{Arc, Mutex};
-use std::thread;
-use std::time::Duration;
-
-static NEXT_SOUL_ID: AtomicUsize = AtomicUsize::new(1);
-
-// ---------------------------------------------------------------------------
-// Data types
-// ---------------------------------------------------------------------------
-
-struct Room {
-    description: String,
-    exits: HashMap<String, String>,
-}
-
-struct PlayerInfo {
-    name: String,
-    current_room: String,
-}
-
-struct Monster {
-    name: String,
-    description: String,
-    current_room: String,
-    patrol_rooms: Vec<String>,
-    patrol_index: usize,
-}
-
-#[derive(Debug)]
-enum Command {
-    Look,
-    Go { direction: String },
-    Say { message: String },
-    Shout { message: String },
-    Take { item: String },
-    Drop { item: String },
-    Inventory,
-    Who,
-    Help,
-    Quit,
-    Unknown { input: String },
-}
-
-impl Command {
-    fn parse(input: &str) -> Command {
-        let lower = input.to_lowercase();
-        let lower = lower.trim();
-        let mut parts = lower.splitn(2, ' ');
-        let verb = parts.next().unwrap_or("");
-        let rest = parts.next().unwrap_or("").trim();
-
-        match verb {
-            "look" | "l" => Command::Look,
-            "who" => Command::Who,
-            "help" | "h" | "?" => Command::Help,
-            "quit" | "exit" | "q" => Command::Quit,
-            "inventory" | "inv" | "i" => Command::Inventory,
-            "go" | "move" | "walk" => {
-                if rest.is_empty() {
-                    Command::Unknown { input: "Go where? Try: go north".into() }
-                } else {
-                    Command::Go { direction: rest.to_string() }
-                }
-            }
-            "north" | "n" => Command::Go { direction: "north".into() },
-            "south" | "s" => Command::Go { direction: "south".into() },
-            "east" | "e" => Command::Go { direction: "east".into() },
-            "west" | "w" => Command::Go { direction: "west".into() },
-            "up" | "u" => Command::Go { direction: "up".into() },
-            "down" | "d" => Command::Go { direction: "down".into() },
-            "say" => {
-                if rest.is_empty() {
-                    Command::Unknown { input: "Say what? Try: say hello".into() }
-                } else {
-                    let orig = input[input.find(' ').map(|i| i + 1).unwrap_or(0)..].trim();
-                    Command::Say { message: orig.to_string() }
-                }
-            }
-            "shout" | "yell" => {
-                if rest.is_empty() {
-                    Command::Unknown { input: "Shout what? Try: shout help!".into() }
-                } else {
-                    let orig = input[input.find(' ').map(|i| i + 1).unwrap_or(0)..].trim();
-                    Command::Shout { message: orig.to_string() }
-                }
-            }
-            "take" | "get" | "grab" | "pick" => {
-                if rest.is_empty() {
-                    Command::Unknown { input: "Take what?".into() }
-                } else {
-                    Command::Take { item: rest.to_string() }
-                }
-            }
-            "drop" | "put" => {
-                if rest.is_empty() {
-                    Command::Unknown { input: "Drop what?".into() }
-                } else {
-                    Command::Drop { item: rest.to_string() }
-                }
-            }
-            _ => Command::Unknown { input: input.to_string() },
-        }
-    }
-}
-```
-
-```rust
-// ---------------------------------------------------------------------------
-// Game state
-// ---------------------------------------------------------------------------
-
-struct GameState {
-    rooms: HashMap<String, Room>,
-    occupancy: HashMap<String, usize>,
-    writers: HashMap<usize, TcpStream>,
-    players: HashMap<usize, PlayerInfo>,
-    monsters: Vec<Monster>,
-    tick: u64,
-}
-
-impl GameState {
-    fn new() -> Self {
-        let mut rooms = HashMap::new();
-
-        let mut entrance_exits = HashMap::new();
-        entrance_exits.insert("north".into(), "library".into());
-        entrance_exits.insert("down".into(), "crypt".into());
-        rooms.insert("entrance_hall".into(), Room {
-            description: "A vast hall lit by flickering torches. Shadows dance on the walls.".into(),
-            exits: entrance_exits,
-        });
-
-        let mut crypt_exits = HashMap::new();
-        crypt_exits.insert("up".into(), "entrance_hall".into());
-        crypt_exits.insert("north".into(), "dungeon".into());
-        rooms.insert("crypt".into(), Room {
-            description: "Cold stone tombs line the walls. Something scratches from inside.".into(),
-            exits: crypt_exits,
-        });
-
-        let mut library_exits = HashMap::new();
-        library_exits.insert("south".into(), "entrance_hall".into());
-        library_exits.insert("up".into(), "tower".into());
-        rooms.insert("library".into(), Room {
-            description: "Dusty tomes fill the shelves. Pages turn by themselves.".into(),
-            exits: library_exits,
-        });
-
-        let mut dungeon_exits = HashMap::new();
-        dungeon_exits.insert("south".into(), "crypt".into());
-        rooms.insert("dungeon".into(), Room {
-            description: "Chains hang from the ceiling. The floor is sticky.".into(),
-            exits: dungeon_exits,
-        });
-
-        let mut tower_exits = HashMap::new();
-        tower_exits.insert("down".into(), "library".into());
-        rooms.insert("tower".into(), Room {
-            description: "A spiral staircase leads to a room with a view of endless fog.".into(),
-            exits: tower_exits,
-        });
-
-        let mut occupancy = HashMap::new();
-        for room_name in rooms.keys() {
-            occupancy.insert(room_name.clone(), 0);
-        }
-
-        let monsters = vec![
-            Monster {
-                name: "The Hollow Knight".into(),
-                description: "A suit of armor that walks without a body inside.".into(),
-                current_room: "dungeon".into(),
-                patrol_rooms: vec!["dungeon".into(), "crypt".into(), "entrance_hall".into(), "crypt".into()],
-                patrol_index: 0,
-            },
-            Monster {
-                name: "The Whispering Shade".into(),
-                description: "A dark mist that drifts between the shelves, murmuring secrets.".into(),
-                current_room: "library".into(),
-                patrol_rooms: vec!["library".into(), "tower".into(), "library".into()],
-                patrol_index: 0,
-            },
-        ];
-
-        GameState { rooms, occupancy, writers: HashMap::new(), players: HashMap::new(), monsters, tick: 0 }
-    }
-
-    fn describe_room(&self, room_name: &str) -> Option<String> {
-        self.rooms.get(room_name).map(|room| {
-            let exits: Vec<&str> = room.exits.keys().map(|s| s.as_str()).collect();
-            let exits_str = if exits.is_empty() {
-                "There are no exits. You are trapped.".to_string()
-            } else {
-                format!("Exits: {}", exits.join(", "))
-            };
-            format!("{}\r\n{}", room.description, exits_str)
-        })
-    }
-
-    fn player_enters(&mut self, room: &str) -> usize {
-        let count = self.occupancy.entry(room.to_string()).or_insert(0);
-        *count += 1;
-        *count
-    }
-
-    fn player_leaves(&mut self, room: &str) -> usize {
-        let count = self.occupancy.entry(room.to_string()).or_insert(0);
-        if *count > 0 { *count -= 1; }
-        *count
-    }
-
-    fn add_writer(&mut self, soul_id: usize, writer: TcpStream) {
-        self.writers.insert(soul_id, writer);
-    }
-
-    fn remove_writer(&mut self, soul_id: usize) { self.writers.remove(&soul_id); }
-
-    fn add_player(&mut self, soul_id: usize, name: String, room: String) {
-        self.players.insert(soul_id, PlayerInfo { name, current_room: room });
-    }
-
-    fn remove_player(&mut self, soul_id: usize) { self.players.remove(&soul_id); }
-
-    fn player_name(&self, soul_id: usize) -> &str {
-        self.players.get(&soul_id).map(|p| p.name.as_str()).unwrap_or("Unknown")
-    }
-
-    fn souls_in_room(&self, room: &str) -> Vec<(usize, String)> {
-        self.players.iter()
-            .filter(|(_, info)| info.current_room == room)
-            .map(|(&id, info)| (id, info.name.clone()))
-            .collect()
-    }
-
-    fn monsters_in_room(&self, room: &str) -> Vec<&Monster> {
-        self.monsters.iter().filter(|m| m.current_room == room).collect()
-    }
-
-    fn move_player(&mut self, soul_id: usize, direction: &str) -> Result<String, String> {
-        let current_room = match self.players.get(&soul_id) {
-            Some(info) => info.current_room.clone(),
-            None => return Err("You don't exist.".into()),
-        };
-        let destination = match self.rooms.get(&current_room) {
-            Some(room) => match room.exits.get(direction) {
-                Some(dest) => dest.clone(),
-                None => return Err(format!("There is no passage to the {}. Only cold stone.", direction)),
-            },
-            None => return Err("You are nowhere.".into()),
-        };
-        self.player_leaves(&current_room);
-        self.player_enters(&destination);
-        if let Some(info) = self.players.get_mut(&soul_id) {
-            info.current_room = destination.clone();
-        }
-        Ok(destination)
-    }
-
-    fn broadcast(&mut self, message: &str) {
-        let mut dead: Vec<usize> = Vec::new();
-        for (&id, w) in self.writers.iter_mut() {
-            if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
-                dead.push(id);
-            }
-        }
-        for id in dead { self.writers.remove(&id); }
-    }
-
-    fn broadcast_except(&mut self, exclude_id: usize, message: &str) {
-        let mut dead: Vec<usize> = Vec::new();
-        for (&id, w) in self.writers.iter_mut() {
-            if id == exclude_id { continue; }
-            if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
-                dead.push(id);
-            }
-        }
-        for id in dead { self.writers.remove(&id); }
-    }
-
-    fn broadcast_to_room(&mut self, room: &str, message: &str) {
-        let ids: Vec<usize> = self.players.iter()
-            .filter(|(_, info)| info.current_room == room)
-            .map(|(&id, _)| id).collect();
-        let mut dead: Vec<usize> = Vec::new();
-        for id in &ids {
-            if let Some(w) = self.writers.get_mut(id) {
-                if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
-                    dead.push(*id);
-                }
-            }
-        }
-        for id in dead { self.writers.remove(&id); }
-    }
-
-    fn broadcast_to_room_except(&mut self, room: &str, exclude_id: usize, message: &str) {
-        let ids: Vec<usize> = self.players.iter()
-            .filter(|(_, info)| info.current_room == room)
-            .filter(|(&id, _)| id != exclude_id)
-            .map(|(&id, _)| id).collect();
-        let mut dead: Vec<usize> = Vec::new();
-        for id in &ids {
-            if let Some(w) = self.writers.get_mut(id) {
-                if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
-                    dead.push(*id);
-                }
-            }
-        }
-        for id in dead { self.writers.remove(&id); }
-    }
-
-    fn tick(&mut self) -> Vec<(String, String)> {
-        self.tick += 1;
-        let mut events: Vec<(String, String)> = Vec::new();
-        for monster in &mut self.monsters {
-            if monster.patrol_rooms.is_empty() { continue; }
-            let old_room = monster.current_room.clone();
-            monster.patrol_index = (monster.patrol_index + 1) % monster.patrol_rooms.len();
-            let new_room = monster.patrol_rooms[monster.patrol_index].clone();
-            if new_room != old_room {
-                monster.current_room = new_room.clone();
-                events.push((old_room, format!("\r\n[{} fades into the darkness...]\r\n> ", monster.name)));
-                events.push((new_room, format!("\r\n[{} emerges from the shadows! {}]\r\n> ", monster.name, monster.description)));
-            }
-        }
-        if self.tick % 6 == 0 {
-            let msgs = [
-                "\r\n[The torches flicker and dim...]\r\n> ",
-                "\r\n[A cold wind howls through the corridors...]\r\n> ",
-                "\r\n[Somewhere distant, a door slams shut...]\r\n> ",
-                "\r\n[The stones beneath your feet tremble...]\r\n> ",
-                "\r\n[A faint scream echoes from deep below...]\r\n> ",
-            ];
-            events.push(("".into(), msgs[(self.tick / 6) as usize % msgs.len()].into()));
-        }
-        events
-    }
-}
-```
-
-```rust
-// ---------------------------------------------------------------------------
-// Game loop (background thread)
-// ---------------------------------------------------------------------------
-
-fn game_loop(state: Arc<Mutex<GameState>>) {
-    let tick_duration = Duration::from_secs(5);
-    loop {
-        thread::sleep(tick_duration);
-        let events = {
-            let mut game = state.lock().unwrap();
-            game.tick()
-        };
-        for (room, message) in &events {
-            let mut game = state.lock().unwrap();
-            if room.is_empty() {
-                game.broadcast(message);
-            } else {
-                game.broadcast_to_room(room, message);
-            }
-        }
-    }
-}
-```
-
-```rust
-// ---------------------------------------------------------------------------
-// Player connection handler (one thread per player)
-// ---------------------------------------------------------------------------
-
-fn handle_haunting(stream: TcpStream, state: Arc<Mutex<GameState>>) {
-    let peer = stream.peer_addr().unwrap();
-    let soul_id = NEXT_SOUL_ID.fetch_add(1, Ordering::Relaxed);
-    println!("[server] Soul #{} arrives from {}", soul_id, peer);
-
-    let personal_writer = stream.try_clone().unwrap();
-    let broadcast_writer = stream.try_clone().unwrap();
-    let mut reader = BufReader::new(stream);
-    let mut writer = personal_writer;
-
-    // Login
-    let _ = writer.write_all(b"The gates of Shadowkeep creak open...\r\n");
-    let _ = writer.write_all(b"What is your name, wanderer? ");
-    let _ = writer.flush();
-
-    let mut name_buf = String::new();
-    match reader.read_line(&mut name_buf) {
-        Ok(0) | Err(_) => {
-            println!("[server] Soul #{} disconnected during login", soul_id);
-            return;
-        }
-        Ok(_) => {}
-    }
-
-    let player_name = name_buf.trim().to_string();
-    if player_name.is_empty() {
-        let _ = writer.write_all(b"The castle rejects the nameless.\r\n");
-        let _ = writer.flush();
-        return;
-    }
-
-    let mut current_room = "entrance_hall".to_string();
-
-    {
-        let mut game = state.lock().unwrap();
-        game.add_writer(soul_id, broadcast_writer);
-        game.add_player(soul_id, player_name.clone(), current_room.clone());
-        let count = game.player_enters(&current_room);
-        let desc = game.describe_room(&current_room).unwrap_or_else(|| "Void.".into());
-        game.broadcast_except(soul_id, &format!("\r\n[{} has entered Shadowkeep...]\r\n> ", player_name));
-        let others = game.souls_in_room(&current_room);
-        let others_msg = if others.len() <= 1 {
-            "You are alone.".to_string()
-        } else {
-            let names: Vec<&str> = others.iter().filter(|(id, _)| *id != soul_id).map(|(_, n)| n.as_str()).collect();
-            format!("Also here: {}", names.join(", "))
-        };
-        let monsters = game.monsters_in_room(&current_room);
-        let monster_msg = if monsters.is_empty() { String::new() } else {
-            let descs: Vec<String> = monsters.iter().map(|m| format!("  {} — {}", m.name, m.description)).collect();
-            format!("\r\nCreatures here:\r\n{}", descs.join("\r\n"))
-        };
-        let welcome = format!("Welcome, {}.\r\n{}\r\n{}{}\r\n> ", player_name, desc, others_msg, monster_msg);
-        let _ = writer.write_all(welcome.as_bytes());
-        let _ = writer.flush();
-    }
-
-    // Game loop
-    for line in reader.lines() {
-        match line {
-            Ok(input) => {
-                let input = input.trim().to_string();
-                if input.is_empty() {
-                    let _ = writer.write_all(b"> ");
-                    let _ = writer.flush();
-                    continue;
-                }
-                match Command::parse(&input) {
-                    Command::Quit => {
-                        let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
-                        let _ = writer.flush();
-                        break;
-                    }
-                    Command::Look => {
-                        let game = state.lock().unwrap();
-                        let desc = game.describe_room(&current_room).unwrap_or_else(|| "Void.".into());
-                        let others = game.souls_in_room(&current_room);
-                        let names: Vec<&str> = others.iter().filter(|(id, _)| *id != soul_id).map(|(_, n)| n.as_str()).collect();
-                        let who = if names.is_empty() { "You are alone.".into() } else { format!("Also here: {}", names.join(", ")) };
-                        let monsters = game.monsters_in_room(&current_room);
-                        let monster_msg = if monsters.is_empty() { String::new() } else {
-                            let descs: Vec<String> = monsters.iter().map(|m| format!("  {} — {}", m.name, m.description)).collect();
-                            format!("\r\nCreatures here:\r\n{}", descs.join("\r\n"))
-                        };
-                        let msg = format!("{}\r\n{}{}\r\n> ", desc, who, monster_msg);
-                        drop(game);
-                        let _ = writer.write_all(msg.as_bytes());
-                        let _ = writer.flush();
-                    }
-                    Command::Go { direction } => {
-                        let mut game = state.lock().unwrap();
-                        match game.move_player(soul_id, &direction) {
-                            Ok(new_room) => {
-                                let old_room = current_room.clone();
-                                game.broadcast_to_room_except(&old_room, soul_id, &format!("\r\n[{} vanishes to the {}...]\r\n> ", player_name, direction));
-                                game.broadcast_to_room_except(&new_room, soul_id, &format!("\r\n[{} emerges from the shadows...]\r\n> ", player_name));
-                                let desc = game.describe_room(&new_room).unwrap_or_else(|| "Void.".into());
-                                let others = game.souls_in_room(&new_room);
-                                let names: Vec<&str> = others.iter().filter(|(id, _)| *id != soul_id).map(|(_, n)| n.as_str()).collect();
-                                let who = if names.is_empty() { "You are alone.".into() } else { format!("Also here: {}", names.join(", ")) };
-                                let monsters = game.monsters_in_room(&new_room);
-                                let monster_msg = if monsters.is_empty() { String::new() } else {
-                                    let descs: Vec<String> = monsters.iter().map(|m| format!("  {} — {}", m.name, m.description)).collect();
-                                    format!("\r\nCreatures here:\r\n{}", descs.join("\r\n"))
-                                };
-                                drop(game);
-                                let msg = format!("You go {}.\r\n{}\r\n{}{}\r\n> ", direction, desc, who, monster_msg);
-                                let _ = writer.write_all(msg.as_bytes());
-                                let _ = writer.flush();
-                                current_room = new_room;
-                            }
-                            Err(msg) => {
-                                drop(game);
-                                let _ = writer.write_all(format!("{}\r\n> ", msg).as_bytes());
-                                let _ = writer.flush();
-                            }
-                        }
-                    }
-                    Command::Say { message } => {
-                        let mut game = state.lock().unwrap();
-                        game.broadcast_to_room_except(&current_room, soul_id, &format!("\r\n{} says: \"{}\"\r\n> ", player_name, message));
-                        drop(game);
-                        let _ = writer.write_all(format!("You say: \"{}\"\r\n> ", message).as_bytes());
-                        let _ = writer.flush();
-                    }
-                    Command::Shout { message } => {
-                        let mut game = state.lock().unwrap();
-                        game.broadcast(&format!("\r\n[{} shouts: \"{}\"]\r\n> ", player_name, message));
-                    }
-                    Command::Who => {
-                        let game = state.lock().unwrap();
-                        let others = game.souls_in_room(&current_room);
-                        let mut msg = format!("Souls in {}:\r\n", current_room);
-                        for (id, name) in &others {
-                            if *id == soul_id { msg.push_str(&format!("  {} (you)\r\n", name)); }
-                            else { msg.push_str(&format!("  {}\r\n", name)); }
-                        }
-                        msg.push_str("> ");
-                        drop(game);
-                        let _ = writer.write_all(msg.as_bytes());
-                        let _ = writer.flush();
-                    }
-                    Command::Help => {
-                        let _ = writer.write_all(b"\
-Commands:\r\n\
-  look (l)          - describe your surroundings\r\n\
-  go <direction>    - move (or just type: north, south, up, down...)\r\n\
-  say <message>     - speak to others in your room\r\n\
-  shout <message>   - yell so everyone in the castle hears\r\n\
-  take <item>       - pick up an item\r\n\
-  drop <item>       - drop an item\r\n\
-  inventory (i)     - check what you're carrying\r\n\
-  who               - see who's in your room\r\n\
-  quit (q)          - leave Shadowkeep\r\n> ");
-                        let _ = writer.flush();
-                    }
-                    Command::Inventory => {
-                        let _ = writer.write_all(b"Your pockets are empty. For now.\r\n> ");
-                        let _ = writer.flush();
-                    }
-                    Command::Take { item } => {
-                        let _ = writer.write_all(format!("You reach for the {}... but your hand passes through it.\r\n> ", item).as_bytes());
-                        let _ = writer.flush();
-                    }
-                    Command::Drop { item } => {
-                        let _ = writer.write_all(format!("You don't have a {} to drop.\r\n> ", item).as_bytes());
-                        let _ = writer.flush();
-                    }
-                    Command::Unknown { input } => {
-                        let _ = writer.write_all(format!("The castle doesn't understand \"{}\". Type 'help'.\r\n> ", input).as_bytes());
-                        let _ = writer.flush();
-                    }
-                }
-            }
-            Err(_) => break,
-        }
-    }
-
-    {
-        let mut game = state.lock().unwrap();
-        game.player_leaves(&current_room);
-        game.remove_writer(soul_id);
-        game.remove_player(soul_id);
-        game.broadcast(&format!("\r\n[{} has been claimed by the darkness...]\r\n> ", player_name));
-    }
-    println!("[server] {} (#{}) has departed", player_name, soul_id);
-}
-```
-
-```rust
-// ---------------------------------------------------------------------------
-// Entry point
-// ---------------------------------------------------------------------------
-
-fn main() {
-    let state = Arc::new(Mutex::new(GameState::new()));
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Shadowkeep awaits on port 7878...");
-    println!("[server] The castle's heart begins to beat (5s tick)...");
-
-    {
-        let state = Arc::clone(&state);
-        thread::spawn(move || game_loop(state));
-    }
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(stream) => {
-                let state = Arc::clone(&state);
-                thread::spawn(move || handle_haunting(stream, state));
-            }
-            Err(e) => eprintln!("[server] Failed to accept: {}", e),
-        }
-    }
-}
-```
-
+> [!check] Checkpoint
+> The complete Stage 18 code combines everything from this act. Here is the full `src/main.rs`:
+>
+> ```rust
+> use std::collections::HashMap;
+> use std::io::{BufRead, BufReader, Write};
+> use std::net::{TcpListener, TcpStream};
+> use std::sync::atomic::{AtomicUsize, Ordering};
+> use std::sync::{Arc, Mutex};
+> use std::thread;
+> use std::time::Duration;
+>
+> static NEXT_SOUL_ID: AtomicUsize = AtomicUsize::new(1);
+>
+> // ---------------------------------------------------------------------------
+> // Data types
+> // ---------------------------------------------------------------------------
+>
+> struct Room {
+>     description: String,
+>     exits: HashMap<String, String>,
+> }
+>
+> struct PlayerInfo {
+>     name: String,
+>     current_room: String,
+> }
+>
+> struct Monster {
+>     name: String,
+>     description: String,
+>     current_room: String,
+>     patrol_rooms: Vec<String>,
+>     patrol_index: usize,
+> }
+>
+> #[derive(Debug)]
+> enum Command {
+>     Look,
+>     Go { direction: String },
+>     Say { message: String },
+>     Shout { message: String },
+>     Take { item: String },
+>     Drop { item: String },
+>     Inventory,
+>     Who,
+>     Help,
+>     Quit,
+>     Unknown { input: String },
+> }
+>
+> impl Command {
+>     fn parse(input: &str) -> Command {
+>         let lower = input.to_lowercase();
+>         let lower = lower.trim();
+>         let mut parts = lower.splitn(2, ' ');
+>         let verb = parts.next().unwrap_or("");
+>         let rest = parts.next().unwrap_or("").trim();
+>
+>         match verb {
+>             "look" | "l" => Command::Look,
+>             "who" => Command::Who,
+>             "help" | "h" | "?" => Command::Help,
+>             "quit" | "exit" | "q" => Command::Quit,
+>             "inventory" | "inv" | "i" => Command::Inventory,
+>             "go" | "move" | "walk" => {
+>                 if rest.is_empty() {
+>                     Command::Unknown { input: "Go where? Try: go north".into() }
+>                 } else {
+>                     Command::Go { direction: rest.to_string() }
+>                 }
+>             }
+>             "north" | "n" => Command::Go { direction: "north".into() },
+>             "south" | "s" => Command::Go { direction: "south".into() },
+>             "east" | "e" => Command::Go { direction: "east".into() },
+>             "west" | "w" => Command::Go { direction: "west".into() },
+>             "up" | "u" => Command::Go { direction: "up".into() },
+>             "down" | "d" => Command::Go { direction: "down".into() },
+>             "say" => {
+>                 if rest.is_empty() {
+>                     Command::Unknown { input: "Say what? Try: say hello".into() }
+>                 } else {
+>                     let orig = input[input.find(' ').map(|i| i + 1).unwrap_or(0)..].trim();
+>                     Command::Say { message: orig.to_string() }
+>                 }
+>             }
+>             "shout" | "yell" => {
+>                 if rest.is_empty() {
+>                     Command::Unknown { input: "Shout what? Try: shout help!".into() }
+>                 } else {
+>                     let orig = input[input.find(' ').map(|i| i + 1).unwrap_or(0)..].trim();
+>                     Command::Shout { message: orig.to_string() }
+>                 }
+>             }
+>             "take" | "get" | "grab" | "pick" => {
+>                 if rest.is_empty() {
+>                     Command::Unknown { input: "Take what?".into() }
+>                 } else {
+>                     Command::Take { item: rest.to_string() }
+>                 }
+>             }
+>             "drop" | "put" => {
+>                 if rest.is_empty() {
+>                     Command::Unknown { input: "Drop what?".into() }
+>                 } else {
+>                     Command::Drop { item: rest.to_string() }
+>                 }
+>             }
+>             _ => Command::Unknown { input: input.to_string() },
+>         }
+>     }
+> }
+> ```
+>
+> ```rust
+> // ---------------------------------------------------------------------------
+> // Game state
+> // ---------------------------------------------------------------------------
+>
+> struct GameState {
+>     rooms: HashMap<String, Room>,
+>     occupancy: HashMap<String, usize>,
+>     writers: HashMap<usize, TcpStream>,
+>     players: HashMap<usize, PlayerInfo>,
+>     monsters: Vec<Monster>,
+>     tick: u64,
+> }
+>
+> impl GameState {
+>     fn new() -> Self {
+>         let mut rooms = HashMap::new();
+>
+>         let mut entrance_exits = HashMap::new();
+>         entrance_exits.insert("north".into(), "library".into());
+>         entrance_exits.insert("down".into(), "crypt".into());
+>         rooms.insert("entrance_hall".into(), Room {
+>             description: "A vast hall lit by flickering torches. Shadows dance on the walls.".into(),
+>             exits: entrance_exits,
+>         });
+>
+>         let mut crypt_exits = HashMap::new();
+>         crypt_exits.insert("up".into(), "entrance_hall".into());
+>         crypt_exits.insert("north".into(), "dungeon".into());
+>         rooms.insert("crypt".into(), Room {
+>             description: "Cold stone tombs line the walls. Something scratches from inside.".into(),
+>             exits: crypt_exits,
+>         });
+>
+>         let mut library_exits = HashMap::new();
+>         library_exits.insert("south".into(), "entrance_hall".into());
+>         library_exits.insert("up".into(), "tower".into());
+>         rooms.insert("library".into(), Room {
+>             description: "Dusty tomes fill the shelves. Pages turn by themselves.".into(),
+>             exits: library_exits,
+>         });
+>
+>         let mut dungeon_exits = HashMap::new();
+>         dungeon_exits.insert("south".into(), "crypt".into());
+>         rooms.insert("dungeon".into(), Room {
+>             description: "Chains hang from the ceiling. The floor is sticky.".into(),
+>             exits: dungeon_exits,
+>         });
+>
+>         let mut tower_exits = HashMap::new();
+>         tower_exits.insert("down".into(), "library".into());
+>         rooms.insert("tower".into(), Room {
+>             description: "A spiral staircase leads to a room with a view of endless fog.".into(),
+>             exits: tower_exits,
+>         });
+>
+>         let mut occupancy = HashMap::new();
+>         for room_name in rooms.keys() {
+>             occupancy.insert(room_name.clone(), 0);
+>         }
+>
+>         let monsters = vec![
+>             Monster {
+>                 name: "The Hollow Knight".into(),
+>                 description: "A suit of armor that walks without a body inside.".into(),
+>                 current_room: "dungeon".into(),
+>                 patrol_rooms: vec!["dungeon".into(), "crypt".into(), "entrance_hall".into(), "crypt".into()],
+>                 patrol_index: 0,
+>             },
+>             Monster {
+>                 name: "The Whispering Shade".into(),
+>                 description: "A dark mist that drifts between the shelves, murmuring secrets.".into(),
+>                 current_room: "library".into(),
+>                 patrol_rooms: vec!["library".into(), "tower".into(), "library".into()],
+>                 patrol_index: 0,
+>             },
+>         ];
+>
+>         GameState { rooms, occupancy, writers: HashMap::new(), players: HashMap::new(), monsters, tick: 0 }
+>     }
+>
+>     fn describe_room(&self, room_name: &str) -> Option<String> {
+>         self.rooms.get(room_name).map(|room| {
+>             let exits: Vec<&str> = room.exits.keys().map(|s| s.as_str()).collect();
+>             let exits_str = if exits.is_empty() {
+>                 "There are no exits. You are trapped.".to_string()
+>             } else {
+>                 format!("Exits: {}", exits.join(", "))
+>             };
+>             format!("{}\r\n{}", room.description, exits_str)
+>         })
+>     }
+>
+>     fn player_enters(&mut self, room: &str) -> usize {
+>         let count = self.occupancy.entry(room.to_string()).or_insert(0);
+>         *count += 1;
+>         *count
+>     }
+>
+>     fn player_leaves(&mut self, room: &str) -> usize {
+>         let count = self.occupancy.entry(room.to_string()).or_insert(0);
+>         if *count > 0 { *count -= 1; }
+>         *count
+>     }
+>
+>     fn add_writer(&mut self, soul_id: usize, writer: TcpStream) {
+>         self.writers.insert(soul_id, writer);
+>     }
+>
+>     fn remove_writer(&mut self, soul_id: usize) { self.writers.remove(&soul_id); }
+>
+>     fn add_player(&mut self, soul_id: usize, name: String, room: String) {
+>         self.players.insert(soul_id, PlayerInfo { name, current_room: room });
+>     }
+>
+>     fn remove_player(&mut self, soul_id: usize) { self.players.remove(&soul_id); }
+>
+>     fn player_name(&self, soul_id: usize) -> &str {
+>         self.players.get(&soul_id).map(|p| p.name.as_str()).unwrap_or("Unknown")
+>     }
+>
+>     fn souls_in_room(&self, room: &str) -> Vec<(usize, String)> {
+>         self.players.iter()
+>             .filter(|(_, info)| info.current_room == room)
+>             .map(|(&id, info)| (id, info.name.clone()))
+>             .collect()
+>     }
+>
+>     fn monsters_in_room(&self, room: &str) -> Vec<&Monster> {
+>         self.monsters.iter().filter(|m| m.current_room == room).collect()
+>     }
+>
+>     fn move_player(&mut self, soul_id: usize, direction: &str) -> Result<String, String> {
+>         let current_room = match self.players.get(&soul_id) {
+>             Some(info) => info.current_room.clone(),
+>             None => return Err("You don't exist.".into()),
+>         };
+>         let destination = match self.rooms.get(&current_room) {
+>             Some(room) => match room.exits.get(direction) {
+>                 Some(dest) => dest.clone(),
+>                 None => return Err(format!("There is no passage to the {}. Only cold stone.", direction)),
+>             },
+>             None => return Err("You are nowhere.".into()),
+>         };
+>         self.player_leaves(&current_room);
+>         self.player_enters(&destination);
+>         if let Some(info) = self.players.get_mut(&soul_id) {
+>             info.current_room = destination.clone();
+>         }
+>         Ok(destination)
+>     }
+>
+>     fn broadcast(&mut self, message: &str) {
+>         let mut dead: Vec<usize> = Vec::new();
+>         for (&id, w) in self.writers.iter_mut() {
+>             if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
+>                 dead.push(id);
+>             }
+>         }
+>         for id in dead { self.writers.remove(&id); }
+>     }
+>
+>     fn broadcast_except(&mut self, exclude_id: usize, message: &str) {
+>         let mut dead: Vec<usize> = Vec::new();
+>         for (&id, w) in self.writers.iter_mut() {
+>             if id == exclude_id { continue; }
+>             if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
+>                 dead.push(id);
+>             }
+>         }
+>         for id in dead { self.writers.remove(&id); }
+>     }
+>
+>     fn broadcast_to_room(&mut self, room: &str, message: &str) {
+>         let ids: Vec<usize> = self.players.iter()
+>             .filter(|(_, info)| info.current_room == room)
+>             .map(|(&id, _)| id).collect();
+>         let mut dead: Vec<usize> = Vec::new();
+>         for id in &ids {
+>             if let Some(w) = self.writers.get_mut(id) {
+>                 if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
+>                     dead.push(*id);
+>                 }
+>             }
+>         }
+>         for id in dead { self.writers.remove(&id); }
+>     }
+>
+>     fn broadcast_to_room_except(&mut self, room: &str, exclude_id: usize, message: &str) {
+>         let ids: Vec<usize> = self.players.iter()
+>             .filter(|(_, info)| info.current_room == room)
+>             .filter(|(&id, _)| id != exclude_id)
+>             .map(|(&id, _)| id).collect();
+>         let mut dead: Vec<usize> = Vec::new();
+>         for id in &ids {
+>             if let Some(w) = self.writers.get_mut(id) {
+>                 if w.write_all(message.as_bytes()).is_err() || w.flush().is_err() {
+>                     dead.push(*id);
+>                 }
+>             }
+>         }
+>         for id in dead { self.writers.remove(&id); }
+>     }
+>
+>     fn tick(&mut self) -> Vec<(String, String)> {
+>         self.tick += 1;
+>         let mut events: Vec<(String, String)> = Vec::new();
+>         for monster in &mut self.monsters {
+>             if monster.patrol_rooms.is_empty() { continue; }
+>             let old_room = monster.current_room.clone();
+>             monster.patrol_index = (monster.patrol_index + 1) % monster.patrol_rooms.len();
+>             let new_room = monster.patrol_rooms[monster.patrol_index].clone();
+>             if new_room != old_room {
+>                 monster.current_room = new_room.clone();
+>                 events.push((old_room, format!("\r\n[{} fades into the darkness...]\r\n> ", monster.name)));
+>                 events.push((new_room, format!("\r\n[{} emerges from the shadows! {}]\r\n> ", monster.name, monster.description)));
+>             }
+>         }
+>         if self.tick % 6 == 0 {
+>             let msgs = [
+>                 "\r\n[The torches flicker and dim...]\r\n> ",
+>                 "\r\n[A cold wind howls through the corridors...]\r\n> ",
+>                 "\r\n[Somewhere distant, a door slams shut...]\r\n> ",
+>                 "\r\n[The stones beneath your feet tremble...]\r\n> ",
+>                 "\r\n[A faint scream echoes from deep below...]\r\n> ",
+>             ];
+>             events.push(("".into(), msgs[(self.tick / 6) as usize % msgs.len()].into()));
+>         }
+>         events
+>     }
+> }
+> ```
+>
+> ```rust
+> // ---------------------------------------------------------------------------
+> // Game loop (background thread)
+> // ---------------------------------------------------------------------------
+>
+> fn game_loop(state: Arc<Mutex<GameState>>) {
+>     let tick_duration = Duration::from_secs(5);
+>     loop {
+>         thread::sleep(tick_duration);
+>         let events = {
+>             let mut game = state.lock().unwrap();
+>             game.tick()
+>         };
+>         for (room, message) in &events {
+>             let mut game = state.lock().unwrap();
+>             if room.is_empty() {
+>                 game.broadcast(message);
+>             } else {
+>                 game.broadcast_to_room(room, message);
+>             }
+>         }
+>     }
+> }
+> ```
+>
+> ```rust
+> // ---------------------------------------------------------------------------
+> // Player connection handler (one thread per player)
+> // ---------------------------------------------------------------------------
+>
+> fn handle_haunting(stream: TcpStream, state: Arc<Mutex<GameState>>) {
+>     let peer = stream.peer_addr().unwrap();
+>     let soul_id = NEXT_SOUL_ID.fetch_add(1, Ordering::Relaxed);
+>     println!("[server] Soul #{} arrives from {}", soul_id, peer);
+>
+>     let personal_writer = stream.try_clone().unwrap();
+>     let broadcast_writer = stream.try_clone().unwrap();
+>     let mut reader = BufReader::new(stream);
+>     let mut writer = personal_writer;
+>
+>     // Login
+>     let _ = writer.write_all(b"The gates of Shadowkeep creak open...\r\n");
+>     let _ = writer.write_all(b"What is your name, wanderer? ");
+>     let _ = writer.flush();
+>
+>     let mut name_buf = String::new();
+>     match reader.read_line(&mut name_buf) {
+>         Ok(0) | Err(_) => {
+>             println!("[server] Soul #{} disconnected during login", soul_id);
+>             return;
+>         }
+>         Ok(_) => {}
+>     }
+>
+>     let player_name = name_buf.trim().to_string();
+>     if player_name.is_empty() {
+>         let _ = writer.write_all(b"The castle rejects the nameless.\r\n");
+>         let _ = writer.flush();
+>         return;
+>     }
+>
+>     let mut current_room = "entrance_hall".to_string();
+>
+>     {
+>         let mut game = state.lock().unwrap();
+>         game.add_writer(soul_id, broadcast_writer);
+>         game.add_player(soul_id, player_name.clone(), current_room.clone());
+>         let count = game.player_enters(&current_room);
+>         let desc = game.describe_room(&current_room).unwrap_or_else(|| "Void.".into());
+>         game.broadcast_except(soul_id, &format!("\r\n[{} has entered Shadowkeep...]\r\n> ", player_name));
+>         let others = game.souls_in_room(&current_room);
+>         let others_msg = if others.len() <= 1 {
+>             "You are alone.".to_string()
+>         } else {
+>             let names: Vec<&str> = others.iter().filter(|(id, _)| *id != soul_id).map(|(_, n)| n.as_str()).collect();
+>             format!("Also here: {}", names.join(", "))
+>         };
+>         let monsters = game.monsters_in_room(&current_room);
+>         let monster_msg = if monsters.is_empty() { String::new() } else {
+>             let descs: Vec<String> = monsters.iter().map(|m| format!("  {} — {}", m.name, m.description)).collect();
+>             format!("\r\nCreatures here:\r\n{}", descs.join("\r\n"))
+>         };
+>         let welcome = format!("Welcome, {}.\r\n{}\r\n{}{}\r\n> ", player_name, desc, others_msg, monster_msg);
+>         let _ = writer.write_all(welcome.as_bytes());
+>         let _ = writer.flush();
+>     }
+>
+>     // Game loop
+>     for line in reader.lines() {
+>         match line {
+>             Ok(input) => {
+>                 let input = input.trim().to_string();
+>                 if input.is_empty() {
+>                     let _ = writer.write_all(b"> ");
+>                     let _ = writer.flush();
+>                     continue;
+>                 }
+>                 match Command::parse(&input) {
+>                     Command::Quit => {
+>                         let _ = writer.write_all(b"The shadows consume you. Farewell.\r\n");
+>                         let _ = writer.flush();
+>                         break;
+>                     }
+>                     Command::Look => {
+>                         let game = state.lock().unwrap();
+>                         let desc = game.describe_room(&current_room).unwrap_or_else(|| "Void.".into());
+>                         let others = game.souls_in_room(&current_room);
+>                         let names: Vec<&str> = others.iter().filter(|(id, _)| *id != soul_id).map(|(_, n)| n.as_str()).collect();
+>                         let who = if names.is_empty() { "You are alone.".into() } else { format!("Also here: {}", names.join(", ")) };
+>                         let monsters = game.monsters_in_room(&current_room);
+>                         let monster_msg = if monsters.is_empty() { String::new() } else {
+>                             let descs: Vec<String> = monsters.iter().map(|m| format!("  {} — {}", m.name, m.description)).collect();
+>                             format!("\r\nCreatures here:\r\n{}", descs.join("\r\n"))
+>                         };
+>                         let msg = format!("{}\r\n{}{}\r\n> ", desc, who, monster_msg);
+>                         drop(game);
+>                         let _ = writer.write_all(msg.as_bytes());
+>                         let _ = writer.flush();
+>                     }
+>                     Command::Go { direction } => {
+>                         let mut game = state.lock().unwrap();
+>                         match game.move_player(soul_id, &direction) {
+>                             Ok(new_room) => {
+>                                 let old_room = current_room.clone();
+>                                 game.broadcast_to_room_except(&old_room, soul_id, &format!("\r\n[{} vanishes to the {}...]\r\n> ", player_name, direction));
+>                                 game.broadcast_to_room_except(&new_room, soul_id, &format!("\r\n[{} emerges from the shadows...]\r\n> ", player_name));
+>                                 let desc = game.describe_room(&new_room).unwrap_or_else(|| "Void.".into());
+>                                 let others = game.souls_in_room(&new_room);
+>                                 let names: Vec<&str> = others.iter().filter(|(id, _)| *id != soul_id).map(|(_, n)| n.as_str()).collect();
+>                                 let who = if names.is_empty() { "You are alone.".into() } else { format!("Also here: {}", names.join(", ")) };
+>                                 let monsters = game.monsters_in_room(&new_room);
+>                                 let monster_msg = if monsters.is_empty() { String::new() } else {
+>                                     let descs: Vec<String> = monsters.iter().map(|m| format!("  {} — {}", m.name, m.description)).collect();
+>                                     format!("\r\nCreatures here:\r\n{}", descs.join("\r\n"))
+>                                 };
+>                                 drop(game);
+>                                 let msg = format!("You go {}.\r\n{}\r\n{}{}\r\n> ", direction, desc, who, monster_msg);
+>                                 let _ = writer.write_all(msg.as_bytes());
+>                                 let _ = writer.flush();
+>                                 current_room = new_room;
+>                             }
+>                             Err(msg) => {
+>                                 drop(game);
+>                                 let _ = writer.write_all(format!("{}\r\n> ", msg).as_bytes());
+>                                 let _ = writer.flush();
+>                             }
+>                         }
+>                     }
+>                     Command::Say { message } => {
+>                         let mut game = state.lock().unwrap();
+>                         game.broadcast_to_room_except(&current_room, soul_id, &format!("\r\n{} says: \"{}\"\r\n> ", player_name, message));
+>                         drop(game);
+>                         let _ = writer.write_all(format!("You say: \"{}\"\r\n> ", message).as_bytes());
+>                         let _ = writer.flush();
+>                     }
+>                     Command::Shout { message } => {
+>                         let mut game = state.lock().unwrap();
+>                         game.broadcast(&format!("\r\n[{} shouts: \"{}\"]\r\n> ", player_name, message));
+>                     }
+>                     Command::Who => {
+>                         let game = state.lock().unwrap();
+>                         let others = game.souls_in_room(&current_room);
+>                         let mut msg = format!("Souls in {}:\r\n", current_room);
+>                         for (id, name) in &others {
+>                             if *id == soul_id { msg.push_str(&format!("  {} (you)\r\n", name)); }
+>                             else { msg.push_str(&format!("  {}\r\n", name)); }
+>                         }
+>                         msg.push_str("> ");
+>                         drop(game);
+>                         let _ = writer.write_all(msg.as_bytes());
+>                         let _ = writer.flush();
+>                     }
+>                     Command::Help => {
+>                         let _ = writer.write_all(b"\
+> Commands:\r\n\
+>   look (l)          - describe your surroundings\r\n\
+>   go <direction>    - move (or just type: north, south, up, down...)\r\n\
+>   say <message>     - speak to others in your room\r\n\
+>   shout <message>   - yell so everyone in the castle hears\r\n\
+>   take <item>       - pick up an item\r\n\
+>   drop <item>       - drop an item\r\n\
+>   inventory (i)     - check what you're carrying\r\n\
+>   who               - see who's in your room\r\n\
+>   quit (q)          - leave Shadowkeep\r\n> ");
+>                         let _ = writer.flush();
+>                     }
+>                     Command::Inventory => {
+>                         let _ = writer.write_all(b"Your pockets are empty. For now.\r\n> ");
+>                         let _ = writer.flush();
+>                     }
+>                     Command::Take { item } => {
+>                         let _ = writer.write_all(format!("You reach for the {}... but your hand passes through it.\r\n> ", item).as_bytes());
+>                         let _ = writer.flush();
+>                     }
+>                     Command::Drop { item } => {
+>                         let _ = writer.write_all(format!("You don't have a {} to drop.\r\n> ", item).as_bytes());
+>                         let _ = writer.flush();
+>                     }
+>                     Command::Unknown { input } => {
+>                         let _ = writer.write_all(format!("The castle doesn't understand \"{}\". Type 'help'.\r\n> ", input).as_bytes());
+>                         let _ = writer.flush();
+>                     }
+>                 }
+>             }
+>             Err(_) => break,
+>         }
+>     }
+>
+>     {
+>         let mut game = state.lock().unwrap();
+>         game.player_leaves(&current_room);
+>         game.remove_writer(soul_id);
+>         game.remove_player(soul_id);
+>         game.broadcast(&format!("\r\n[{} has been claimed by the darkness...]\r\n> ", player_name));
+>     }
+>     println!("[server] {} (#{}) has departed", player_name, soul_id);
+> }
+> ```
+>
+> ```rust
+> // ---------------------------------------------------------------------------
+> // Entry point
+> // ---------------------------------------------------------------------------
+>
+> fn main() {
+>     let state = Arc::new(Mutex::new(GameState::new()));
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Shadowkeep awaits on port 7878...");
+>     println!("[server] The castle's heart begins to beat (5s tick)...");
+>
+>     {
+>         let state = Arc::clone(&state);
+>         thread::spawn(move || game_loop(state));
+>     }
+>
+>     for stream in listener.incoming() {
+>         match stream {
+>             Ok(stream) => {
+>                 let state = Arc::clone(&state);
+>                 thread::spawn(move || handle_haunting(stream, state));
+>             }
+>             Err(e) => eprintln!("[server] Failed to accept: {}", e),
+>         }
+>     }
+> }
+> ```
 
 ---
 

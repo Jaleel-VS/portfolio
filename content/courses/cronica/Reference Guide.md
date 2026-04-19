@@ -1,6 +1,6 @@
 # Rust Crónica — Reference Guide
 
-> Companion cheat sheet for the Rust Crónica course. Keep this open while building your AI-powered Discord bot. You know Python/TS — this maps those concepts to Rust.
+> Companion cheat sheet for the Rust Crónica course. Keep this open while building your AI-powered Discord bot. You know Python — this maps those concepts to Rust.
 
 ---
 
@@ -8,27 +8,27 @@
 
 ### Variables
 
-| Syntax | Mutability | Scope | Python/TS Equivalent |
+| Syntax | Mutability | Scope | Python Equivalent |
 |--------|-----------|-------|---------------------|
-| `let x = 5;` | Immutable | Block | `x = 5` (py) / `const x = 5` (ts) |
-| `let mut x = 5;` | Mutable | Block | `x = 5` (py) / `let x = 5` (ts) |
-| `const MAX: u32 = 100;` | Immutable, compile-time | Global/block | `MAX = 100` (py) / `const MAX = 100` (ts) |
+| `let x = 5;` | Immutable | Block | `x = 5` |
+| `let mut x = 5;` | Mutable | Block | `x = 5` |
+| `const MAX: u32 = 100;` | Immutable, compile-time | Global/block | `MAX = 100` |
 | `static COUNT: u32 = 0;` | Global lifetime, fixed address | Global | Module-level variable |
 
 > **Key difference**: `let` bindings are immutable by default. You must opt *in* to mutation.
 
 ### Types
 
-| Rust | Python | TypeScript | Notes |
-|------|--------|------------|-------|
-| `i32`, `u64`, `f64`, `bool`, `char` | `int`, `float`, `bool`, `str` | `number`, `boolean`, `string` | Rust has sized numeric types |
-| `String` | `str` | `string` | Owned, heap-allocated, growable |
-| `&str` | — | — | Borrowed string slice (view into a String or literal) |
-| `Vec<T>` | `list` | `Array<T>` | Growable array |
-| `HashMap<K, V>` | `dict` | `Map<K, V>` | Key-value store |
-| `Option<T>` | `Optional[T]` | `T \| undefined` | `Some(val)` or `None` |
-| `Result<T, E>` | — | — | `Ok(val)` or `Err(e)` — no exceptions in Rust |
-| `(i32, String)` | `tuple` | `[number, string]` | Fixed-size heterogeneous |
+| Rust | Python | Notes |
+|------|--------|-------|
+| `i32`, `u64`, `f64`, `bool`, `char` | `int`, `float`, `bool`, `str` | Rust has sized numeric types |
+| `String` | `str` | Owned, heap-allocated, growable |
+| `&str` | — | Borrowed string slice (view into a String or literal) |
+| `Vec<T>` | `list` | Growable array |
+| `HashMap<K, V>` | `dict` | Key-value store |
+| `Option<T>` | `Optional[T]` | `Some(val)` or `None` |
+| `Result<T, E>` | — | `Ok(val)` or `Err(e)` — no exceptions in Rust |
+| `(i32, String)` | `tuple` | Fixed-size heterogeneous |
 
 **String vs &str rule of thumb**: Own data → `String`. Borrow/view data → `&str`. Function params usually take `&str`, struct fields usually store `String`.
 
@@ -53,7 +53,7 @@ let s2 = s1;          // s1 is MOVED — can't use s1 anymore
 let s3 = s2.clone();  // explicit deep copy — both s2 and s3 valid
 ```
 
-> **Python/TS mental model**: Everything in Python is reference-counted behind the scenes. In Rust, YOU decide: move it, clone it, or borrow it.
+> **Python mental model**: Everything in Python is reference-counted behind the scenes. In Rust, YOU decide: move it, clone it, or borrow it.
 
 ### Pattern Matching
 
@@ -72,10 +72,10 @@ if let Some(val) = maybe_value { use(val); }
 while let Some(item) = iter.next() { process(item); }
 ```
 
-| Rust | Python | TS |
-|------|--------|----|
-| `match x { ... }` | `match x:` (3.10+) | `switch(x) { ... }` |
-| `if let Some(v) = opt` | `if (v := opt) is not None` | `if (v !== undefined)` |
+| Rust | Python |
+|------|--------|
+| `match x { ... }` | `match x:` (3.10+) |
+| `if let Some(v) = opt` | `if (v := opt) is not None` |
 
 ### Error Handling
 
@@ -120,12 +120,12 @@ impl Character {
 }
 ```
 
-| Rust | Python | TS |
-|------|--------|----|
-| `struct` | `@dataclass` | `interface` / `class` |
-| `enum` (with data) | `Enum` + union types | discriminated union |
-| `impl` block | methods in class body | methods in class body |
-| `#[derive(...)]` | `@dataclass` decorators | — |
+| Rust | Python |
+|------|--------|
+| `struct` | `@dataclass` |
+| `enum` (with data) | `Enum` + union types |
+| `impl` block | methods in class body |
+| `#[derive(...)]` | `@dataclass` decorators |
 
 ### Traits
 
@@ -137,15 +137,15 @@ trait Rollable {
 impl Rollable for Dice { fn roll(&self) -> i32 { /* ... */ } }
 ```
 
-| Common Trait | Purpose | Python/TS Equivalent |
+| Common Trait | Purpose | Python Equivalent |
 |-------------|---------|---------------------|
-| `Debug` | `{:?}` formatting | `__repr__` / `toString()` |
-| `Display` | `{}` formatting | `__str__` / `toString()` |
-| `Clone` | Explicit deep copy | `copy.deepcopy()` / structuredClone |
+| `Debug` | `{:?}` formatting | `__repr__` |
+| `Display` | `{}` formatting | `__str__` |
+| `Clone` | Explicit deep copy | `copy.deepcopy()` |
 | `Copy` | Implicit bitwise copy | Value types (int, bool) |
-| `Serialize` / `Deserialize` | serde JSON/etc | `json.dumps` / `JSON.stringify` |
+| `Serialize` / `Deserialize` | serde JSON/etc | `json.dumps` / `json.loads` |
 | `Default` | Zero/empty value | Default constructor |
-| `From<T>` / `Into<T>` | Type conversion | `__init__` overloads / type coercion |
+| `From<T>` / `Into<T>` | Type conversion | `__init__` overloads |
 
 ### Closures and Iterators
 
@@ -156,15 +156,15 @@ let names: Vec<String> = characters.iter()
     .collect();
 ```
 
-| Rust | Python | TS |
-|------|--------|----|
-| `.iter().map(f)` | `map(f, list)` | `.map(f)` |
-| `.filter(f)` | `filter(f, list)` | `.filter(f)` |
-| `.collect::<Vec<_>>()` | `list(...)` | spread / `Array.from` |
-| `.for_each(f)` | `for x in list` | `.forEach(f)` |
-| `.find(f)` | `next(x for x in ...)` | `.find(f)` |
-| `.any(f)` / `.all(f)` | `any()` / `all()` | `.some(f)` / `.every(f)` |
-| `\|x\| x + 1` | `lambda x: x + 1` | `(x) => x + 1` |
+| Rust | Python |
+|------|--------|
+| `.iter().map(f)` | `map(f, list)` |
+| `.filter(f)` | `filter(f, list)` |
+| `.collect::<Vec<_>>()` | `list(...)` |
+| `.for_each(f)` | `for x in list` |
+| `.find(f)` | `next(x for x in ...)` |
+| `.any(f)` / `.all(f)` | `any()` / `all()` |
+| `\|x\| x + 1` | `lambda x: x + 1` |
 
 ### Async/Await
 
@@ -183,14 +183,14 @@ tokio::select! {
 }
 ```
 
-| Rust | Python | TS |
-|------|--------|----|
-| `async fn` / `.await` | `async def` / `await` | `async function` / `await` |
-| `tokio::spawn()` | `asyncio.create_task()` | `Promise` (auto-concurrent) |
-| `tokio::select!` | `asyncio.wait(FIRST_COMPLETED)` | `Promise.race()` |
-| `tokio::join!` | `asyncio.gather()` | `Promise.all()` |
+| Rust | Python |
+|------|--------|
+| `async fn` / `.await` | `async def` / `await` |
+| `tokio::spawn()` | `asyncio.create_task()` |
+| `tokio::select!` | `asyncio.wait(FIRST_COMPLETED)` |
+| `tokio::join!` | `asyncio.gather()` |
 
-> **Key difference**: Rust futures are lazy — they do nothing until `.await`ed. Python/JS futures start immediately.
+> **Key difference**: Rust futures are lazy — they do nothing until `.await`ed. Python futures start immediately.
 
 ### Lifetimes
 
@@ -217,13 +217,13 @@ struct Quest<'a> { description: &'a str }
 
 ### Smart Pointers
 
-| Type | Purpose | Thread-safe? | Python/TS Equivalent |
+| Type | Purpose | Thread-safe? | Python Equivalent |
 |------|---------|-------------|---------------------|
 | `Box<T>` | Heap allocation, single owner | N/A (single owner) | Default in Python (everything is heap) |
 | `Rc<T>` | Reference counting, multiple owners | No | Python's default ref counting |
 | `Arc<T>` | Atomic ref counting | Yes | Shared references across workers |
 | `RefCell<T>` | Interior mutability (runtime borrow check) | No | Mutable object behind immutable ref |
-| `Mutex<T>` | Mutual exclusion lock | Yes | `threading.Lock` / — |
+| `Mutex<T>` | Mutual exclusion lock | Yes | `threading.Lock` |
 | `RwLock<T>` | Read-write lock (many readers OR one writer) | Yes | `ReadWriteLock` pattern |
 
 **Common combo**: `Arc<Mutex<T>>` — shared mutable state across async tasks (like your bot's game state).

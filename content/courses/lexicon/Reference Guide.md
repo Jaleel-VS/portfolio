@@ -785,16 +785,16 @@ These are the classic English test cases for any spell checker:
 
 ---
 
-## 7. Rust Quick Reference for Python/TS Developers
+## 7. Rust Quick Reference for Python Developers
 
 ### Ownership & Borrowing
 
-The big concept that doesn't exist in Python or TypeScript. Every value in
+The big concept that doesn't exist in Python. Every value in
 Rust has exactly one owner. When the owner goes out of scope, the value is
 dropped (freed).
 
 ```rust
-// MOVE — ownership transfers (Python/TS: this never happens)
+// MOVE — ownership transfers (Python: this never happens)
 let s1 = String::from("hello");
 let s2 = s1;           // s1 is MOVED to s2
 // println!("{s1}");    // ✗ compile error! s1 is no longer valid
@@ -812,15 +812,12 @@ change(&mut s);                    // &mut s = mutable borrow
 **In Python:** everything is a reference. `a = b` makes both point to the same
 object. Garbage collector handles cleanup. You never think about this.
 
-**In TypeScript:** same as Python. `const a = b` copies the reference, not the
-value. GC handles cleanup.
-
 **In Rust:** `let a = b` MOVES the value. `b` is gone. To share, you borrow
 with `&` (read) or `&mut` (write). No garbage collector — compiler enforces
 rules at compile time.
 
 ```
-  Python/TS mental model:        Rust mental model:
+  Python mental model:           Rust mental model:
 
   a ──→ ┌───────┐ ←── b         a ──→ ┌───────┐     b is INVALID
          │ data  │                      │ data  │
@@ -832,11 +829,11 @@ rules at compile time.
 ### String vs &str
 
 ```rust
-// String — owned, heap-allocated, growable (like Python str or TS string)
+// String — owned, heap-allocated, growable (like Python str)
 let owned: String = String::from("hello");
 let also_owned: String = "hello".to_string();
 
-// &str — borrowed string slice, read-only view (no Python/TS equivalent)
+// &str — borrowed string slice, read-only view (no Python equivalent)
 let slice: &str = "hello";          // string literal → &str
 let slice2: &str = &owned[0..3];    // borrow part of a String → &str
 let slice3: &str = &owned;          // borrow whole String → &str
@@ -858,7 +855,6 @@ word_length(&String::from("hello"));     // String auto-borrows ✓
 ```
 
 **In Python:** there's just `str`. It's immutable and reference-counted.
-**In TypeScript:** there's just `string`. It's immutable and GC'd.
 **In Rust:** `String` = you own it and can mutate it. `&str` = you're borrowing
 a view of someone else's string.
 
@@ -895,7 +891,6 @@ map.entry("world".to_string()).or_insert(0);
 ```
 
 **In Python:** `dict` — `d["key"]` raises `KeyError` if missing.
-**In TypeScript:** `Map` or plain object — `obj["key"]` returns `undefined`.
 **In Rust:** `HashMap` — `.get()` returns `Option<&V>`, forcing you to handle
 the missing case.
 
@@ -903,17 +898,17 @@ the missing case.
 
 ```rust
 // Option<T> = either Some(value) or None
-// Like: Python's Optional[T], TS's T | null | undefined
+// Like: Python's Optional[T]
 
 let maybe: Option<i32> = Some(42);
 let nothing: Option<i32> = None;
 
-// Unwrap (Python: just use it and hope; TS: value!)
+// Unwrap (Python: just use it and hope)
 let val = maybe.unwrap();           // panics if None — avoid in production
 let val = maybe.unwrap_or(0);       // default if None (Python: value or 0)
 let val = maybe.expect("msg");      // panics with message if None
 
-// Pattern match (no Python/TS equivalent — this is better)
+// Pattern match (no Python equivalent — this is better)
 match maybe {
     Some(v) => println!("got {v}"),
     None => println!("nothing"),
@@ -927,7 +922,7 @@ if let Some(v) = maybe {
 
 ```rust
 // Result<T, E> = either Ok(value) or Err(error)
-// Like: Python's try/except, TS's try/catch — but as a return type
+// Like: Python's try/except — but as a return type
 
 fn parse_number(s: &str) -> Result<i32, String> {
     s.parse::<i32>().map_err(|e| e.to_string())
@@ -943,7 +938,7 @@ match parse_number("42") {
 ### Pattern Matching
 
 ```rust
-// match = Python's match/case (3.10+) or TS switch, but exhaustive
+// match = Python's match/case (3.10+), but exhaustive
 
 let distance: usize = 2;
 
@@ -954,7 +949,7 @@ match distance {
     _ => println!("too far"),       // _ = default (required for exhaustiveness)
 }
 
-// Destructuring (no direct Python/TS equivalent)
+// Destructuring (no direct Python equivalent)
 enum Suggestion {
     Exact(String),
     Fuzzy(String, usize),  // word, distance
@@ -970,59 +965,56 @@ match suggestion {
 ```
 
 **In Python:** `match/case` (3.10+) is similar but not exhaustive.
-**In TypeScript:** `switch` doesn't destructure. Discriminated unions are close.
 **In Rust:** `match` is exhaustive (compiler error if you miss a case) and
 destructures naturally.
 
 ### Iterator Methods
 
 ```
-┌──────────────────────┬──────────────────────────┬──────────────────────────┐
-│ Rust                 │ Python                   │ TypeScript               │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.map(|x| x + 1) │ [x + 1 for x in lst]    │ arr.map(x => x + 1)     │
-│                      │ map(lambda x: x+1, lst)  │                          │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.filter(|x|      │ [x for x in lst          │ arr.filter(x =>         │
-│   x > &5)            │   if x > 5]              │   x > 5)                │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.collect::<Vec>()│ list(...)                │ (already an array)       │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.enumerate()     │ enumerate(lst)           │ arr.entries() or         │
-│                      │                          │ arr.forEach((v,i) =>)    │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.any(|x| cond)   │ any(cond for x in lst)   │ arr.some(x => cond)     │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.all(|x| cond)   │ all(cond for x in lst)   │ arr.every(x => cond)    │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.find(|x| cond)  │ next(x for x in lst      │ arr.find(x => cond)     │
-│                      │   if cond, None)         │                          │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.fold(init,      │ functools.reduce(f, lst,  │ arr.reduce((acc, x) =>  │
-│   |acc, x| f)        │   init)                  │   f, init)              │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.zip(other)      │ zip(lst1, lst2)          │ (no built-in, use       │
-│                      │                          │  lodash _.zip)           │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.take(n)         │ lst[:n] or               │ arr.slice(0, n)         │
-│                      │ itertools.islice(it, n)  │                          │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.skip(n)         │ lst[n:] or               │ arr.slice(n)            │
-│                      │ itertools.islice(it,n,∞) │                          │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.count()         │ len(lst)                 │ arr.length               │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.min() / max()   │ min(lst) / max(lst)      │ Math.min(...arr)        │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.sum::<T>()      │ sum(lst)                 │ arr.reduce((a,b)=>a+b,0)│
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.flatten()       │ itertools.chain(*lsts)   │ arr.flat()              │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.chain(other)    │ itertools.chain(a, b)    │ [...arr1, ...arr2]      │
-├──────────────────────┼──────────────────────────┼──────────────────────────┤
-│ iter.sorted()        │ sorted(lst)              │ [...arr].sort()         │
-│ (itertools crate)    │                          │                          │
-└──────────────────────┴──────────────────────────┴──────────────────────────┘
+┌──────────────────────┬──────────────────────────┐
+│ Rust                 │ Python                   │
+├──────────────────────┼──────────────────────────┤
+│ iter.map(|x| x + 1) │ [x + 1 for x in lst]    │
+│                      │ map(lambda x: x+1, lst)  │
+├──────────────────────┼──────────────────────────┤
+│ iter.filter(|x|      │ [x for x in lst          │
+│   x > &5)            │   if x > 5]              │
+├──────────────────────┼──────────────────────────┤
+│ iter.collect::<Vec>()│ list(...)                │
+├──────────────────────┼──────────────────────────┤
+│ iter.enumerate()     │ enumerate(lst)           │
+├──────────────────────┼──────────────────────────┤
+│ iter.any(|x| cond)   │ any(cond for x in lst)   │
+├──────────────────────┼──────────────────────────┤
+│ iter.all(|x| cond)   │ all(cond for x in lst)   │
+├──────────────────────┼──────────────────────────┤
+│ iter.find(|x| cond)  │ next(x for x in lst      │
+│                      │   if cond, None)         │
+├──────────────────────┼──────────────────────────┤
+│ iter.fold(init,      │ functools.reduce(f, lst,  │
+│   |acc, x| f)        │   init)                  │
+├──────────────────────┼──────────────────────────┤
+│ iter.zip(other)      │ zip(lst1, lst2)          │
+├──────────────────────┼──────────────────────────┤
+│ iter.take(n)         │ lst[:n] or               │
+│                      │ itertools.islice(it, n)  │
+├──────────────────────┼──────────────────────────┤
+│ iter.skip(n)         │ lst[n:] or               │
+│                      │ itertools.islice(it,n,∞) │
+├──────────────────────┼──────────────────────────┤
+│ iter.count()         │ len(lst)                 │
+├──────────────────────┼──────────────────────────┤
+│ iter.min() / max()   │ min(lst) / max(lst)      │
+├──────────────────────┼──────────────────────────┤
+│ iter.sum::<T>()      │ sum(lst)                 │
+├──────────────────────┼──────────────────────────┤
+│ iter.flatten()       │ itertools.chain(*lsts)   │
+├──────────────────────┼──────────────────────────┤
+│ iter.chain(other)    │ itertools.chain(a, b)    │
+├──────────────────────┼──────────────────────────┤
+│ iter.sorted()        │ sorted(lst)              │
+│ (itertools crate)    │                          │
+└──────────────────────┴──────────────────────────┘
 ```
 
 **Key difference:** Rust iterators are lazy (like Python generators). Nothing
@@ -1068,20 +1060,12 @@ def load_dict(path):
         return f.read().splitlines()
 ```
 
-**In TypeScript:**
-```typescript
-// Same as Python — exceptions are implicit
-function loadDict(path: string): string[] {
-    return fs.readFileSync(path, 'utf8').split('\n');  // throws implicitly
-}
-```
-
 **In Rust:** errors are values, not exceptions. The `?` operator is syntactic
 sugar for "if this is an Err, return it from the current function." You always
 see where errors can occur — no hidden control flow.
 
 ```
-  Python/TS:   errors are invisible until they explode at runtime
+  Python:      errors are invisible until they explode at runtime
   Rust:        errors are in the type signature — you MUST handle them
 ```
 
@@ -1089,11 +1073,11 @@ see where errors can occur — no hidden control flow.
 
 ```
 ┌──────────────────────┬──────────────────────────┬──────────────────────────┐
-│ Concept              │ Python / TypeScript       │ Rust                     │
+│ Concept              │ Python                    │ Rust                     │
 ├──────────────────────┼──────────────────────────┼──────────────────────────┤
 │ Variable             │ x = 5                    │ let x = 5;               │
 │ Mutable variable     │ (all mutable by default) │ let mut x = 5;           │
-│ Constant             │ X = 5 / const X = 5      │ const X: i32 = 5;        │
+│ Constant             │ X = 5                    │ const X: i32 = 5;        │
 │ Print                │ print(f"{x}")            │ println!("{x}");         │
 │ String format        │ f"hello {name}"          │ format!("hello {name}")  │
 │ Function             │ def f(x: int) -> int:    │ fn f(x: i32) -> i32 {    │
@@ -1104,7 +1088,7 @@ see where errors can occur — no hidden control flow.
 │ For loop             │ for x in lst:            │ for x in &v { ... }      │
 │ While loop           │ while cond:              │ while cond { ... }       │
 │ If/else              │ if x > 5:                │ if x > 5 { ... }         │
-│ Null/None            │ None / null / undefined  │ None (inside Option<T>)  │
+│ Null/None            │ None                     │ None (inside Option<T>)  │
 │ Type annotation      │ x: int = 5               │ let x: i32 = 5;          │
 │ Tuple                │ (1, "a")                 │ (1, "a")                 │
 │ Closure/Lambda       │ lambda x: x + 1          │ |x| x + 1               │

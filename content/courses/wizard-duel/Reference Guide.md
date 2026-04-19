@@ -26,13 +26,6 @@ mana -= 10
 name = "Gandalf"
 ```
 
-```typescript
-// TypeScript
-const hp = 100;        // immutable
-let mana = 50;         // mutable
-mana -= 10;
-```
-
 **In the project:** Wizard stats use `let mut` because HP/mana change each turn. Spell definitions use `let` because they're immutable after creation.
 
 ---
@@ -61,13 +54,6 @@ let wizard_name: String = String::from("Harry"); // owned, heap
 damage = 25
 multiplier = 1.5
 spell_name = "Reducto"
-```
-
-```typescript
-// TypeScript — number covers int and float
-const damage: number = 25;
-const multiplier: number = 1.5;
-const spellName: string = "Reducto";
 ```
 
 **In the project:** `&str` for compile-time spell names, `String` for user input (wizard name, save file paths).
@@ -120,15 +106,6 @@ class Burn:
     turns: int
 ```
 
-```typescript
-// TypeScript — discriminated union
-type StatusEffect =
-  | { kind: "burn"; damage: number; turns: number }
-  | { kind: "shield"; hp: number }
-  | { kind: "stun" }
-  | { kind: "none" };
-```
-
 **In the project:** `GameState` enum drives the state machine (Menu, CharacterCreation, Duel, Results). `SpellEffect` enum carries damage/heal/status data per variant.
 
 ---
@@ -178,22 +155,6 @@ class Wizard:
 
     def is_alive(self) -> bool:
         return self.hp > 0
-```
-
-```typescript
-class Wizard {
-  constructor(
-    public name: string,
-    public hp = 100,
-    public maxHp = 100,
-    public mana = 50,
-    public level = 1,
-  ) {}
-
-  isAlive(): boolean {
-    return this.hp > 0;
-  }
-}
 ```
 
 **In the project:** `Wizard` struct holds all combatant state. `Spell` struct defines each spell's stats. `impl` blocks group behavior with data.
@@ -250,15 +211,6 @@ class Combatant(ABC):
         return self.hp() > 0
 ```
 
-```typescript
-// TypeScript — interface
-interface Combatant {
-  name(): string;
-  hp(): number;
-  isAlive(): boolean; // no default impl in interfaces
-}
-```
-
 **In the project:** `AiStrategy` trait defines the AI interface. Different difficulty levels (RandomAi, TrackingAi, OptimalAi) implement it. The duel engine accepts `&dyn AiStrategy`.
 
 ---
@@ -290,14 +242,6 @@ while let Some(effect) = status_effects.pop() {
 match game_state:
     case "menu": draw_menu()
     case "duel": draw_duel()
-```
-
-```typescript
-// TypeScript — switch on discriminant
-switch (gameState.kind) {
-  case "menu": drawMenu(); break;
-  case "duel": drawDuel(); break;
-}
 ```
 
 **In the project:** `match` on `GameState` drives the main render loop. `if let` checks optional spell selection. `while let` drains status effect queues.
@@ -341,14 +285,6 @@ def find_spell(name: str, spells: list) -> Spell | None:
     return next((s for s in spells if s.name == name), None)
 ```
 
-```typescript
-// TypeScript — try/catch or undefined
-function loadSave(path: string): string { /* throws */ }
-function findSpell(name: string, spells: Spell[]): Spell | undefined {
-  return spells.find((s) => s.name === name);
-}
-```
-
 **In the project:** Save/load uses `Result` with `?`. Spell lookup returns `Option`. Game logic uses `expect()` only for invariants that indicate bugs.
 
 ---
@@ -384,12 +320,6 @@ fn longest_name<'a>(a: &'a Wizard, b: &'a Wizard) -> &'a str {
 # Python — no ownership, everything is reference-counted
 wizard = Wizard("Harry")
 winner = wizard  # both point to same object
-```
-
-```typescript
-// TypeScript — same as Python, GC handles it
-const wizard = new Wizard("Harry");
-const winner = wizard; // shared reference
 ```
 
 **In the project:** The duel engine borrows both wizards mutably on alternating turns. Status effects are owned by each wizard's `Vec<StatusEffect>`. Spell references are borrowed from the spell registry.
@@ -431,13 +361,6 @@ spells = []
 spells.append(Spell("Stupefy", 2, 15))
 high_damage = [s for s in spells if s.damage > 20]
 total_mana = sum(s.mana_cost for s in spells)
-```
-
-```typescript
-const spells: Spell[] = [];
-spells.push(new Spell("Stupefy", 2, 15));
-const highDamage = spells.filter((s) => s.damage > 20);
-const totalMana = spells.reduce((sum, s) => sum + s.manaCost, 0);
 ```
 
 **In the project:** `Vec<Spell>` for each wizard's spell book. `Vec<StatusEffect>` for active effects. Iterators for damage calculation, AI spell evaluation, and rendering spell lists.
@@ -493,13 +416,6 @@ def create_ai(difficulty: int) -> AiStrategy:
     return RandomAi() if difficulty == 1 else TrackingAi()
 ```
 
-```typescript
-// TypeScript — interfaces, no boxing
-function createAi(difficulty: number): AiStrategy {
-  return difficulty === 1 ? new RandomAi() : new TrackingAi();
-}
-```
-
 **In the project:** `Box<dyn AiStrategy>` lets the duel engine work with any AI difficulty without knowing the concrete type. Chosen at character creation, used throughout the duel.
 
 ---
@@ -529,12 +445,6 @@ greet();
 # Python — closures capture by reference
 threshold = 20
 is_strong = lambda s: s.damage > threshold
-```
-
-```typescript
-// TypeScript — closures capture by reference
-const threshold = 20;
-const isStrong = (s: Spell) => s.damage > threshold;
 ```
 
 **In the project:** Closures used heavily with iterators for filtering spells, calculating damage, and sorting AI options. `Fn` closures for reusable predicates, `FnMut` for accumulating combat log entries.
@@ -572,14 +482,6 @@ class Wizard:
     def __init__(self, name: str):
         self.name = name      # public
         self._hp = 100        # "private" by convention
-```
-
-```typescript
-// TypeScript — export keyword
-// wizard.ts
-export class Wizard {
-  constructor(public name: string, private hp = 100) {}
-}
 ```
 
 **In the project:** `mod wizard`, `mod spells`, `mod duel`, `mod ai`, `mod ui` — each game system in its own module. `pub` on structs/methods that cross module boundaries, private for internal logic.

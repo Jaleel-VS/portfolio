@@ -19,7 +19,7 @@ But first, we lay the foundation stones.
 - Rust installed (`curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh`)
 - A terminal (Ghostty, iTerm2, whatever you like)
 - A text editor (nvim, VS Code, Zed — anything works)
-- Familiarity with Python or TypeScript (we'll compare constantly)
+- Familiarity with Python (we'll compare constantly)
 
 **RPG Glossary:**
 
@@ -41,7 +41,7 @@ Before you can seal a single secret, you need a vault that compiles. This stage 
 
 > *"Every great vault begins with a single stone. Yours begins with `cargo new`."*
 
-**Difficulty:** Very Easy
+*Difficulty: Very Easy*
 **Concepts introduced:** Cargo, crates, `main.rs`, `println!`, `Cargo.toml`
 **Time estimate:** 10 minutes
 
@@ -62,7 +62,7 @@ cd ironvault
 
 ```
 ironvault/
-├── Cargo.toml    # Project manifest (like package.json or pyproject.toml)
+├── Cargo.toml    # Project manifest (like pyproject.toml)
 └── src/
     └── main.rs   # Entry point (like if __name__ == "__main__" or index.ts)
 ```
@@ -74,14 +74,6 @@ ironvault/
 | `pip install requests` | `cargo add reqwest` |
 | `python main.py` | `cargo run` |
 | PyPI | crates.io |
-
-**TypeScript comparison:**
-| TypeScript | Rust |
-|------------|------|
-| `package.json` | `Cargo.toml` |
-| `npm install` | `cargo build` |
-| `npx ts-node index.ts` | `cargo run` |
-| npm registry | crates.io |
 
 ### Step 2: Look at What Cargo Generated
 
@@ -170,7 +162,7 @@ edition = "2021"
 # Act 2: Encryption & security (coming later)
 # aes-gcm = "0.10"
 # argon2 = "0.5"
-# rand = "0.8"
+# rand = "0.9"
 # zeroize = { version = "1", features = ["derive"] }
 # secrecy = "0.10"
 # rpassword = "7"
@@ -186,18 +178,18 @@ Run `cargo run` again to make sure it still compiles. Comments in TOML use `#`, 
 
 With the toolchain proven and the dependency map laid out, you're ready to define the core data type that every vault operation revolves around — the Relic.
 
-### Checkpoint Code
+> [!check] Checkpoint
+> Your project should look like this:
+>
+> **`Cargo.toml`:**
+> ```toml
+> [package]
+> name = "ironvault"
+> version = "0.1.0"
+> edition = "2021"
+>
+> [dependencies]
 
-Your project should look like this:
-
-**`Cargo.toml`:**
-```toml
-[package]
-name = "ironvault"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
 # (all commented out — we'll enable them stage by stage)
 ```
 
@@ -216,27 +208,25 @@ fn main() {
 2. Try `cargo build --release` — this creates an optimized binary at `target/release/ironvault`. Run it directly: `./target/release/ironvault`.
 3. Try `println!("Relics stored: {}", 42);` — the `{}` is a format placeholder, like Python's f-string `f"Relics stored: {42}"`.
 
-### Common Mistakes
+> [!warning] Common Mistake: Forgetting the `!` in `println`
+> ```rust
+> println("oops");  // ❌ error[E0423]: expected function, found macro `println`
+> ```
+> `println` is a macro, not a function. Always use `println!` with the bang.
 
-**Forgetting the `!` in `println`:**
-```rust
-println("oops");  // ❌ error[E0423]: expected function, found macro `println`
-```
-`println` is a macro, not a function. Always use `println!` with the bang.
+> [!warning] Common Mistake: Missing semicolon
+> ```rust
+> fn main() {
+>     println!("hello")  // ❌ error: expected `;`
+> }
+> ```
+> Rust requires semicolons at the end of statements. This is not optional.
 
-**Missing semicolon:**
-```rust
-fn main() {
-    println!("hello")  // ❌ error: expected `;`
-}
-```
-Rust requires semicolons at the end of statements. Unlike JavaScript, this is not optional.
-
-**Wrong quotes:**
-```rust
-println!('hello');  // ❌ error: character literal may only contain one codepoint
-```
-Single quotes are for single characters (`char`). Strings always use double quotes.
+> [!warning] Common Mistake: Wrong quotes
+> ```rust
+> println!('hello');  // ❌ error: character literal may only contain one codepoint
+> ```
+> Single quotes are for single characters (`char`). Strings always use double quotes.
 
 ---
 
@@ -246,7 +236,7 @@ A password manager without a data model is just a text file. This stage solves t
 
 > *"A relic is more than a name and a password. It carries the memory of where it was forged, what chamber it belongs to, and when it last saw the light."*
 
-**Difficulty:** Easy
+*Difficulty: Easy*
 **Concepts introduced:** Structs, derive macros, `String` vs `&str`, `Option<T>`, serde serialization
 **Time estimate:** 20 minutes
 **Spec reference:** The Relic struct captures every field a credential needs — identity (name, username), the secret (password), context (URL, chamber, tags, notes), and audit trail (timestamps). Each field type is chosen deliberately: `String` for required fields, `Option<String>` for optional ones, `Vec<String>` for multi-value tags.
@@ -354,7 +344,7 @@ struct Relic {
 }
 ```
 
-A struct is Rust's equivalent of a Python `@dataclass` or a TypeScript `interface` (but with actual data storage). Each field has a name and a type.
+A struct is Rust's equivalent of a Python `@dataclass` (but with actual data storage). Each field has a name and a type.
 
 **Python comparison:**
 ```python
@@ -411,7 +401,7 @@ enum Option<T> {
 
 **Python comparison:** `Optional[str]` in type hints, but Python doesn't enforce it — you can still pass `None` where `str` is expected. Rust enforces it at compile time. If a field is `Option<String>`, you **must** handle the `None` case. If it's `String`, it's guaranteed to have a value.
 
-**TypeScript comparison:** `string | undefined`, but enforced by the compiler, not just the type checker.
+**Python comparison:** `Optional[str]`, but enforced by the compiler, not just the type checker.
 
 When creating a relic:
 ```rust
@@ -425,7 +415,7 @@ notes: None,                                       // no value
 tags: Vec<String>,
 ```
 
-`Vec<T>` is a growable array. Like Python's `list` or JavaScript's `Array`.
+`Vec<T>` is a growable array. Like Python's `list`.
 
 ```rust
 // Create with the vec! macro (like a list literal)
@@ -443,7 +433,7 @@ tags.push(String::from("dev"));
 struct Relic { ... }
 ```
 
-`#[derive(...)]` tells the Rust compiler to auto-generate trait implementations. Think of traits as interfaces (TypeScript) or protocols (Python).
+`#[derive(...)]` tells the Rust compiler to auto-generate trait implementations. Think of traits as protocols (Python).
 
 | Derive | What it does | Python equivalent |
 |--------|-------------|-------------------|
@@ -499,48 +489,47 @@ Notice how `Option<String>` with `Some(...)` serializes as the plain value, and 
 
 A single relic is useful, but a real vault needs organization — chambers to categorize relics, a top-level structure to hold them all, and proper timestamps instead of raw strings. That's what Stage 3 delivers.
 
-### Checkpoint Code
-
-**`Cargo.toml`** — serde and serde_json uncommented.
-
-**`src/main.rs`:**
-```rust
-use serde::{Deserialize, Serialize};
-
-#[derive(Debug, Serialize, Deserialize)]
-struct Relic {
-    id: String,
-    name: String,
-    username: String,
-    password: String,
-    url: Option<String>,
-    chamber: String,
-    tags: Vec<String>,
-    notes: Option<String>,
-    created_at: String,
-    updated_at: String,
-}
-
-fn main() {
-    let relic = Relic {
-        id: String::from("a1b2c3d4"),
-        name: String::from("GitHub"),
-        username: String::from("adventurer@example.com"),
-        password: String::from("hunter2"),
-        url: Some(String::from("https://github.com")),
-        chamber: String::from("Armory"),
-        tags: vec![String::from("dev"), String::from("git")],
-        notes: Some(String::from("Personal account. 2FA enabled.")),
-        created_at: String::from("2026-04-18T15:00:00Z"),
-        updated_at: String::from("2026-04-18T15:00:00Z"),
-    };
-
-    let json = serde_json::to_string_pretty(&relic).unwrap();
-    println!("{}", json);
-}
-```
-
-**Run:** `cargo run` → prints pretty JSON.
+> [!check] Checkpoint
+> **`Cargo.toml`** — serde and serde_json uncommented.
+>
+> **`src/main.rs`:**
+> ```rust
+> use serde::{Deserialize, Serialize};
+>
+> #[derive(Debug, Serialize, Deserialize)]
+> struct Relic {
+>     id: String,
+>     name: String,
+>     username: String,
+>     password: String,
+>     url: Option<String>,
+>     chamber: String,
+>     tags: Vec<String>,
+>     notes: Option<String>,
+>     created_at: String,
+>     updated_at: String,
+> }
+>
+> fn main() {
+>     let relic = Relic {
+>         id: String::from("a1b2c3d4"),
+>         name: String::from("GitHub"),
+>         username: String::from("adventurer@example.com"),
+>         password: String::from("hunter2"),
+>         url: Some(String::from("https://github.com")),
+>         chamber: String::from("Armory"),
+>         tags: vec![String::from("dev"), String::from("git")],
+>         notes: Some(String::from("Personal account. 2FA enabled.")),
+>         created_at: String::from("2026-04-18T15:00:00Z"),
+>         updated_at: String::from("2026-04-18T15:00:00Z"),
+>     };
+>
+>     let json = serde_json::to_string_pretty(&relic).unwrap();
+>     println!("{}", json);
+> }
+> ```
+>
+> **Run:** `cargo run` → prints pretty JSON.
 
 ### What to Try
 
@@ -553,26 +542,24 @@ fn main() {
    println!("Parsed relic name: {}", parsed.name);
    ```
 
-### Common Mistakes
+> [!warning] Common Mistake: Forgetting `String::from()` for string literals
+> ```rust
+> name: "GitHub",  // ❌ error: expected `String`, found `&str`
+> ```
+> String literals are `&str`. Struct fields are `String`. You need to convert: `String::from("GitHub")` or `"GitHub".to_string()`.
 
-**Forgetting `String::from()` for string literals:**
-```rust
-name: "GitHub",  // ❌ error: expected `String`, found `&str`
-```
-String literals are `&str`. Struct fields are `String`. You need to convert: `String::from("GitHub")` or `"GitHub".to_string()`.
+> [!warning] Common Mistake: Forgetting `Some()` for Option fields
+> ```rust
+> url: "https://github.com",  // ❌ error: expected `Option<String>`, found `&str`
+> ```
+> Wrap it: `url: Some(String::from("https://github.com"))`.
 
-**Forgetting `Some()` for Option fields:**
-```rust
-url: "https://github.com",  // ❌ error: expected `Option<String>`, found `&str`
-```
-Wrap it: `url: Some(String::from("https://github.com"))`.
-
-**Missing derive:**
-```rust
-struct Relic { ... }  // no #[derive(Serialize)]
-serde_json::to_string_pretty(&relic);  // ❌ error: the trait `Serialize` is not implemented for `Relic`
-```
-The compiler error is clear — add `#[derive(Serialize)]`.
+> [!warning] Common Mistake: Missing derive
+> ```rust
+> struct Relic { ... }  // no #[derive(Serialize)]
+> serde_json::to_string_pretty(&relic);  // ❌ error: the trait `Serialize` is not implemented for `Relic`
+> ```
+> The compiler error is clear — add `#[derive(Serialize)]`.
 
 ---
 
@@ -582,7 +569,7 @@ A flat list of credentials becomes unmanageable the moment you have more than a 
 
 > *"A vault without chambers is just a pile. The wise adventurer sorts their relics — weapons in the Armory, gold in the Treasury, scrolls in the Library, and the darkest secrets in the Crypt."*
 
-**Difficulty:** Easy
+*Difficulty: Easy*
 **Concepts introduced:** `HashMap`, nested structs, `chrono::DateTime<Utc>`, the `use` statement
 **Time estimate:** 20 minutes
 **Spec reference:** The vault's three-layer structure — `Vault` owns `Chamber`s and `Relic`s — mirrors how real password managers organize data. Chambers provide human-meaningful categories, while the flat `relics` Vec keeps serialization simple and search fast.
@@ -729,7 +716,7 @@ let mut chambers = HashMap::new();
 chambers.insert(String::from("Armory"), Chamber { ... });
 ```
 
-`HashMap` is Rust's dictionary/map type. Like Python's `dict` or JavaScript's `Map`.
+`HashMap` is Rust's dictionary/map type. Like Python's `dict`.
 
 | Python | Rust |
 |--------|------|
@@ -770,7 +757,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 ```
 
-`use` brings items into scope. Like Python's `from X import Y` or TypeScript's `import { Y } from 'X'`.
+`use` brings items into scope. Like Python's `from X import Y`.
 
 - `std::collections::HashMap` — from the standard library
 - `chrono::{DateTime, Utc}` — from the chrono crate (curly braces import multiple items)
@@ -849,13 +836,12 @@ This matches the Design Spec §4.2 decrypted payload format exactly. The vault i
 
 The data model is complete, but it only lives in memory. A vault that vanishes when the process exits is no vault at all — next, we write it to disk and read it back.
 
-### Checkpoint Code
-
-**`Cargo.toml`** — serde, serde_json, and chrono uncommented.
-
-**`src/main.rs`** — the full code from Step 2 above.
-
-**Run:** `cargo run` → prints the full vault JSON with real timestamps.
+> [!check] Checkpoint
+> **`Cargo.toml`** — serde, serde_json, and chrono uncommented.
+>
+> **`src/main.rs`** — the full code from Step 2 above.
+>
+> **Run:** `cargo run` → prints the full vault JSON with real timestamps.
 
 ### What to Try
 
@@ -864,27 +850,25 @@ The data model is complete, but it only lives in memory. A vault that vanishes w
 3. Try accessing a chamber that doesn't exist: `chambers.get("Dungeon")` returns `None`.
 4. Note that HashMap order is not guaranteed — the chambers may print in any order. This is the same as Python's `dict` before 3.7.
 
-### Common Mistakes
+> [!warning] Common Mistake: Forgetting `mut` on the HashMap
+> ```rust
+> let chambers = HashMap::new();
+> chambers.insert(...);  // ❌ error: cannot borrow `chambers` as mutable, as it is not declared as mutable
+> ```
+> Add `mut`: `let mut chambers = HashMap::new();`
 
-**Forgetting `mut` on the HashMap:**
-```rust
-let chambers = HashMap::new();
-chambers.insert(...);  // ❌ error: cannot borrow `chambers` as mutable, as it is not declared as mutable
-```
-Add `mut`: `let mut chambers = HashMap::new();`
+> [!warning] Common Mistake: Using `&str` where `String` is expected in HashMap keys
+> ```rust
+> chambers.insert("Armory", Chamber { ... });
+> // ❌ error: expected `String`, found `&str`
+> ```
+> HashMap keys are `String` in our struct, so: `chambers.insert(String::from("Armory"), ...)`.
 
-**Using `&str` where `String` is expected in HashMap keys:**
-```rust
-chambers.insert("Armory", Chamber { ... });
-// ❌ error: expected `String`, found `&str`
-```
-HashMap keys are `String` in our struct, so: `chambers.insert(String::from("Armory"), ...)`.
-
-**Forgetting the chrono `serde` feature:**
-```toml
-chrono = "0.4"  # ❌ Missing serde feature
-```
-Without `features = ["serde"]`, you'll get: `the trait Serialize is not implemented for DateTime<Utc>`.
+> [!warning] Common Mistake: Forgetting the chrono `serde` feature
+> ```toml
+> chrono = "0.4"  # ❌ Missing serde feature
+> ```
+> Without `features = ["serde"]`, you'll get: `the trait Serialize is not implemented for DateTime<Utc>`.
 
 ---
 
@@ -894,7 +878,7 @@ A vault that exists only in memory dies with the process. This stage solves pers
 
 > *"A vault that exists only in memory is no vault at all. The scroll must be written to stone — and read back without corruption."*
 
-**Difficulty:** Medium
+*Difficulty: Medium*
 **Concepts introduced:** `std::fs`, `Result<T, E>`, the `?` operator, `PathBuf`, `dirs::home_dir()`, error handling
 **Time estimate:** 30 minutes
 
@@ -1284,13 +1268,12 @@ In Act 2, we'll replace this with the encrypted binary format from Design Spec �
 
 The vault persists to disk and survives restarts, but there's no way to interact with it except by editing `main()`. Next, we build the Gatekeeper — a real CLI that lets you create, add, and list relics from the terminal.
 
-### Checkpoint Code
-
-**`Cargo.toml`** — serde, serde_json, chrono uncommented.
-
-**`src/main.rs`** — the full code from Step 2 above.
-
-**Run:** `cargo run` → creates `~/.ironvault/vault.json`, reads it back, prints summary.
+> [!check] Checkpoint
+> **`Cargo.toml`** — serde, serde_json, chrono uncommented.
+>
+> **`src/main.rs`** — the full code from Step 2 above.
+>
+> **Run:** `cargo run` → creates `~/.ironvault/vault.json`, reads it back, prints summary.
 
 ### What to Try
 
@@ -1299,28 +1282,26 @@ The vault persists to disk and survives restarts, but there's no way to interact
 3. Corrupt the JSON file (open it, delete a brace) and try loading — see the "Vault file is corrupted" error.
 4. Try `ls -la ~/.ironvault/` — note the file permissions. On macOS/Linux, `fs::write` creates files with `0644` by default. In Act 2, we'll set `0600` (owner-only read/write).
 
-### Common Mistakes
+> [!warning] Common Mistake: Using `unwrap()` in functions that should return `Result`
+> ```rust
+> fn load_vault() -> Result<Vault, ...> {
+>     let json = fs::read_to_string(&path).unwrap();  // ❌ panics on error instead of returning Err
+> }
+> ```
+> Use `?` instead of `.unwrap()` in functions that return `Result`. Save `.unwrap()` for cases where failure is truly impossible.
 
-**Using `unwrap()` in functions that should return `Result`:**
-```rust
-fn load_vault() -> Result<Vault, ...> {
-    let json = fs::read_to_string(&path).unwrap();  // ❌ panics on error instead of returning Err
-}
-```
-Use `?` instead of `.unwrap()` in functions that return `Result`. Save `.unwrap()` for cases where failure is truly impossible.
+> [!warning] Common Mistake: Forgetting `&` when passing to functions
+> ```rust
+> fs::write(path, json);  // ❌ moves `path` and `json` — can't use them after this
+> fs::write(&path, &json);  // ✅ borrows — path and json are still usable
+> ```
+> The `&` passes a reference (borrow) instead of moving ownership. We'll cover ownership deeply in Act 2.
 
-**Forgetting `&` when passing to functions:**
-```rust
-fs::write(path, json);  // ❌ moves `path` and `json` — can't use them after this
-fs::write(&path, &json);  // ✅ borrows — path and json are still usable
-```
-The `&` passes a reference (borrow) instead of moving ownership. We'll cover ownership deeply in Act 2.
-
-**Hardcoding the home directory:**
-```rust
-let path = PathBuf::from("/Users/adventurer/.ironvault/vault.json");  // ❌ only works on your machine
-```
-Use `std::env::var("HOME")` to get the home directory portably.
+> [!warning] Common Mistake: Hardcoding the home directory
+> ```rust
+> let path = PathBuf::from("/Users/adventurer/.ironvault/vault.json");  // ❌ only works on your machine
+> ```
+> Use `std::env::var("HOME")` to get the home directory portably.
 
 ---
 
@@ -1330,7 +1311,7 @@ A vault you can only interact with by recompiling `main.rs` is no tool at all. T
 
 > *"The Gatekeeper stands at the entrance, interpreting the adventurer's commands. 'Init,' you say, and a new vault springs into existence. 'Add,' and a relic is forged. 'List,' and the ledger opens."*
 
-**Difficulty:** Medium
+*Difficulty: Medium*
 **Concepts introduced:** clap derive API (`Parser`, `Subcommand`), enums for subcommands, `match` expressions, reading from stdin
 **Time estimate:** 30 minutes
 **Spec reference:** The CLI uses subcommands (not flags) because each operation is distinct — `init` creates, `add` writes, `list` reads. Subcommands make the interface discoverable via `--help` and prevent ambiguous flag combinations.
@@ -1845,13 +1826,12 @@ GitHub               adventurer@example.com    Armory
 
 The CLI skeleton is in place with create, add, and list. But a vault that can only add and list is incomplete — you need to retrieve individual relics, edit them, and delete them. The Ledger in Stage 6 completes the CRUD interface.
 
-### Checkpoint Code
-
-**`Cargo.toml`** — serde, serde_json, chrono, and clap uncommented.
-
-**`src/main.rs`** — the full code from Step 3 above.
-
-**Run:** `cargo run -- init`, `cargo run -- add`, `cargo run -- list`.
+> [!check] Checkpoint
+> **`Cargo.toml`** — serde, serde_json, chrono, and clap uncommented.
+>
+> **`src/main.rs`** — the full code from Step 3 above.
+>
+> **Run:** `cargo run -- init`, `cargo run -- add`, `cargo run -- list`.
 
 ### What to Try
 
@@ -1860,31 +1840,29 @@ The CLI skeleton is in place with create, add, and list. But a vault that can on
 3. Try running `cargo run -- delete` — clap gives you a helpful error: `error: unrecognized subcommand 'delete'`.
 4. Check `~/.ironvault/vault.json` after adding relics — see the JSON grow.
 
-### Common Mistakes
+> [!warning] Common Mistake: Forgetting `#[command(subcommand)]` on the field
+> ```rust
+> struct Cli {
+>     command: Commands,  // ❌ error: clap doesn't know this is a subcommand
+> }
+> ```
+> Add `#[command(subcommand)]` above the field.
 
-**Forgetting `#[command(subcommand)]` on the field:**
-```rust
-struct Cli {
-    command: Commands,  // ❌ error: clap doesn't know this is a subcommand
-}
-```
-Add `#[command(subcommand)]` above the field.
+> [!warning] Common Mistake: Enum variants not matching expected subcommand names
+> ```rust
+> enum Commands {
+>     InitVault,  // becomes "init-vault" (kebab-case by default)
+> }
+> ```
+> Clap converts PascalCase to kebab-case. `InitVault` → `init-vault`. If you want just `init`, name the variant `Init`.
 
-**Enum variants not matching expected subcommand names:**
-```rust
-enum Commands {
-    InitVault,  // becomes "init-vault" (kebab-case by default)
-}
-```
-Clap converts PascalCase to kebab-case. `InitVault` → `init-vault`. If you want just `init`, name the variant `Init`.
-
-**Forgetting to flush stdout before reading stdin:**
-```rust
-print!("Name: ");
-// Without flush, the prompt might not appear before read_line blocks
-io::stdin().read_line(&mut input).unwrap();
-```
-Always call `io::stdout().flush().unwrap()` after `print!`.
+> [!warning] Common Mistake: Forgetting to flush stdout before reading stdin
+> ```rust
+> print!("Name: ");
+> // Without flush, the prompt might not appear before read_line blocks
+> io::stdin().read_line(&mut input).unwrap();
+> ```
+> Always call `io::stdout().flush().unwrap()` after `print!`.
 
 ---
 
@@ -1894,7 +1872,7 @@ A vault you can only add to is a vault you can't maintain. Passwords change, acc
 
 > *"The Ledger knows all. It can reveal a relic's secrets, strike an entry from the record, or amend what was written. But it guards its knowledge — passwords are shown only to those who ask explicitly."*
 
-**Difficulty:** Medium
+*Difficulty: Medium*
 **Concepts introduced:** Pattern matching on `Option`, iterators (`find`, `position`, `retain`), `--show-password` flag, confirmation prompts
 **Time estimate:** 30 minutes
 **Spec reference:** CRUD operations follow the principle of least surprise — `get` shows details, `edit` modifies in place, `delete` requires confirmation. The `--show-password` flag defaults to hidden because the most common use case (copying a password) doesn't require seeing it on screen.
@@ -1944,7 +1922,7 @@ enum Commands {
 }
 ```
 
-Notice how `Get`, `Delete`, and `Edit` have **fields inside the enum variant**. This is a Rust feature that Python and TypeScript don't have — enum variants can carry data. Clap turns these fields into CLI arguments.
+Notice how `Get`, `Delete`, and `Edit` have **fields inside the enum variant**. This is a Rust feature that Python doesn't have — enum variants can carry data. Clap turns these fields into CLI arguments.
 
 - `name: String` — a required positional argument (because it's not wrapped in `Option` and has no `#[arg(long)]`)
 - `#[arg(long)]` — makes `show_password` a `--show-password` flag
@@ -1987,7 +1965,7 @@ Key iterator methods we'll use:
 - `.find(|r| ...)` — returns `Option<&Relic>` — a reference to the first match, or `None`
 - `.retain(|r| ...)` — keeps only elements where the closure returns `true` (mutates in place)
 
-The `|r|` syntax is a **closure** (anonymous function). Like Python's `lambda r:` or JavaScript's `(r) =>`.
+The `|r|` syntax is a **closure** (anonymous function). Like Python's `lambda r:`.
 
 ### Step 3: Command Handlers
 
@@ -2200,13 +2178,13 @@ cargo run -- list
 
 The full CRUD interface is operational — you can create, read, update, and delete relics. But there's a silent danger: if the process crashes mid-write, your vault file could be corrupted or empty. Stage 7 introduces atomic writes to make the vault crash-proof.
 
-### Checkpoint Code
-1. Three new variants in `Commands` enum (`Get`, `Delete`, `Edit`)
-2. `find_relic()` helper function
-3. `cmd_get()`, `cmd_delete()`, `cmd_edit()` handler functions
-4. Updated `match` in `main()`
-
-**Run:** All six commands work: `init`, `add`, `list`, `get`, `delete`, `edit`.
+> [!check] Checkpoint
+> 1. Three new variants in `Commands` enum (`Get`, `Delete`, `Edit`)
+> 2. `find_relic()` helper function
+> 3. `cmd_get()`, `cmd_delete()`, `cmd_edit()` handler functions
+> 4. Updated `match` in `main()`
+>
+> **Run:** All six commands work: `init`, `add`, `list`, `get`, `delete`, `edit`.
 
 ### What to Try
 
@@ -2215,26 +2193,24 @@ The full CRUD interface is operational — you can create, read, update, and del
 3. Try `cargo run -- edit GitHub` and press Enter for every field — all values stay the same.
 4. Try partial ID matching: `cargo run -- get a1b2` (first 4 chars of the ID).
 
-### Common Mistakes
+> [!warning] Common Mistake: Trying to modify a relic while borrowing the vault
+> ```rust
+> let relic = &vault.relics[i];     // immutable borrow
+> relic.name = new_name;             // ❌ error: cannot assign to `relic.name` which is behind a `&` reference
+> ```
+> You need a mutable reference: `let relic = &mut vault.relics[i];`. But you can't have an immutable borrow and a mutable borrow at the same time — this is Rust's borrow checker protecting you from data races. That's why in `cmd_edit` we first read with `&vault.relics[i]`, then later get `&mut vault.relics[i]` in a separate scope.
 
-**Trying to modify a relic while borrowing the vault:**
-```rust
-let relic = &vault.relics[i];     // immutable borrow
-relic.name = new_name;             // ❌ error: cannot assign to `relic.name` which is behind a `&` reference
-```
-You need a mutable reference: `let relic = &mut vault.relics[i];`. But you can't have an immutable borrow and a mutable borrow at the same time — this is Rust's borrow checker protecting you from data races. That's why in `cmd_edit` we first read with `&vault.relics[i]`, then later get `&mut vault.relics[i]` in a separate scope.
+> [!warning] Common Mistake: Forgetting to destructure enum variants in match
+> ```rust
+> Commands::Get => cmd_get(),  // ❌ error: this variant has fields
+> ```
+> You must destructure: `Commands::Get { name, show_password } => cmd_get(&name, show_password)`.
 
-**Forgetting to destructure enum variants in match:**
-```rust
-Commands::Get => cmd_get(),  // ❌ error: this variant has fields
-```
-You must destructure: `Commands::Get { name, show_password } => cmd_get(&name, show_password)`.
-
-**Using `==` to compare `Option<String>` with `&str`:**
-```rust
-if relic.url == "https://github.com" {  // ❌ error: can't compare Option<String> with &str
-```
-Use `relic.url.as_deref() == Some("https://github.com")` or pattern match.
+> [!warning] Common Mistake: Using `==` to compare `Option<String>` with `&str`
+> ```rust
+> if relic.url == "https://github.com" {  // ❌ error: can't compare Option<String> with &str
+> ```
+> Use `relic.url.as_deref() == Some("https://github.com")` or pattern match.
 
 ---
 
@@ -2244,7 +2220,7 @@ Your vault file is the single source of truth for every credential you own. If a
 
 > *"A careless scribe once lost an entire vault when lightning struck mid-sentence. The Atomic Quill writes to a shadow scroll first, then swaps it into place in a single, indivisible motion. The old scroll is never touched until the new one is complete."*
 
-**Difficulty:** Medium
+*Difficulty: Medium*
 **Concepts introduced:** `File::sync_all()`, `std::fs::rename()`, atomic file operations, `#[cfg(test)]`, `#[test]`, unit testing
 **Time estimate:** 30 minutes
 **Spec reference:** The write-tmp-fsync-rename strategy is the industry standard for crash-safe file updates. It's used by SQLite (WAL mode), Git (loose objects), and PostgreSQL (WAL). The key insight: never modify the original file — always write a complete replacement and atomically swap it in.
@@ -2654,31 +2630,30 @@ All five tests pass. The atomic write strategy works:
 
 The vault's walls are raised, its data is crash-proof, and its CRUD interface is complete. But every secret still sits in plaintext on disk — readable by anyone with filesystem access. In Act 2, you'll forge the Master Key and seal the vault with real cryptography.
 
-### Checkpoint Code
-
-**`Cargo.toml`:**
-```toml
-[package]
-name = "ironvault"
-version = "0.1.0"
-edition = "2021"
-
-[dependencies]
-serde = { version = "1", features = ["derive"] }
-serde_json = "1"
-chrono = { version = "0.4", features = ["serde"] }
-clap = { version = "4", features = ["derive"] }
-
-[dev-dependencies]
-tempfile = "3"
-```
-
-**`src/main.rs`** — the full Stage 6 code with:
-1. `save_vault_to()` and `load_vault_from()` path-parameterized helpers
-2. `save_vault()` updated to use atomic write (write tmp → fsync → rename)
-3. `#[cfg(test)] mod tests` with 5 test functions
-
-**Run:** `cargo test` → 5 tests pass. `cargo run -- init/add/list/get/edit/delete` all still work.
+> [!check] Checkpoint
+> **`Cargo.toml`:**
+> ```toml
+> [package]
+> name = "ironvault"
+> version = "0.1.0"
+> edition = "2021"
+>
+> [dependencies]
+> serde = { version = "1", features = ["derive"] }
+> serde_json = "1"
+> chrono = { version = "0.4", features = ["serde"] }
+> clap = { version = "4", features = ["derive"] }
+>
+> [dev-dependencies]
+> tempfile = "3"
+> ```
+>
+> **`src/main.rs`** — the full Stage 6 code with:
+> 1. `save_vault_to()` and `load_vault_from()` path-parameterized helpers
+> 2. `save_vault()` updated to use atomic write (write tmp → fsync → rename)
+> 3. `#[cfg(test)] mod tests` with 5 test functions
+>
+> **Run:** `cargo test` → 5 tests pass. `cargo run -- init/add/list/get/edit/delete` all still work.
 
 ### What to Try
 
@@ -2688,35 +2663,33 @@ tempfile = "3"
 4. Check that `vault.json.tmp` doesn't exist after a normal `cargo run -- add` — the rename cleaned it up.
 5. Try adding `#[ignore]` above a test — it's skipped unless you run `cargo test -- --ignored`.
 
-### Common Mistakes
+> [!warning] Common Mistake: Forgetting `use super::*` in the test module
+> ```rust
+> #[cfg(test)]
+> mod tests {
+>     #[test]
+>     fn test_something() {
+>         let vault = create_default_vault();  // ❌ error: not found in this scope
+>     }
+> }
+> ```
+> Add `use super::*;` to import everything from the parent module.
 
-**Forgetting `use super::*` in the test module:**
-```rust
-#[cfg(test)]
-mod tests {
-    #[test]
-    fn test_something() {
-        let vault = create_default_vault();  // ❌ error: not found in this scope
-    }
-}
-```
-Add `use super::*;` to import everything from the parent module.
+> [!warning] Common Mistake: Using the real vault path in tests
+> ```rust
+> #[test]
+> fn test_save() {
+>     save_vault(&vault).unwrap();  // ❌ writes to ~/.ironvault/ — pollutes your real vault!
+> }
+> ```
+> Always use `tempfile::tempdir()` and `save_vault_to()` in tests. Never touch the real filesystem.
 
-**Using the real vault path in tests:**
-```rust
-#[test]
-fn test_save() {
-    save_vault(&vault).unwrap();  // ❌ writes to ~/.ironvault/ — pollutes your real vault!
-}
-```
-Always use `tempfile::tempdir()` and `save_vault_to()` in tests. Never touch the real filesystem.
-
-**Forgetting `[dev-dependencies]`:**
-```toml
-[dependencies]
-tempfile = "3"  # ❌ ships tempfile in your release binary
-```
-Test-only crates go in `[dev-dependencies]`.
+> [!warning] Common Mistake: Forgetting `[dev-dependencies]`
+> ```toml
+> [dependencies]
+> tempfile = "3"  # ❌ ships tempfile in your release binary
+> ```
+> Test-only crates go in `[dev-dependencies]`.
 
 ---
 

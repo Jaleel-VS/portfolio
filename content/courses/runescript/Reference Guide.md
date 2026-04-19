@@ -21,15 +21,15 @@ This guide covers every Rust concept, language rule, and interpreter term used a
 
 ## 1. Rust Cheat Sheet
 
-Every Rust concept used in the course, with Python/TS equivalents. If you know one, you can read the other.
+Every Rust concept used in the course, with Python equivalents. If you know one, you can read the other.
 
 ### Variables
 
-| Rust | Python | TypeScript |
-|------|--------|------------|
-| `let x = 5;` | `x = 5` | `const x = 5;` |
-| `let mut x = 5;` | `x = 5` (all mutable) | `let x = 5;` |
-| `let x: i64 = 5;` | `x: int = 5` | `const x: number = 5;` |
+| Rust | Python |
+|------|--------|
+| `let x = 5;` | `x = 5` |
+| `let mut x = 5;` | `x = 5` (all mutable) |
+| `let x: i64 = 5;` | `x: int = 5` |
 
 Rust variables are **immutable by default**. Use `let mut` when you need to reassign. The compiler will tell you if you forgot `mut`.
 
@@ -46,13 +46,6 @@ fn heal(target: &mut i64, amount: i64) -> i64 {
 def heal(target: list, amount: int) -> int:
     target[0] += amount
     return target[0]
-```
-
-```typescript
-function heal(target: { hp: number }, amount: number): number {
-    target.hp += amount;
-    return target.hp;
-}
 ```
 
 Key difference: Rust functions return the **last expression** if it has no semicolon. Adding a semicolon turns it into a statement that returns `()` (unit / void).
@@ -79,14 +72,6 @@ class StrVal:
 # ... and a type alias: Value = IntVal | StrVal | BoolVal | NilVal
 ```
 
-```typescript
-type Value =
-    | { tag: "int"; value: number }
-    | { tag: "str"; value: string }
-    | { tag: "bool"; value: boolean }
-    | { tag: "nil" };
-```
-
 Rust enums are the **core data structure** for interpreters. Each variant can carry different data. The compiler forces you to handle every variant in a `match`.
 
 ### Structs
@@ -108,10 +93,6 @@ class Span:
     col: int
 ```
 
-```typescript
-interface Span { line: number; col: number; }
-```
-
 ### Match (Pattern Matching)
 
 ```rust
@@ -128,14 +109,6 @@ match token.kind:
     case IntLit(n):  print(f"Got integer: {n}")
     case Plus():     print("Got plus")
     case _:          print("Something else")
-```
-
-```typescript
-switch (token.tag) {
-    case "int_lit": console.log(`Got integer: ${token.value}`); break;
-    case "plus":    console.log("Got plus"); break;
-    default:        console.log("Something else");
-}
 ```
 
 `match` is exhaustive — the compiler errors if you miss a variant. The `_` wildcard catches everything else.
@@ -158,10 +131,10 @@ fn parse(input: &str) -> Result<Expr, RuneError> {
 }
 ```
 
-| Rust | Python | TypeScript |
-|------|--------|------------|
-| `Option<T>` → `Some(val)` / `None` | `Optional[T]` → `val` / `None` | `T \| undefined` |
-| `Result<T, E>` → `Ok(val)` / `Err(e)` | return or `raise` | return or `throw` |
+| Rust | Python |
+|------|--------|
+| `Option<T>` → `Some(val)` / `None` | `Optional[T]` → `val` / `None` |
+| `Result<T, E>` → `Ok(val)` / `Err(e)` | return or `raise` |
 
 ### The `?` Operator (Error Propagation)
 
@@ -200,7 +173,7 @@ let expr = Expr::Binary(
 
 Why `Box`? Rust needs to know the size of every type at compile time. An `Expr` that contains another `Expr` would be infinitely sized. `Box<Expr>` is a pointer (fixed size) to a heap-allocated `Expr`.
 
-Python/TS don't need this — everything is already heap-allocated and reference-counted/garbage-collected.
+Python doesn't need this — everything is already heap-allocated and reference-counted/garbage-collected.
 
 ### Vec (Dynamic Array)
 
@@ -212,12 +185,12 @@ println!("Count: {}", enemies.len());  // 2
 let first = &enemies[0];               // borrow a reference
 ```
 
-| Rust | Python | TypeScript |
-|------|--------|------------|
-| `Vec<T>` | `list` | `Array<T>` |
-| `v.push(x)` | `v.append(x)` | `v.push(x)` |
-| `v.len()` | `len(v)` | `v.length` |
-| `&v[i]` | `v[i]` | `v[i]` |
+| Rust | Python |
+|------|--------|
+| `Vec<T>` | `list` |
+| `v.push(x)` | `v.append(x)` |
+| `v.len()` | `len(v)` |
+| `&v[i]` | `v[i]` |
 
 ### HashMap
 
@@ -232,17 +205,17 @@ if let Some(val) = scope.get("hp") {
 }
 ```
 
-| Rust | Python | TypeScript |
-|------|--------|------------|
-| `HashMap<K, V>` | `dict` | `Map<K, V>` |
-| `m.insert(k, v)` | `m[k] = v` | `m.set(k, v)` |
-| `m.get(&k)` → `Option<&V>` | `m.get(k)` / `m[k]` | `m.get(k)` |
+| Rust | Python |
+|------|--------|
+| `HashMap<K, V>` | `dict` |
+| `m.insert(k, v)` | `m[k] = v` |
+| `m.get(&k)` → `Option<&V>` | `m.get(k)` / `m[k]` |
 
 ### String vs &str
 
 | Type | What it is | Analogy |
 |------|-----------|---------|
-| `String` | Owned, heap-allocated, growable | Python `str` / JS `string` (you own it) |
+| `String` | Owned, heap-allocated, growable | Python `str` (you own it) |
 | `&str` | Borrowed slice — a view into a String or literal | A read-only reference, like a pointer |
 
 ```rust
@@ -321,11 +294,11 @@ impl Display for Value {
 }
 ```
 
-| Rust | Python | TypeScript |
-|------|--------|------------|
-| `trait` | ABC / protocol | `interface` |
-| `impl Trait for Type` | `class Foo(Protocol)` | `class Foo implements Bar` |
-| `#[derive(Debug)]` | auto-generated `__repr__` | — |
+| Rust | Python |
+|------|--------|
+| `trait` | ABC / protocol |
+| `impl Trait for Type` | `class Foo(Protocol)` |
+| `#[derive(Debug)]` | auto-generated `__repr__` |
 
 Traits define shared behavior. `#[derive(...)]` auto-implements common traits. You'll implement `Display` for `Value` so `print()` knows how to show runtime values.
 
@@ -671,7 +644,7 @@ fn eval_expr(&mut self, expr: &Expr) -> Result<Value, RuneError> {
 }
 ```
 
-Why this works so well in Rust: the compiler **guarantees exhaustiveness**. If you add a new `Expr` variant and forget to handle it, the code won't compile. Python and TypeScript can't enforce this — you'd need runtime checks or linters.
+Why this works so well in Rust: the compiler **guarantees exhaustiveness**. If you add a new `Expr` variant and forget to handle it, the code won't compile. Python can't enforce this — you'd need runtime checks or linters.
 
 ### Box for Recursive Types
 

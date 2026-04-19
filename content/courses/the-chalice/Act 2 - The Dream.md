@@ -21,7 +21,8 @@ This is where the game becomes a *game*.
 
 ## Stage 11 — The Hunter Struct
 
-**Difficulty:** Easy | **Concept:** Structs, enums, rendering a player character
+*Difficulty: Easy*
+
 
 > *"A hunter is a hunter, even in a dream."*
 
@@ -49,7 +50,7 @@ pub enum Weapon {
 }
 ```
 
-In Python you might use a string or a dictionary lookup. In TypeScript, a union type. Rust's enums are more powerful — each variant is a distinct type that the compiler tracks. You literally *cannot* pass an invalid weapon name.
+In Python you might use a string or a dictionary lookup. Rust's enums are more powerful — each variant is a distinct type that the compiler tracks. You literally *cannot* pass an invalid weapon name.
 
 Now we add methods to the enum. This is one of Rust's superpowers — you can attach behavior directly to data:
 
@@ -95,7 +96,7 @@ impl Weapon {
 }
 ```
 
-**Why `match` instead of `if/else`?** The Rust compiler *forces* you to handle every variant. If you add a new weapon later and forget to update `base_damage()`, the code won't compile. Python and TypeScript will happily let you ship a bug. Rust won't.
+**Why `match` instead of `if/else`?** The Rust compiler *forces* you to handle every variant. If you add a new weapon later and forget to update `base_damage()`, the code won't compile. Python will happily let you ship a bug. Rust won't.
 
 > **Python comparison:**
 > ```python
@@ -284,25 +285,28 @@ let span = Span::raw(format!("HP: {}", hp));
 
 `Span::raw()` accepts anything that implements `Into<Cow<'a, str>>`, which includes both `&str` and `String`. When you pass an owned `String`, the `Span` takes ownership and there's no lifetime issue.
 
-### Stage 11 Checkpoint
-
-Your project should now have:
-
-```
-src/
-  main.rs          // game loop (from Act 1)
-  dungeon.rs       // BSP generation (from Act 1)
-  hunter.rs        // NEW — Hunter struct, Weapon enum
-  render.rs        // rendering functions
-```
-
-The Hunter exists, has stats, and renders as `@` on the map. But they're frozen in place — a statue in the labyrinth. Next, we teach them to walk, and the dungeon transforms from a painting into a world.
+> [!check] Checkpoint
+> Your project should now have:
+>
+> ```
+> src/
+>   main.rs          // game loop (from Act 1)
+>   dungeon.rs       // BSP generation (from Act 1)
+>   hunter.rs        // NEW — Hunter struct, Weapon enum
+>   render.rs        // rendering functions
+> ```
+>
+> The Hunter exists, has stats, and renders as `@` on the map. But they're frozen in place — a statue in the labyrinth. Next, we teach them to walk, and the dungeon transforms from a painting into a world.
 
 ---
 
 ## Stage 12 — Movement & Collision
 
-**Difficulty:** Medium | **Concepts:** Input handling, enum-based actions, collision detection, fog of war
+*Difficulty: Medium*
+
+> [!warning] Difficulty Spike
+> This stage introduces several new concepts at once — keyboard input, collision detection, and fog of war. Focus on getting movement working first, then add collision, then fog reveal.
+
 
 > *"The labyrinth shifts around you. Or perhaps it is you who shifts within it."*
 
@@ -402,15 +406,6 @@ pub fn read_player_action() -> std::io::Result<PlayerAction> {
 
 **Critical detail:** `key.kind == KeyEventKind::Press`. Without this check, you'll process the same key twice — once on press, once on release. This is a common crossterm gotcha.
 
-> **TypeScript comparison:**
-> ```typescript
-> // In a browser, you'd use addEventListener
-> document.addEventListener('keydown', (e) => {
->     if (e.key === 'w') moveNorth();
-> });
-> ```
-> The crossterm approach is similar but synchronous — `event::read()` blocks the thread until input arrives. This is fine for a turn-based game where nothing happens until the player acts.
-
 ### 12.3 — Applying Movement
 
 Now we make the Hunter actually move. The tricky part: we need to check what's at the destination *before* moving there.
@@ -467,12 +462,14 @@ impl Hunter {
 
 **The `usize`/`isize` dance:** Grid coordinates are `usize` (unsigned), but movement deltas are `isize` (signed). We cast to `isize` for the addition, bounds-check, then cast back. This is a common Rust pattern for grid-based games.
 
-> **Common mistake:** Using `usize` arithmetic directly:
+> [!warning] Common Mistake
+> Using `usize` arithmetic directly:
 > ```rust
 > // PANIC! If position.0 is 0 and dx is -1, this underflows
 > let new_x = self.position.0 + dx as usize;
 > ```
 > `usize` subtraction panics on underflow in debug mode and wraps in release mode. Always cast to `isize` first.
+
 
 ### 12.4 — Fog of War Reveal
 
@@ -703,33 +700,33 @@ The fix: `try_move` returns a `bool`, and the mutable borrow ends when the funct
 
 **Rule of thumb:** Break complex operations into sequential steps. Let each mutable borrow finish before starting the next one. Rust's borrow checker is strict but predictable — if you structure your code as "do A, then do B," you'll rarely fight it.
 
-### Stage 12 Checkpoint
-
-You now have a playable (if empty) dungeon:
-
-- WASD moves the Hunter through corridors and rooms
-- Walls block movement
-- Doors open when you walk into them
-- Fog reveals as you explore
-- The game loop runs: draw → input → update → repeat
-
-The `@` moves. The fog parts. But every action is free — there's no cost, no consequence, no tension. Next, we introduce the resource that makes every decision matter: stamina.
-
-```
-  ████████████
-  █··········█
-  █··@·······+····
-  █··········█
-  ████████████
-```
-
-The `@` moves. The fog parts. The dungeon awaits.
+> [!check] Checkpoint
+> You now have a playable (if empty) dungeon:
+>
+> - WASD moves the Hunter through corridors and rooms
+> - Walls block movement
+> - Doors open when you walk into them
+> - Fog reveals as you explore
+> - The game loop runs: draw → input → update → repeat
+>
+> The `@` moves. The fog parts. But every action is free — there's no cost, no consequence, no tension. Next, we introduce the resource that makes every decision matter: stamina.
+>
+> ```
+>   ████████████
+>   █··········█
+>   █··@·······+····
+>   █··········█
+>   ████████████
+> ```
+>
+> The `@` moves. The fog parts. The dungeon awaits.
 
 ---
 
 ## Stage 13 — Stamina
 
-**Difficulty:** Easy | **Concepts:** Resource management, game balance, conditional logic
+*Difficulty: Easy*
+
 
 > *"Every swing, every dodge, every desperate lunge — it all costs something. The blood remembers."*
 
@@ -952,23 +949,23 @@ fn draw(frame: &mut Frame, dungeon: &Dungeon, hunter: &Hunter) {
 }
 ```
 
-### Stage 13 Checkpoint
-
-The Hunter now has a stamina economy:
-
-- Actions cost stamina (15 for light attack, 30 for heavy, 20 for dodge, 5 for items)
-- Standing still regenerates +10 stamina
-- Running out of stamina causes exhaustion (1 turn vulnerability)
-- The HUD shows HP and stamina bars with color-coded warnings
-- Dodge cooldown is tracked and displayed
-
-The pressure is real. Every action matters. Now that actions have costs, we need something worth spending stamina on — the first blow against the beasts that haunt these halls.
+> [!check] Checkpoint
+> The Hunter now has a stamina economy:
+>
+> - Actions cost stamina (15 for light attack, 30 for heavy, 20 for dodge, 5 for items)
+> - Standing still regenerates +10 stamina
+> - Running out of stamina causes exhaustion (1 turn vulnerability)
+> - The HUD shows HP and stamina bars with color-coded warnings
+> - Dodge cooldown is tracked and displayed
+>
+> The pressure is real. Every action matters. Now that actions have costs, we need something worth spending stamina on — the first blow against the beasts that haunt these halls.
 
 ---
 
 ## Stage 14 — Light Attack
 
-**Difficulty:** Medium | **Concepts:** Entity interaction, damage calculation, the rally mechanic, death checks
+*Difficulty: Medium*
+
 
 > *"Steel meets flesh. The beast staggers. You press forward — there is no mercy in the hunt."*
 
@@ -1301,24 +1298,24 @@ if (x, y) == hunter.position {
 }
 ```
 
-### Stage 14 Checkpoint
-
-Combat works at its most basic level:
-
-- Light attack costs 15 stamina, deals weapon base damage
-- Blade of Mercy hits twice per attack
-- Rally mechanic recovers HP when attacking after taking damage
-- Enemies adjacent to the Hunter retaliate after the player's turn
-- Dead enemies are removed from the map
-- Combat messages appear in a log
-
-The Hunt has begun. But the light attack is safe and predictable — the hunter needs riskier options that create real tactical decisions. Next: the heavy attack that staggers but leaves you exposed, and the dodge roll that saves your life but costs precious stamina.
+> [!check] Checkpoint
+> Combat works at its most basic level:
+>
+> - Light attack costs 15 stamina, deals weapon base damage
+> - Blade of Mercy hits twice per attack
+> - Rally mechanic recovers HP when attacking after taking damage
+> - Enemies adjacent to the Hunter retaliate after the player's turn
+> - Dead enemies are removed from the map
+> - Combat messages appear in a log
+>
+> The Hunt has begun. But the light attack is safe and predictable — the hunter needs riskier options that create real tactical decisions. Next: the heavy attack that staggers but leaves you exposed, and the dodge roll that saves your life but costs precious stamina.
 
 ---
 
 ## Stage 15 — Heavy Attack & Dodge
 
-**Difficulty:** Medium | **Concepts:** State transitions, cooldown systems, invulnerability frames, stagger mechanics
+*Difficulty: Medium*
+
 
 > *"The heavy blow lands with the weight of purpose. The beast stumbles. For one precious moment, the world holds its breath."*
 
@@ -1640,23 +1637,23 @@ graph TD
     style K fill:#2d5a8b,stroke:#1d3a5b
 ```
 
-### Stage 15 Checkpoint
-
-The combat system now has real depth:
-
-- **Light attack:** 15 stamina, weapon damage, safe and reliable
-- **Heavy attack:** 30 stamina, 2x damage + stagger, but enemies act first
-- **Dodge roll:** 20 stamina, invulnerable + move 2 tiles, 1-turn cooldown
-- **Rally:** attacking after taking damage recovers HP (30% of damage dealt)
-- **Stagger:** heavy attacks make enemies skip their next turn
-
-The Hunter has options. Every turn is a decision. But even the finest swordplay means nothing if you bleed out in a corridor with no way to heal. Next, we give the Hunter their most precious resource: blood vials and the items that keep them alive.
+> [!check] Checkpoint
+> The combat system now has real depth:
+>
+> - **Light attack:** 15 stamina, weapon damage, safe and reliable
+> - **Heavy attack:** 30 stamina, 2x damage + stagger, but enemies act first
+> - **Dodge roll:** 20 stamina, invulnerable + move 2 tiles, 1-turn cooldown
+> - **Rally:** attacking after taking damage recovers HP (30% of damage dealt)
+> - **Stagger:** heavy attacks make enemies skip their next turn
+>
+> The Hunter has options. Every turn is a decision. But even the finest swordplay means nothing if you bleed out in a corridor with no way to heal. Next, we give the Hunter their most precious resource: blood vials and the items that keep them alive.
 
 ---
 
 ## Stage 16 — Blood Vials & Items
 
-**Difficulty:** Medium | **Concepts:** Inventory management, item effects, loot pickup, Vec operations
+*Difficulty: Medium*
+
 
 > *"The blood heals. The blood sustains. The blood is everything in this wretched place."*
 
@@ -2025,18 +2022,17 @@ fn tile_to_span(tile: &Tile) -> Span<'static> {
 }
 ```
 
-### Stage 16 Checkpoint
-
-The item system is complete:
-
-- Blood vials heal 30 HP, tracked separately, max 10
-- 8-slot inventory for other items
-- Loot pickup when walking over `!` tiles
-- Items consumed on use with unique effects per type
-- Inventory screen with rarity-colored item names
-- Molotovs deal area fire damage
-- Sedatives reduce insight
-- Bold Hunter's Mark teleports to entrance
+> [!check] Checkpoint
+> The item system is complete:
+>
+> - Blood vials heal 30 HP, tracked separately, max 10
+> - 8-slot inventory for other items
+> - Loot pickup when walking over `!` tiles
+> - Items consumed on use with unique effects per type
+> - Inventory screen with rarity-colored item names
+> - Molotovs deal area fire damage
+> - Sedatives reduce insight
+> - Bold Hunter's Mark teleports to entrance
 
 ---
 

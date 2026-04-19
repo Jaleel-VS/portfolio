@@ -19,7 +19,7 @@ In this act, you'll feel the pain of single-threaded blocking, then fix it three
 
 ## The Concurrency Landscape
 
-Before we write code, let's understand what we're choosing between. In Python and Node.js, the runtime makes this choice for you. In Rust, *you* pick your concurrency model.
+Before we write code, let's understand what we're choosing between. In Python, the runtime makes this choice for you. In Rust, *you* pick your concurrency model.
 
 ### Threads vs Async — The Mental Model
 
@@ -41,20 +41,20 @@ Before we write code, let's understand what we're choosing between. In Python an
 
 **Python** has the GIL (Global Interpreter Lock). Even with `threading`, only one thread executes Python bytecode at a time. CPU-bound work needs `multiprocessing` (separate processes). `asyncio` gives you cooperative concurrency on a single thread — similar to Tokio but single-threaded by default.
 
-**Node.js** is single-threaded with an event loop. All I/O is async by default. `setTimeout`, `fetch`, file reads — they all go through libuv's event loop. You never think about threads. The downside: one CPU-bound function blocks everything. Worker threads exist but are rarely used.
-
 **Rust** gives you the choice:
 - `std::thread` for OS threads — true parallelism, heavier weight
 - Tokio/async-std for async — lightweight tasks, cooperative scheduling
 - Or both — Tokio's multi-threaded runtime runs async tasks across a thread pool
 
-> **AWS connection:** This is why Lambda is powerful — each invocation gets its own execution environment. No shared state headaches, no thread pools to tune. The tradeoff is cold starts and per-invocation cost.
+> [!info] AWS Connection
+> This is why Lambda is powerful — each invocation gets its own execution environment. No shared state headaches, no thread pools to tune. The tradeoff is cold starts and per-invocation cost.
+
 
 ---
 
 ## Stage 16 — One at a Time
 
-**Difficulty: Easy** · *Feel the pain of single-threaded blocking*
+*Difficulty: Easy* · *Feel the pain of single-threaded blocking*
 
 Before you can fix a problem, you need to feel it. Your server handles one request at a time — while it's processing a slow request, every other client is frozen, waiting in line. This stage makes that pain visceral: you'll add a slow endpoint and watch fast requests get held hostage. Understanding *why* concurrency matters is the first step to implementing it correctly.
 
@@ -125,19 +125,20 @@ fn main() {
 
 `handle_connection` runs to completion before the loop accepts the next connection. While one client is sleeping for 3 seconds, every other client is queued in the OS's TCP backlog, waiting.
 
-> **AWS connection:** This is exactly the problem that auto-scaling solves. A single EC2 instance behind an ALB has the same issue if it's single-threaded — one slow request starves the rest. That's why ALB targets run multi-threaded servers, and why you scale horizontally.
+> [!info] AWS Connection
+> This is exactly the problem that auto-scaling solves. A single EC2 instance behind an ALB has the same issue if it's single-threaded — one slow request starves the rest. That's why ALB targets run multi-threaded servers, and why you scale horizontally.
 
-### Checkpoint — Stage 16
 
-You've felt the heat of single-threaded blocking — one slow request melts the entire server. The fix is straightforward: don't wait for each connection to finish before accepting the next one. Next, we'll spawn a thread per connection and watch the bottleneck vanish.
-
-Your server should have `/slow` and `/fast` routes, and you should have *felt* the blocking problem. The accept loop processes one connection at a time. Next, we fix it.
+> [!check] Checkpoint
+> You've felt the heat of single-threaded blocking — one slow request melts the entire server. The fix is straightforward: don't wait for each connection to finish before accepting the next one. Next, we'll spawn a thread per connection and watch the bottleneck vanish.
+>
+> Your server should have `/slow` and `/fast` routes, and you should have *felt* the blocking problem. The accept loop processes one connection at a time. Next, we fix it.
 
 ---
 
 ## Stage 17 — Thread Per Connection
 
-**Difficulty: Medium** · *Spawn a thread per request*
+*Difficulty: Medium* · *Spawn a thread per request*
 
 You've seen the problem: one slow request blocks everything. The most intuitive fix is also the simplest — hand each connection to its own OS thread and let the operating system handle the scheduling. This stage solves the blocking problem with one line of code, but it also reveals a new problem: unbounded resource consumption.
 
@@ -217,50 +218,50 @@ Each connection spawns a new OS thread. Each thread allocates ~8MB of stack. 10,
 - macOS is more conservative — thread creation starts failing around ~2,000
 - Each thread also costs CPU time for context switching
 
-> **AWS connection:** This is why Nginx and HAProxy don't use thread-per-connection. They use event loops (like Tokio). An ALB can handle millions of connections because it uses async I/O internally, not a thread per connection.
+> [!info] AWS Connection
+> This is why Nginx and HAProxy don't use thread-per-connection. They use event loops (like Tokio). An ALB can handle millions of connections because it uses async I/O internally, not a thread per connection.
 
-### Common Mistake: Forgetting `move`
 
-If your closure captures a reference instead of taking ownership:
+> [!warning] Common Mistake: Forgetting `move`
+> If your closure captures a reference instead of taking ownership:
+>
+> ```rust
+> // This WON'T compile:
+> thread::spawn(|| {
+>     handle_connection(&stream); // borrows stream
+> });
+> // stream is still owned by main thread — but main thread moves on!
+> ```
+>
+> The compiler catches this: `closure may outlive the current function, but it borrows stream, which is owned by the current function`. The spawned thread might outlive the loop iteration where `stream` was created. Rust won't let you have a dangling reference.
 
-```rust
-// This WON'T compile:
-thread::spawn(|| {
-    handle_connection(&stream); // borrows stream
-});
-// stream is still owned by main thread — but main thread moves on!
-```
-
-The compiler catches this: `closure may outlive the current function, but it borrows stream, which is owned by the current function`. The spawned thread might outlive the loop iteration where `stream` was created. Rust won't let you have a dangling reference.
-
-### Checkpoint — Stage 17
-
-Concurrent requests work — the blocking problem is solved. But spawning an unbounded number of threads is a ticking time bomb: 10,000 connections means 10,000 threads and ~80GB of stack memory. Next, we'll cap the damage with a thread pool — a fixed number of workers pulling jobs from a queue.
-
-```rust
-use std::net::TcpListener;
-use std::thread;
-
-fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
-    println!("Listening on http://127.0.0.1:7878");
-
-    for stream in listener.incoming() {
-        let stream = stream.unwrap();
-        thread::spawn(|| {
-            handle_connection(stream);
-        });
-    }
-}
-```
-
-Concurrent requests work. But unbounded thread creation is a ticking time bomb. Next: we build a thread pool to cap the damage.
+> [!check] Checkpoint
+> Concurrent requests work — the blocking problem is solved. But spawning an unbounded number of threads is a ticking time bomb: 10,000 connections means 10,000 threads and ~80GB of stack memory. Next, we'll cap the damage with a thread pool — a fixed number of workers pulling jobs from a queue.
+>
+> ```rust
+> use std::net::TcpListener;
+> use std::thread;
+>
+> fn main() {
+>     let listener = TcpListener::bind("127.0.0.1:7878").unwrap();
+>     println!("Listening on http://127.0.0.1:7878");
+>
+>     for stream in listener.incoming() {
+>         let stream = stream.unwrap();
+>         thread::spawn(|| {
+>             handle_connection(stream);
+>         });
+>     }
+> }
+> ```
+>
+> Concurrent requests work. But unbounded thread creation is a ticking time bomb. Next: we build a thread pool to cap the damage.
 
 ---
 
 ## Stage 18 — The Thread Pool
 
-**Difficulty: Hard** · *Build a fixed-size thread pool from scratch*
+*Difficulty: Hard* · *Build a fixed-size thread pool from scratch*
 
 Thread-per-connection works but doesn't scale — each thread costs ~8MB of stack, and the OS has hard limits on thread count. This stage solves the resource management problem: pre-creating a fixed number of worker threads and feeding them jobs through a channel. No matter how many connections arrive, you never exceed your thread limit. This is the architecture inside Nginx, Tomcat, and every production web server.
 
@@ -556,25 +557,26 @@ impl Worker {
 }
 ```
 
-> **AWS connection:** The thread pool you just built is essentially what's inside an EC2-backed ALB target. Nginx uses a similar model (though with event loops instead of threads). When you configure `worker_processes 4` in Nginx, you're setting the pool size. When you set `maxConcurrency` on a Lambda function, you're capping the pool of execution environments.
+> [!info] AWS Connection
+> The thread pool you just built is essentially what's inside an EC2-backed ALB target. Nginx uses a similar model (though with event loops instead of threads). When you configure `worker_processes 4` in Nginx, you're setting the pool size. When you set `maxConcurrency` on a Lambda function, you're capping the pool of execution environments.
 
-### Checkpoint — Stage 18
 
-You've forged a real thread pool — fixed workers, a job queue, and clean shutdown. This is the same architecture inside every production web server. But with multiple threads comes a new challenge: how do they share data? Your todo API needs a single list that all threads can read and write. That's next.
-
-You have a working thread pool with:
-- Fixed number of worker threads
-- Job queue via `mpsc::channel`
-- Shared receiver via `Arc<Mutex<>>`
-- Clean shutdown via `Drop`
-
-This is a real, production-quality pattern. The Rust Book's final project builds exactly this. Now let's add shared state.
+> [!check] Checkpoint
+> You've forged a real thread pool — fixed workers, a job queue, and clean shutdown. This is the same architecture inside every production web server. But with multiple threads comes a new challenge: how do they share data? Your todo API needs a single list that all threads can read and write. That's next.
+>
+> You have a working thread pool with:
+> - Fixed number of worker threads
+> - Job queue via `mpsc::channel`
+> - Shared receiver via `Arc<Mutex<>>`
+> - Clean shutdown via `Drop`
+>
+> This is a real, production-quality pattern. The Rust Book's final project builds exactly this. Now let's add shared state.
 
 ---
 
 ## Stage 19 — Shared State
 
-**Difficulty: Medium** · *`Arc<Mutex<>>` for shared data across handlers*
+*Difficulty: Medium* · *`Arc<Mutex<>>` for shared data across handlers*
 
 Your thread pool can handle concurrent requests, but each thread is isolated — they can't see each other's data. Your todo API needs a single list that all handlers can read and write. This stage solves the shared mutable state problem, which is the central challenge of concurrent programming and the reason Rust's ownership system exists.
 
@@ -706,66 +708,67 @@ curl http://localhost:7878/todos | python3 -m json.tool
 
 You should see all three todos with unique IDs, regardless of which thread handled which request.
 
-### Common Mistake: Deadlocks
+> [!warning] Common Mistake: Deadlocks
+> A deadlock happens when two threads each hold a lock the other needs:
+>
+> ```rust
+> // Thread 1:                    // Thread 2:
+> let a = db.lock();              let b = next_id.lock();
+> let b = next_id.lock(); // 💀   let a = db.lock(); // 💀
+> // Thread 1 waits for next_id   // Thread 2 waits for db
+> // Neither can proceed — DEADLOCK
+> ```
+>
+> **The fix:** Always acquire locks in the same order. If you always lock `db` before `next_id`, deadlocks can't happen. This is a convention you enforce by code review — the compiler can't catch it.
 
-A deadlock happens when two threads each hold a lock the other needs:
+> [!warning] Common Mistake: Holding Locks Too Long
+> ```rust
+> // BAD — holds the lock during an expensive operation
+> let mut todos = db.lock().unwrap();
+> let result = expensive_computation(); // Other threads blocked!
+> todos.push(result);
+>
+> // GOOD — lock only when you need it
+> let result = expensive_computation(); // No lock held
+> let mut todos = db.lock().unwrap();
+> todos.push(result);
+> // Lock released immediately
+> ```
 
-```rust
-// Thread 1:                    // Thread 2:
-let a = db.lock();              let b = next_id.lock();
-let b = next_id.lock(); // 💀   let a = db.lock(); // 💀
-// Thread 1 waits for next_id   // Thread 2 waits for db
-// Neither can proceed — DEADLOCK
-```
+> [!warning] Common Mistake: Mutex Poisoning
+> If a thread panics while holding a lock, the `Mutex` becomes "poisoned." Subsequent `.lock()` calls return `Err`. Using `.unwrap()` will propagate the panic. In production, you might want:
+>
+> ```rust
+> // Recover from a poisoned mutex
+> let mut todos = db.lock().unwrap_or_else(|poisoned| {
+>     eprintln!("Mutex was poisoned, recovering");
+>     poisoned.into_inner()
+> });
+> ```
+>
+>
+> > [!info] AWS Connection
+> > DynamoDB avoids all of this. Each request is independent — no shared in-memory state. That's the appeal of stateless architectures. But sometimes you need in-memory caches (like ElastiCache/Redis), and then you're back to shared-state problems — just at a different layer.
 
-**The fix:** Always acquire locks in the same order. If you always lock `db` before `next_id`, deadlocks can't happen. This is a convention you enforce by code review — the compiler can't catch it.
-
-### Common Mistake: Holding Locks Too Long
-
-```rust
-// BAD — holds the lock during an expensive operation
-let mut todos = db.lock().unwrap();
-let result = expensive_computation(); // Other threads blocked!
-todos.push(result);
-
-// GOOD — lock only when you need it
-let result = expensive_computation(); // No lock held
-let mut todos = db.lock().unwrap();
-todos.push(result);
-// Lock released immediately
-```
-
-### Common Mistake: Mutex Poisoning
-
-If a thread panics while holding a lock, the `Mutex` becomes "poisoned." Subsequent `.lock()` calls return `Err`. Using `.unwrap()` will propagate the panic. In production, you might want:
-
-```rust
-// Recover from a poisoned mutex
-let mut todos = db.lock().unwrap_or_else(|poisoned| {
-    eprintln!("Mutex was poisoned, recovering");
-    poisoned.into_inner()
-});
-```
-
-> **AWS connection:** DynamoDB avoids all of this. Each request is independent — no shared in-memory state. That's the appeal of stateless architectures. But sometimes you need in-memory caches (like ElastiCache/Redis), and then you're back to shared-state problems — just at a different layer.
-
-### Checkpoint — Stage 19
-
-Your server now safely shares data across threads — the `Arc<Mutex<>>` pattern is the foundation of concurrent Rust. But OS threads are heavy: each costs ~8MB of stack and context switches are expensive. For I/O-bound servers handling thousands of connections, we need something lighter. Next, we go async with Tokio.
-
-Your server now has:
-- Thread pool (4 workers)
-- Shared todo store via `Arc<Mutex<Vec<Todo>>>`
-- Thread-safe CRUD operations
-- No deadlocks (because you lock in consistent order)
-
-This is a fully functional concurrent web server. But threads have limits. Time to go async.
+> [!check] Checkpoint
+> Your server now safely shares data across threads — the `Arc<Mutex<>>` pattern is the foundation of concurrent Rust. But OS threads are heavy: each costs ~8MB of stack and context switches are expensive. For I/O-bound servers handling thousands of connections, we need something lighter. Next, we go async with Tokio.
+>
+> Your server now has:
+> - Thread pool (4 workers)
+> - Shared todo store via `Arc<Mutex<Vec<Todo>>>`
+> - Thread-safe CRUD operations
+> - No deadlocks (because you lock in consistent order)
+>
+> This is a fully functional concurrent web server. But threads have limits. Time to go async.
 
 ---
 
 ## Stage 20 — Tokio Awakens
 
-**Difficulty: Hard** · *Rewrite the server with async/await*
+*Difficulty: Hard* · *Rewrite the server with async/await*
+
+> [!warning] Difficulty Spike
+> This is the biggest refactor in the course. You'll rewrite the server from synchronous threads to async/await with Tokio. The concepts are new but the structure is familiar — every handler you built still works, just with `async fn` and `.await`. Take it in sections: first the listener, then the handler, then the shared state.
 
 OS threads solved concurrency but at a steep cost: ~8MB per thread, expensive context switches, and a hard ceiling around 10,000 connections. For a web server that needs to handle thousands of simultaneous connections — WebSockets, long-polling, slow clients — you need something fundamentally lighter. This stage rewrites your server with async/await and Tokio, replacing heavy OS threads with lightweight tasks that cost only a few hundred bytes each.
 
@@ -786,9 +789,9 @@ The compiler transforms this into a state machine. At the `.await`, the task say
 **No data arrives?** The task sleeps (costs nothing — it's just a struct on the heap).
 **Data arrives?** The OS notifies the runtime (via `epoll` on Linux, `kqueue` on macOS), which wakes the task and resumes it right after the `.await`.
 
-This is the same model as Node.js's event loop, but with two key differences:
-1. **Rust is multi-threaded by default** — Tokio runs a thread pool of event loops (one per CPU core). Node.js is single-threaded unless you use worker threads.
-2. **You must explicitly `.await`** — in Node.js, everything is async by default. In Rust, you choose. A function is only async if you mark it `async fn`.
+This is the same model as Python's `asyncio` event loop, but with two key differences:
+1. **Rust is multi-threaded by default** — Tokio runs a thread pool of event loops (one per CPU core). Python's `asyncio` is single-threaded by default.
+2. **You must explicitly `.await`** — in Rust, you choose. A function is only async if you mark it `async fn`.
 
 ### Add Tokio
 
@@ -988,7 +991,7 @@ async fn handle_slow(mut stream: tokio::net::TcpStream) {
 
 **Critical rule:** Never use blocking operations (`std::thread::sleep`, blocking file I/O, CPU-heavy computation) inside an async task. It blocks the runtime thread, starving other tasks. Use `tokio::time::sleep`, `tokio::fs`, or `tokio::task::spawn_blocking` for CPU work.
 
-> **Node.js comparison:** This is exactly like blocking the event loop in Node.js. If you do `while(true){}` in a Node.js handler, every other request hangs. Same thing in Tokio — `std::thread::sleep` is the Rust equivalent of blocking the event loop.
+> **Python comparison:** This is exactly like blocking the event loop in Python's `asyncio`. If you do `time.sleep(10)` in an async handler, every other request hangs. Same thing in Tokio — `std::thread::sleep` is the Rust equivalent of blocking the event loop.
 
 ### Test It
 
@@ -1002,65 +1005,63 @@ wait
 # Expected: ~3 seconds (not 12!)
 ```
 
-### Common Mistake: "future is not `Send`"
+> [!warning] Common Mistake: "future is not `Send`"
+> ```rust
+> // This won't compile:
+> tokio::spawn(async {
+>     let rc = std::rc::Rc::new(42); // Rc is not Send!
+>     tokio::time::sleep(Duration::from_secs(1)).await;
+>     println!("{}", rc);
+> });
+> ```
+>
+> Error: `` `Rc<i32>` cannot be sent between threads safely ``
+>
+> `tokio::spawn` requires `Send` because Tokio might move the task to a different thread at any `.await` point. `Rc` is not thread-safe — use `Arc` instead.
+>
+> **The rule:** Anything held across an `.await` must be `Send`. If it's only used between `.await` points (created and dropped without an `.await` in between), it doesn't need to be `Send`.
 
-```rust
-// This won't compile:
-tokio::spawn(async {
-    let rc = std::rc::Rc::new(42); // Rc is not Send!
-    tokio::time::sleep(Duration::from_secs(1)).await;
-    println!("{}", rc);
-});
-```
-
-Error: `` `Rc<i32>` cannot be sent between threads safely ``
-
-`tokio::spawn` requires `Send` because Tokio might move the task to a different thread at any `.await` point. `Rc` is not thread-safe — use `Arc` instead.
-
-**The rule:** Anything held across an `.await` must be `Send`. If it's only used between `.await` points (created and dropped without an `.await` in between), it doesn't need to be `Send`.
-
-### Checkpoint — Stage 20
-
-Your server is now async — lightweight tasks instead of heavy threads, cooperative scheduling instead of OS preemption. But right now `handle_connection` is one monolithic async function. Next, we'll bring back the router pattern with async handlers and shared state, making the architecture clean and extensible again.
-
-```rust
-use tokio::io::{AsyncReadExt, AsyncWriteExt};
-use tokio::net::TcpListener;
-
-#[tokio::main]
-async fn main() {
-    let listener = TcpListener::bind("127.0.0.1:7878").await.unwrap();
-    println!("Listening on http://127.0.0.1:7878 (async)");
-
-    loop {
-        let (stream, addr) = listener.accept().await.unwrap();
-        println!("Connection from {addr}");
-
-        tokio::spawn(async move {
-            handle_connection(stream).await;
-        });
-    }
-}
-
-async fn handle_connection(mut stream: tokio::net::TcpStream) {
-    let mut buffer = vec![0u8; 4096];
-    let n = stream.read(&mut buffer).await.unwrap();
-
-    let request = String::from_utf8_lossy(&buffer[..n]);
-    println!("Request: {}", request.lines().next().unwrap_or(""));
-
-    let response = "HTTP/1.1 200 OK\r\nContent-Length: 14\r\n\r\nHello, async!\n";
-    stream.write_all(response.as_bytes()).await.unwrap();
-}
-```
-
-Your server is now async. No thread pool to manage, no `Arc<Mutex<>>` on the receiver. Tokio handles the scheduling. Next: make the handlers themselves async.
+> [!check] Checkpoint
+> Your server is now async — lightweight tasks instead of heavy threads, cooperative scheduling instead of OS preemption. But right now `handle_connection` is one monolithic async function. Next, we'll bring back the router pattern with async handlers and shared state, making the architecture clean and extensible again.
+>
+> ```rust
+> use tokio::io::{AsyncReadExt, AsyncWriteExt};
+> use tokio::net::TcpListener;
+>
+> #[tokio::main]
+> async fn main() {
+>     let listener = TcpListener::bind("127.0.0.1:7878").await.unwrap();
+>     println!("Listening on http://127.0.0.1:7878 (async)");
+>
+>     loop {
+>         let (stream, addr) = listener.accept().await.unwrap();
+>         println!("Connection from {addr}");
+>
+>         tokio::spawn(async move {
+>             handle_connection(stream).await;
+>         });
+>     }
+> }
+>
+> async fn handle_connection(mut stream: tokio::net::TcpStream) {
+>     let mut buffer = vec![0u8; 4096];
+>     let n = stream.read(&mut buffer).await.unwrap();
+>
+>     let request = String::from_utf8_lossy(&buffer[..n]);
+>     println!("Request: {}", request.lines().next().unwrap_or(""));
+>
+>     let response = "HTTP/1.1 200 OK\r\nContent-Length: 14\r\n\r\nHello, async!\n";
+>     stream.write_all(response.as_bytes()).await.unwrap();
+> }
+> ```
+>
+> Your server is now async. No thread pool to manage, no `Arc<Mutex<>>` on the receiver. Tokio handles the scheduling. Next: make the handlers themselves async.
 
 ---
 
 ## Stage 21 — Async Handlers
 
-**Difficulty: Medium** · *Async route handlers with shared state*
+*Difficulty: Medium* · *Async route handlers with shared state*
 
 Your async server works, but all the logic is crammed into one big `handle_connection` function — the same problem you solved with the Router in Act 2. This stage brings back clean architecture: an async router that dispatches to async handler functions, each with access to shared state. This is the pattern that production frameworks like Axum and Actix-web are built on.
 
@@ -1196,28 +1197,27 @@ async fn good_handler(db: Arc<Mutex<Vec<Todo>>>) -> Response {
 
 If you need to hold a lock across `.await` points, use `tokio::sync::Mutex` instead of `std::sync::Mutex`. Tokio's mutex is async-aware — it yields instead of blocking the thread. But it's slower for short critical sections, so prefer `std::sync::Mutex` when you can release before `.await`.
 
-### Common Mistake: Async Lifetime Issues
-
-```rust
-// This won't compile:
-async fn handler(data: &str) -> Response {
-    Response::new(200, data)
-}
-
-// tokio::spawn requires 'static — no borrowed references
-tokio::spawn(async {
-    handler(&some_string).await; // `some_string` might be dropped!
-});
-```
-
-**Fix:** Move owned data into the task:
-
-```rust
-let owned_string = some_string.clone();
-tokio::spawn(async move {
-    handler(&owned_string).await; // owned_string lives inside the task
-});
-```
+> [!warning] Common Mistake: Async Lifetime Issues
+> ```rust
+> // This won't compile:
+> async fn handler(data: &str) -> Response {
+>     Response::new(200, data)
+> }
+>
+> // tokio::spawn requires 'static — no borrowed references
+> tokio::spawn(async {
+>     handler(&some_string).await; // `some_string` might be dropped!
+> });
+> ```
+>
+> **Fix:** Move owned data into the task:
+>
+> ```rust
+> let owned_string = some_string.clone();
+> tokio::spawn(async move {
+>     handler(&owned_string).await; // owned_string lives inside the task
+> });
+> ```
 
 ### Test It
 
@@ -1233,23 +1233,22 @@ wait
 curl -s http://localhost:7878/todos | python3 -m json.tool | head -30
 ```
 
-### Checkpoint — Stage 21
-
-Your async server now has clean architecture — an async router dispatching to async handlers with shared state. One critical piece remains: what happens when you press Ctrl+C? Right now, in-flight requests get killed mid-response. Next, we add graceful shutdown so your server drains connections before exiting.
-
-You should have:
-- An `AsyncRouter` that stores async handlers
-- Shared state via `Arc<Mutex<>>` passed to handlers
-- `tokio::spawn` per connection with the router behind an `Arc`
-- No locks held across `.await` points
-
-One more stage: shutting down cleanly.
+> [!check] Checkpoint
+> Your async server now has clean architecture — an async router dispatching to async handlers with shared state. One critical piece remains: what happens when you press Ctrl+C? Right now, in-flight requests get killed mid-response. Next, we add graceful shutdown so your server drains connections before exiting.
+>
+> You should have:
+> - An `AsyncRouter` that stores async handlers
+> - Shared state via `Arc<Mutex<>>` passed to handlers
+> - `tokio::spawn` per connection with the router behind an `Arc`
+> - No locks held across `.await` points
+>
+> One more stage: shutting down cleanly.
 
 ---
 
 ## Stage 22 — Graceful Shutdown
 
-**Difficulty: Medium** · *Ctrl+C handling, drain connections, clean exit*
+*Difficulty: Medium* · *Ctrl+C handling, drain connections, clean exit*
 
 Your server runs forever until you kill it — and when you do, in-flight requests are severed mid-response, database writes may be half-complete, and clients get cryptic connection-reset errors. This stage solves the shutdown problem: catching the termination signal, stopping new connections, letting active requests finish, and exiting cleanly. This is what ECS expects when it sends SIGTERM before stopping a task.
 
@@ -1425,34 +1424,34 @@ server.await.unwrap();
 
 You just built the mechanism that production frameworks provide out of the box.
 
-> **AWS connection:** Graceful shutdown is critical for ECS tasks and Lambda extensions. When ECS sends SIGTERM before stopping a task, your server needs to drain connections — exactly what you just built. Lambda extensions use the same pattern: the runtime sends a shutdown event, and your extension has a few seconds to flush logs and close connections.
+> [!info] AWS Connection
+> Graceful shutdown is critical for ECS tasks and Lambda extensions. When ECS sends SIGTERM before stopping a task, your server needs to drain connections — exactly what you just built. Lambda extensions use the same pattern: the runtime sends a shutdown event, and your extension has a few seconds to flush logs and close connections.
 
-### Common Mistake: Forgetting Cancel Safety
 
-Not all async operations are cancel-safe. If `select!` cancels a branch, any work done by that branch's future is lost. From the Tokio docs:
+> [!warning] Common Mistake: Forgetting Cancel Safety
+> Not all async operations are cancel-safe. If `select!` cancels a branch, any work done by that branch's future is lost. From the Tokio docs:
+>
+> **Cancel-safe** (safe to use in `select!`):
+> - `TcpListener::accept()`
+> - `mpsc::Receiver::recv()`
+> - `AsyncReadExt::read()`
+>
+> **Not cancel-safe** (data can be lost):
+> - `AsyncReadExt::read_exact()` — partial reads are lost
+> - `AsyncReadExt::read_to_end()` — accumulated data is lost
+> - `AsyncWriteExt::write_all()` — partial writes are lost
+>
+> If you're reading a request body with `read_to_end` inside a `select!`, and the other branch fires, you lose the partially-read body. Use cancel-safe alternatives or restructure your code.
 
-**Cancel-safe** (safe to use in `select!`):
-- `TcpListener::accept()`
-- `mpsc::Receiver::recv()`
-- `AsyncReadExt::read()`
-
-**Not cancel-safe** (data can be lost):
-- `AsyncReadExt::read_exact()` — partial reads are lost
-- `AsyncReadExt::read_to_end()` — accumulated data is lost
-- `AsyncWriteExt::write_all()` — partial writes are lost
-
-If you're reading a request body with `read_to_end` inside a `select!`, and the other branch fires, you lose the partially-read body. Use cancel-safe alternatives or restructure your code.
-
-### Checkpoint — Stage 22
-
-Your server now shuts down like a production service — draining connections, respecting timeouts, and exiting cleanly. This completes the concurrency story. In Act 4, you'll add the production features that turn this into a server that can survive the real internet: keep-alive, compression, TLS, rate limiting, and deployment.
-
-Your server now:
-- Catches Ctrl+C via `tokio::signal::ctrl_c()`
-- Stops accepting new connections
-- Waits for in-flight requests to complete (up to 10 seconds)
-- Force-closes remaining connections after timeout
-- Exits cleanly
+> [!check] Checkpoint
+> Your server now shuts down like a production service — draining connections, respecting timeouts, and exiting cleanly. This completes the concurrency story. In Act 4, you'll add the production features that turn this into a server that can survive the real internet: keep-alive, compression, TLS, rate limiting, and deployment.
+>
+> Your server now:
+> - Catches Ctrl+C via `tokio::signal::ctrl_c()`
+> - Stops accepting new connections
+> - Waits for in-flight requests to complete (up to 10 seconds)
+> - Force-closes remaining connections after timeout
+> - Exits cleanly
 
 ---
 

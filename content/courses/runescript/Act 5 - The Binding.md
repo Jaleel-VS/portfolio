@@ -15,13 +15,14 @@ Game Engine
 
 **Prerequisites:** Acts 1–4 complete — you have a working interpreter with REPL, file execution, and error diagnostics.
 
-**What you'll learn:**
-- Trait objects and dynamic dispatch (`dyn Trait`)
-- Dependency inversion — the interpreter depends on an abstraction, not a concrete game engine
-- Directory scanning with `std::fs::read_dir`
-- File watching with the `notify` crate (or manual polling)
-- Performance benchmarking with `std::time::Instant`
-- Integration testing — running real scripts end-to-end
+> [!tip] What You'll Learn
+> - Trait objects and dynamic dispatch (`dyn Trait`)
+> - Dependency inversion — the interpreter depends on an abstraction, not a concrete game engine
+> - Directory scanning with `std::fs::read_dir`
+> - File watching with the `notify` crate (or manual polling)
+> - Performance benchmarking with `std::time::Instant`
+> - Integration testing — running real scripts end-to-end
+
 
 **Estimated time:** 4–6 hours across all 4 stages.
 
@@ -39,6 +40,8 @@ flowchart TD
 ---
 
 ## Stage 27: The Game Bridge — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Define a `GameCallback` trait with methods for each game built-in. Replace the `[GAME]` print stubs in your built-in functions with trait method calls. Demonstrate dependency inversion.
 
@@ -61,7 +64,7 @@ This works for standalone testing, but it's hardcoded. When the game engine call
 
 A trait defines *what* methods exist without saying *how* they work. The evaluator calls `self.callbacks.spawn_enemy(name, count)`. In standalone mode, `callbacks` is a `StandaloneCallbacks` that prints `[GAME]`. In the real game, it's a `ChaliceCallbacks` that talks to the engine. The evaluator doesn't know the difference — that's dependency inversion.
 
-### Python/TS equivalent
+### Python equivalent
 
 In Python, you'd use an abstract base class:
 
@@ -83,7 +86,7 @@ class StandaloneCallbacks(GameCallback):
         print(f"[GAME] show_text({message})")
 ```
 
-In TypeScript, you'd use an `interface`. Rust traits are the same concept with compile-time enforcement.
+Rust traits are the same concept with compile-time enforcement.
 
 ### The Code
 
@@ -184,7 +187,7 @@ impl Evaluator {
 }
 ```
 
-- `Box<dyn GameCallback>` — a **trait object**. `Box` heap-allocates the value. `dyn GameCallback` means "any type that implements `GameCallback`." The compiler doesn't know the concrete type at compile time — method calls go through a vtable (dynamic dispatch). This is like a Python object behind an interface or a TypeScript variable typed as an interface.
+- `Box<dyn GameCallback>` — a **trait object**. `Box` heap-allocates the value. `dyn GameCallback` means "any type that implements `GameCallback`." The compiler doesn't know the concrete type at compile time — method calls go through a vtable (dynamic dispatch). This is like a Python object behind an abstract base class.
 - `Self::with_callbacks(...)` — an alternative constructor. `new()` uses `StandaloneCallbacks` by default; `with_callbacks()` lets the game engine inject its own implementation.
 
 **Step 4: Update built-in functions to use callbacks.**
@@ -253,12 +256,11 @@ impl GameCallback for TestCallbacks {
 
 This is the **test double** pattern — `TestCallbacks` records every call so your tests can assert exactly which game functions were invoked and in what order.
 
-### Common mistakes
-
-- **Forgetting `dyn` in `Box<dyn GameCallback>`** — without `dyn`, Rust tries to use static dispatch and can't determine the size at compile time. The compiler error is: "the size for values of type `dyn GameCallback` cannot be known at compilation time."
-- **Using `&dyn GameCallback` instead of `Box<dyn GameCallback>`** — a reference requires a lifetime parameter on the `Evaluator` struct, which complicates everything. `Box` owns the callbacks, avoiding lifetime issues.
-- **Not updating `Evaluator::new()` to use `StandaloneCallbacks`** — existing tests that call `Evaluator::new()` should still work because `new()` defaults to standalone mode.
-- **Making callbacks `&self` when the game engine needs `&mut self`** — if the engine needs to mutate state (spawn enemies, update HP), the trait methods need `&mut self`. It's easier to start with `&mut self` and relax later than to change it after the fact.
+> [!warning] Common Mistakes
+> - **Forgetting `dyn` in `Box<dyn GameCallback>`** — without `dyn`, Rust tries to use static dispatch and can't determine the size at compile time. The compiler error is: "the size for values of type `dyn GameCallback` cannot be known at compilation time."
+> - **Using `&dyn GameCallback` instead of `Box<dyn GameCallback>`** — a reference requires a lifetime parameter on the `Evaluator` struct, which complicates everything. `Box` owns the callbacks, avoiding lifetime issues.
+> - **Not updating `Evaluator::new()` to use `StandaloneCallbacks`** — existing tests that call `Evaluator::new()` should still work because `new()` defaults to standalone mode.
+> - **Making callbacks `&self` when the game engine needs `&mut self`** — if the engine needs to mutate state (spawn enemies, update HP), the trait methods need `&mut self`. It's easier to start with `&mut self` and relax later than to change it after the fact.
 
 ### Verify it works
 
@@ -276,18 +278,19 @@ Output should be identical to before — `[GAME] show_text(...)`, `[GAME] damage
 
 The bridge is built — game events flow through a trait, and any engine can implement it. But right now we load one script at a time. Next, we build the `ScriptManager` that scans a directory of scrolls, parses them all, and dispatches to the right one when a room is entered.
 
-### Checkpoint
-
-New files:
-- `src/callbacks.rs` — `GameCallback` trait, `StandaloneCallbacks`, `TestCallbacks`
-
-Updated files:
-- `src/evaluator.rs` — holds `Box<dyn GameCallback>`, `new()` and `with_callbacks()` constructors, built-ins call `self.callbacks` methods
-- `src/main.rs` — added `mod callbacks;`
+> [!check] Checkpoint
+> New files:
+> - `src/callbacks.rs` — `GameCallback` trait, `StandaloneCallbacks`, `TestCallbacks`
+>
+> Updated files:
+> - `src/evaluator.rs` — holds `Box<dyn GameCallback>`, `new()` and `with_callbacks()` constructors, built-ins call `self.callbacks` methods
+> - `src/main.rs` — added `mod callbacks;`
 
 ---
 
 ## Stage 28: Loading Scrolls — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Scan a directory for `.rune` files, associate each with a room ID (derived from the filename), parse them on load, and evaluate `on_enter(hunter)` when a room is entered.
 
@@ -301,7 +304,7 @@ In a real game, you don't run one script at a time — you have a directory full
 
 The key optimization: scripts are **parsed once on load** and stored as ASTs. When a room is entered, only the evaluator runs — no re-lexing or re-parsing. This matters for performance when the same room is entered multiple times.
 
-### Python/TS equivalent
+### Python equivalent
 
 ```python
 import os
@@ -529,12 +532,11 @@ fn run_directory(dir: &str) {
 }
 ```
 
-### Common mistakes
-
-- **Not handling `OsStr` → `&str` conversion** — filenames on Unix can contain non-UTF-8 bytes. `.to_str()` returns `None` in that case. Always use `.and_then(|s| s.to_str())` and handle the `None`.
-- **Sharing evaluator state between rooms** — if you reuse the same evaluator for multiple rooms, variables from one script leak into the next. Create a fresh evaluator per `on_enter` call.
-- **Panicking on load errors** — a single broken script shouldn't prevent all other scripts from loading. Collect errors and report them, but keep going.
-- **Forgetting to sort room IDs** — `HashMap` iteration order is random. Sort the IDs for deterministic output.
+> [!warning] Common Mistakes
+> - **Not handling `OsStr` → `&str` conversion** — filenames on Unix can contain non-UTF-8 bytes. `.to_str()` returns `None` in that case. Always use `.and_then(|s| s.to_str())` and handle the `None`.
+> - **Sharing evaluator state between rooms** — if you reuse the same evaluator for multiple rooms, variables from one script leak into the next. Create a fresh evaluator per `on_enter` call.
+> - **Panicking on load errors** — a single broken script shouldn't prevent all other scripts from loading. Collect errors and report them, but keep going.
+> - **Forgetting to sort room IDs** — `HashMap` iteration order is random. Sort the IDs for deterministic output.
 
 ### Verify it works
 
@@ -564,17 +566,18 @@ Loaded 6 scrolls (0 errors)
 
 Scrolls load from a directory, parse once, and dispatch on demand. But during development, you'd have to restart the interpreter every time you edit a script. Next, we add the watcher — a sentinel that detects file changes and hot-reloads scripts without restarting.
 
-### Checkpoint
-
-New files:
-- `src/script_manager.rs` — `ScriptManager` with `load_directory()`, `on_enter()`, `room_ids()`
-
-Updated files:
-- `src/main.rs` — added `--dir` argument handling, `run_directory()` function, `mod script_manager;`
+> [!check] Checkpoint
+> New files:
+> - `src/script_manager.rs` — `ScriptManager` with `load_directory()`, `on_enter()`, `room_ids()`
+>
+> Updated files:
+> - `src/main.rs` — added `--dir` argument handling, `run_directory()` function, `mod script_manager;`
 
 ---
 
 ## Stage 29: The Watcher — Hard
+
+*Difficulty: Hard*
 
 **Goal:** Detect when `.rune` files change on disk, re-lex and re-parse them without restarting the interpreter, and report errors gracefully. This is hot-reload for scripts.
 
@@ -590,7 +593,7 @@ The approach: a background thread watches the `examples/` directory for file cha
 
 This stage offers two approaches: the `notify` crate (event-driven, production-quality) or manual polling (simpler, good enough for learning). We'll show both.
 
-### Python/TS equivalent
+### Python equivalent
 
 In Python with `watchdog`:
 
@@ -608,8 +611,6 @@ observer = Observer()
 observer.schedule(ReloadHandler(), "examples/", recursive=False)
 observer.start()
 ```
-
-In Node.js: `fs.watch("examples/", callback)`.
 
 ### The Code — Approach A: Manual Polling (Simpler)
 
@@ -823,12 +824,11 @@ New Rust concepts:
 
 **Which approach to choose:** Start with Approach A (polling). It's simpler, has no extra dependency, and teaches the same concepts. If you want the challenge, try Approach B — it introduces channels and OS-level events.
 
-### Common mistakes
-
-- **Not keeping the old AST on parse failure** — if you remove the old script before parsing the new one, a parse error leaves the room with no script at all. Always parse first, then replace.
-- **Reacting to every filesystem event** — editors often create temporary files, write to them, then rename. You might get multiple events for a single save. The polling approach naturally deduplicates (it only checks timestamps). With `notify`, you may want to debounce — wait 100ms after the last event before reloading.
-- **Forgetting to keep the watcher alive** — in the `notify` approach, if `watcher` is dropped, watching stops. Make sure it lives as long as the loop runs. The `for event_result in rx` loop keeps the function alive, which keeps `watcher` in scope.
-- **Blocking the main thread** — in a real game, the watcher would run in a background thread. For this learning project, blocking is fine since we're not running a game loop simultaneously.
+> [!warning] Common Mistakes
+> - **Not keeping the old AST on parse failure** — if you remove the old script before parsing the new one, a parse error leaves the room with no script at all. Always parse first, then replace.
+> - **Reacting to every filesystem event** — editors often create temporary files, write to them, then rename. You might get multiple events for a single save. The polling approach naturally deduplicates (it only checks timestamps). With `notify`, you may want to debounce — wait 100ms after the last event before reloading.
+> - **Forgetting to keep the watcher alive** — in the `notify` approach, if `watcher` is dropped, watching stops. Make sure it lives as long as the loop runs. The `for event_result in rx` loop keeps the function alive, which keeps `watcher` in scope.
+> - **Blocking the main thread** — in a real game, the watcher would run in a background thread. For this learning project, blocking is fine since we're not running a game loop simultaneously.
 
 ### Verify it works
 
@@ -871,19 +871,20 @@ The old version of the script is preserved — the game keeps running.
 
 The watcher stands guard — edit a scroll, save it, and the interpreter picks up the change without missing a beat. One final stage remains: the Grand Ritual, where every scroll runs end-to-end and we measure the interpreter's speed.
 
-### Checkpoint
-
-New files:
-- `src/watcher.rs` — `FileWatcher` with `check_changes()` (polling approach)
-
-Updated files:
-- `src/script_manager.rs` — added `reload()` method
-- `src/main.rs` — added `--watch` argument handling
-- `Cargo.toml` — optionally added `notify = "8"` (if using Approach B)
+> [!check] Checkpoint
+> New files:
+> - `src/watcher.rs` — `FileWatcher` with `check_changes()` (polling approach)
+>
+> Updated files:
+> - `src/script_manager.rs` — added `reload()` method
+> - `src/main.rs` — added `--watch` argument handling
+> - `Cargo.toml` — optionally added `notify = "8"` (if using Approach B)
 
 ---
 
 ## Stage 30: The Grand Ritual — Medium
+
+*Difficulty: Medium*
 
 **Goal:** Run all 6 example scripts end-to-end as integration tests. Benchmark performance by timing 1000 evaluations of the boss encounter script. Celebrate.
 
@@ -897,7 +898,7 @@ This is the victory lap. Every component you've built — lexer, parser, evaluat
 
 The benchmark gives you a concrete performance number. How fast is your tree-walking interpreter? Spoiler: it's fast enough for a scripting language. Thousands of evaluations per second on a modern machine.
 
-### Python/TS equivalent
+### Python equivalent
 
 Integration testing in Python:
 
@@ -1123,13 +1124,12 @@ cargo test --test integration benchmark -- --ignored --nocapture
 
 The `--nocapture` flag is important — without it, `cargo test` swallows `println!` output. You need it to see the benchmark results.
 
-### Common mistakes
-
-- **Benchmarking debug builds** — debug builds are 10–50x slower than release builds. Always use `--release` for benchmarks. The difference is dramatic.
-- **Not using `--nocapture`** — `cargo test` captures stdout by default. Without `--nocapture`, you won't see the benchmark results.
-- **Measuring process spawn time instead of evaluation time** — the subprocess approach includes Cargo compilation checks, process creation, and I/O. The direct approach (via `lib.rs`) is more accurate.
-- **Running too few iterations** — 10 iterations might finish in milliseconds, making timing noise significant. 1000 iterations gives a stable average.
-- **Forgetting `#[ignore]` on the benchmark** — without it, the slow benchmark runs on every `cargo test`, slowing down your development cycle.
+> [!warning] Common Mistakes
+> - **Benchmarking debug builds** — debug builds are 10–50x slower than release builds. Always use `--release` for benchmarks. The difference is dramatic.
+> - **Not using `--nocapture`** — `cargo test` captures stdout by default. Without `--nocapture`, you won't see the benchmark results.
+> - **Measuring process spawn time instead of evaluation time** — the subprocess approach includes Cargo compilation checks, process creation, and I/O. The direct approach (via `lib.rs`) is more accurate.
+> - **Running too few iterations** — 10 iterations might finish in milliseconds, making timing noise significant. 1000 iterations gives a stable average.
+> - **Forgetting `#[ignore]` on the benchmark** — without it, the slow benchmark runs on every `cargo test`, slowing down your development cycle.
 
 ### Verify it works
 
@@ -1158,11 +1158,10 @@ Evaluations/sec: 308
 
 If all six scripts run and the benchmark completes, the Grand Ritual is done. Your interpreter is complete.
 
-### Checkpoint
-
-New files:
-- `tests/integration.rs` — 6 end-to-end tests + 1 benchmark
-- Optionally `src/lib.rs` — re-exports modules for integration test access
+> [!check] Checkpoint
+> New files:
+> - `tests/integration.rs` — 6 end-to-end tests + 1 benchmark
+> - Optionally `src/lib.rs` — re-exports modules for integration test access
 
 ---
 
@@ -1224,7 +1223,7 @@ The spec (§12) lists several extensions. In rough order of difficulty:
 5. **LSP server** — syntax highlighting and error squiggles in VS Code. Uses the lexer and parser you already built.
 6. **Debugger** — step through Runescript line by line, inspect variables. Requires adding breakpoint support to the evaluator.
 
-Each extension builds on the foundation you've laid. The lexer, parser, and evaluator patterns you've learned are the same ones used in production language implementations — from Lua to Ruby to early JavaScript engines.
+Each extension builds on the foundation you've laid. The lexer, parser, and evaluator patterns you've learned are the same ones used in production language implementations — from Lua to Ruby to CPython.
 
 **The Grand Ritual is complete.** The runes glow. The dungeon breathes. The hunter's story is yours to write.
 

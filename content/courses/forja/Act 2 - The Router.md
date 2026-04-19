@@ -4,7 +4,7 @@
 
 In Act 1 you built a raw HTTP server — TCP listener, request parser, response writer. You handled every request in one big `handle_connection` function with `if/else` branches on the path. That works for two routes. It falls apart at ten.
 
-In this act you'll build a **router** — the core of every web framework. By the end, you'll have something that feels like Express.js or Flask, but you built every piece yourself. You'll understand what API Gateway, ALB, and every web framework does under the hood, because you wrote the engine.
+In this act you'll build a **router** — the core of every web framework. By the end, you'll have something that feels like Flask, but you built every piece yourself. You'll understand what API Gateway, ALB, and every web framework does under the hood, because you wrote the engine.
 
 **What you'll build:**
 - A route table that maps `(method, path)` → handler function
@@ -27,6 +27,9 @@ In this act you'll build a **router** — the core of every web framework. By th
 ---
 
 ## Stage 9 — Route Matching
+
+> [!warning] Difficulty Spike
+> This stage introduces several new concepts at once — closures, trait objects, `Box<dyn Fn>`, and the `'static` lifetime. Focus on getting the router working first, then come back to understand each abstraction. The concept sections after the code explain each piece in detail.
 
 **Goal:** Register handler functions for specific method+path combinations, and dispatch incoming requests to the right handler.
 
@@ -52,14 +55,6 @@ fn handle_connection(stream: &mut TcpStream) {
 }
 ```
 
-In Express.js, you'd write:
-
-```javascript
-app.get('/', handleIndex);
-app.get('/about', handleAbout);
-app.get('/health', handleHealth);
-```
-
 In Flask:
 
 ```python
@@ -72,11 +67,10 @@ We want the same thing in Rust. Let's build it.
 
 ### Concept: Closures in Rust
 
-A **closure** is an anonymous function that can capture variables from its surrounding scope. If you know Python lambdas or JavaScript arrow functions, closures are the Rust equivalent — but more powerful.
+A **closure** is an anonymous function that can capture variables from its surrounding scope. If you know Python lambdas, closures are the Rust equivalent — but more powerful.
 
 ```rust
 // Python:  square = lambda x: x * x
-// JS:      const square = (x) => x * x;
 // Rust:
 let square = |x: i32| -> i32 { x * x };
 println!("{}", square(5)); // 25
@@ -94,7 +88,7 @@ let greet = |name: &str| {
 greet("world");
 ```
 
-In JavaScript, every function closes over its scope automatically. Rust does the same, but the borrow checker tracks *how* the closure uses captured variables — by reference, by mutable reference, or by taking ownership.
+In Python, closures capture variables from the enclosing scope. Rust does the same, but the borrow checker tracks *how* the closure uses captured variables — by reference, by mutable reference, or by taking ownership.
 
 ### Concept: Function Pointers vs Closures vs Trait Objects
 
@@ -108,7 +102,9 @@ We need option 3 because our route table stores *different* handler functions in
 
 Think of it like Python's duck typing — any callable that takes a `Request` and returns a `Response` can be a handler. In Rust, `Box<dyn Fn(Request) -> Response>` is the typed version of that idea.
 
-**AWS connection:** API Gateway's route table does exactly this — it maps `(method, resource)` pairs to Lambda function ARNs. You're building the same dispatch table, except your "Lambda functions" are Rust closures.
+> [!info] AWS Connection
+> API Gateway's route table does exactly this — it maps `(method, resource)` pairs to Lambda function ARNs. You're building the same dispatch table, except your "Lambda functions" are Rust closures.
+
 
 ### Concept: `Box<dyn Fn>` — What Each Part Means
 
@@ -183,7 +179,7 @@ impl Router {
 
 Let's unpack the new syntax:
 
-**`impl Router`** — this is how you add methods to a struct in Rust. Like a class in Python/TS, but data (`struct`) and behavior (`impl`) are separate.
+**`impl Router`** — this is how you add methods to a struct in Rust. Like a class in Python, but data (`struct`) and behavior (`impl`) are separate.
 
 **`fn add_route<F>(&mut self, ...)`** — the `<F>` is a *generic type parameter*. It means "this function works with any type `F`". The `where` clause constrains `F`: it must implement `Fn(&Request) -> Response` (it's callable with the right signature) and `'static` (it doesn't borrow short-lived data — more on lifetimes later).
 
@@ -193,7 +189,7 @@ Let's unpack the new syntax:
 
 ### Convenience Methods
 
-Express has `app.get()`, `app.post()`, etc. Let's add those:
+Flask has `@app.route()` with method arguments. Let's add those:
 
 ```rust
 impl Router {
@@ -442,48 +438,46 @@ OK
 404 Not Found
 ```
 
-### Common Mistake: Closures and the Borrow Checker
+> [!warning] Common Mistake: Closures and the Borrow Checker
+> What if you try to use a variable from `main` inside a handler?
+>
+> ```rust
+> let server_name = String::from("Forja v2");
+>
+> router.get("/info", |_req| {
+>     // ERROR: closure may outlive the current function
+>     Response::new(200, "OK", &server_name)
+> });
+> ```
+>
+> The compiler complains because `server_name` lives on the stack in `main`, but the closure is stored in the router and might be called later — after `server_name` is dropped.
+>
+> **Fix: use `move`** to transfer ownership into the closure:
+>
+> ```rust
+> let server_name = String::from("Forja v2");
+>
+> router.get("/info", move |_req| {
+>     Response::new(200, "OK", &server_name)
+> });
+> // server_name has been moved — you can't use it here anymore
+> ```
+>
+> The `move` keyword tells Rust: "don't borrow these variables — take ownership of them." The closure now *owns* `server_name`, so it's valid for as long as the closure exists.
+>
+> In Python, closures capture by reference and the garbage collector handles cleanup. In Rust, you choose: borrow (default) or move (explicit). The compiler enforces that your choice is safe.
 
-What if you try to use a variable from `main` inside a handler?
-
-```rust
-let server_name = String::from("Forja v2");
-
-router.get("/info", |_req| {
-    // ERROR: closure may outlive the current function
-    Response::new(200, "OK", &server_name)
-});
-```
-
-The compiler complains because `server_name` lives on the stack in `main`, but the closure is stored in the router and might be called later — after `server_name` is dropped.
-
-**Fix: use `move`** to transfer ownership into the closure:
-
-```rust
-let server_name = String::from("Forja v2");
-
-router.get("/info", move |_req| {
-    Response::new(200, "OK", &server_name)
-});
-// server_name has been moved — you can't use it here anymore
-```
-
-The `move` keyword tells Rust: "don't borrow these variables — take ownership of them." The closure now *owns* `server_name`, so it's valid for as long as the closure exists.
-
-In JavaScript, closures capture by reference and the garbage collector handles cleanup. In Rust, you choose: borrow (default) or move (explicit). The compiler enforces that your choice is safe.
-
-### Checkpoint — Stage 9
-
-You've forged the routing table — the backbone of every web framework. But real APIs don't have static paths like `/users`. They have dynamic segments like `/users/42`. Next, we'll teach the router to extract parameters from the URL.
-
-You now have:
-- A `Router` struct with a `Vec<Route>`
-- `get()`, `post()`, `delete()` convenience methods
-- Path-based dispatch with 404 fallback
-- `Response::new()` and `Response::html()` constructors
-- Clean separation: routes registered in `main`, dispatch in `Router::route()`
-
-This is the skeleton of every web framework. Express, Flask, Actix-web, Axum — they all start here.
+> [!check] Checkpoint
+> You've forged the routing table — the backbone of every web framework. But real APIs don't have static paths like `/users`. They have dynamic segments like `/users/42`. Next, we'll teach the router to extract parameters from the URL.
+>
+> You now have:
+> - A `Router` struct with a `Vec<Route>`
+> - `get()`, `post()`, `delete()` convenience methods
+> - Path-based dispatch with 404 fallback
+> - `Response::new()` and `Response::html()` constructors
+> - Clean separation: routes registered in `main`, dispatch in `Router::route()`
+>
+> This is the skeleton of every web framework. Flask, Actix-web, Axum — they all start here.
 
 ---
 
@@ -497,14 +491,6 @@ Your router can match exact paths, but real APIs are built on dynamic URLs. You 
 
 Real APIs have dynamic paths. You don't register a route for every user ID:
 
-```javascript
-// Express.js
-app.get('/users/:id', (req, res) => {
-    const userId = req.params.id;
-    res.json({ user: userId });
-});
-```
-
 ```python
 # Flask
 @app.route('/users/<user_id>')
@@ -512,7 +498,9 @@ def get_user(user_id):
     return jsonify(user=user_id)
 ```
 
-**AWS connection:** API Gateway uses `{proxy+}` and `{id}` syntax for path parameters. When you define a resource like `/users/{userId}`, API Gateway extracts `userId` from the URL and passes it in the event object to your Lambda. You're building that extraction engine.
+> [!info] AWS Connection
+> API Gateway uses `{proxy+}` and `{id}` syntax for path parameters. When you define a resource like `/users/{userId}`, API Gateway extracts `userId` from the URL and passes it in the event object to your Lambda. You're building that extraction engine.
+
 
 Right now our router does exact string matching: `route.path == request.path`. We need pattern matching: `/users/:id` should match `/users/42`, `/users/alice`, etc., and extract the dynamic part.
 
@@ -708,7 +696,7 @@ impl Request {
 }
 ```
 
-**`T: std::str::FromStr`** — this is a *trait bound*. It means "T can be any type that knows how to parse itself from a string." `i32`, `u64`, `f64`, `bool` all implement `FromStr`. It's like a TypeScript generic with a constraint: `function parse<T extends Parseable>(s: string): T`.
+**`T: std::str::FromStr`** — this is a *trait bound*. It means "T can be any type that knows how to parse itself from a string." `i32`, `u64`, `f64`, `bool` all implement `FromStr`.
 
 **`?.parse().ok()?`** — chained Option operations:
 1. `self.params.get(name)?` — returns `None` if the param doesn't exist
@@ -726,266 +714,264 @@ router.get("/users/:id", |req| {
 });
 ```
 
-The `::<u64>` is called the **turbofish** syntax — it tells Rust which type to parse into. It's like TypeScript's `parseFloat()` vs `parseInt()`, but generalized to any parseable type.
+The `::<u64>` is called the **turbofish** syntax — it tells Rust which type to parse into. It's generalized to any parseable type.
 
-### Common Mistake: Route Order Matters
+> [!warning] Common Mistake: Route Order Matters
+> Routes are checked in registration order. If you register `/users/me` *after* `/users/:id`, the parameter route matches first and `me` becomes the `id` value:
+>
+> ```rust
+> // BUG: /users/me is caught by :id
+> router.get("/users/:id", |req| { /* ... */ });
+> router.get("/users/me", |req| { /* ... */ });  // never reached!
+> ```
+>
+> **Fix:** Register specific routes before parameterized ones:
+>
+> ```rust
+> // CORRECT: specific before generic
+> router.get("/users/me", |req| { /* ... */ });
+> router.get("/users/:id", |req| { /* ... */ });
+> ```
+>
+> This is the same issue in Flask. API Gateway avoids it by using a tree structure instead of linear search — but linear search is simpler and fine for learning.
 
-Routes are checked in registration order. If you register `/users/me` *after* `/users/:id`, the parameter route matches first and `me` becomes the `id` value:
-
-```rust
-// BUG: /users/me is caught by :id
-router.get("/users/:id", |req| { /* ... */ });
-router.get("/users/me", |req| { /* ... */ });  // never reached!
-```
-
-**Fix:** Register specific routes before parameterized ones:
-
-```rust
-// CORRECT: specific before generic
-router.get("/users/me", |req| { /* ... */ });
-router.get("/users/:id", |req| { /* ... */ });
-```
-
-This is the same issue in Express.js and Flask. API Gateway avoids it by using a tree structure instead of linear search — but linear search is simpler and fine for learning.
-
-### Checkpoint — Stage 10
-
-Your router now extracts dynamic values from URLs — the same pattern-matching engine inside API Gateway and every web framework. But URLs carry more than just the path: query strings like `?page=2&limit=10` are how clients pass optional parameters. That's next.
-
-Full `main.rs` at this point:
-
-```rust
-use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-
-// ── Request & Response ──────────────────────────────────────────────
-
-struct Request {
-    method: String,
-    path: String,
-    version: String,
-    headers: HashMap<String, String>,
-    body: String,
-    params: HashMap<String, String>,
-}
-
-impl Request {
-    fn param(&self, name: &str) -> Option<&String> {
-        self.params.get(name)
-    }
-
-    fn param_as<T: std::str::FromStr>(&self, name: &str) -> Option<T> {
-        self.params.get(name)?.parse().ok()
-    }
-}
-
-struct Response {
-    status_code: u16,
-    status_text: String,
-    headers: HashMap<String, String>,
-    body: String,
-}
-
-impl Response {
-    fn new(status_code: u16, status_text: &str, body: &str) -> Self {
-        let mut headers = HashMap::new();
-        headers.insert("Content-Length".to_string(), body.len().to_string());
-        headers.insert("Content-Type".to_string(), "text/plain".to_string());
-        Response {
-            status_code,
-            status_text: status_text.to_string(),
-            headers,
-            body: body.to_string(),
-        }
-    }
-
-    fn html(status_code: u16, status_text: &str, body: &str) -> Self {
-        let mut resp = Response::new(status_code, status_text, body);
-        resp.headers
-            .insert("Content-Type".to_string(), "text/html".to_string());
-        resp
-    }
-
-    fn to_bytes(&self) -> Vec<u8> {
-        let mut output = format!("HTTP/1.1 {} {}\r\n", self.status_code, self.status_text);
-        for (key, value) in &self.headers {
-            output.push_str(&format!("{}: {}\r\n", key, value));
-        }
-        output.push_str("\r\n");
-        output.push_str(&self.body);
-        output.into_bytes()
-    }
-}
-
-// ── Route & Router ──────────────────────────────────────────────────
-
-struct Route {
-    method: String,
-    path: String,
-    handler: Box<dyn Fn(&Request) -> Response>,
-}
-
-struct Router {
-    routes: Vec<Route>,
-}
-
-impl Router {
-    fn new() -> Self {
-        Router { routes: Vec::new() }
-    }
-
-    fn add_route<F>(&mut self, method: &str, path: &str, handler: F)
-    where
-        F: Fn(&Request) -> Response + 'static,
-    {
-        self.routes.push(Route {
-            method: method.to_string(),
-            path: path.to_string(),
-            handler: Box::new(handler),
-        });
-    }
-
-    fn get<F>(&mut self, path: &str, handler: F)
-    where
-        F: Fn(&Request) -> Response + 'static,
-    {
-        self.add_route("GET", path, handler);
-    }
-
-    fn post<F>(&mut self, path: &str, handler: F)
-    where
-        F: Fn(&Request) -> Response + 'static,
-    {
-        self.add_route("POST", path, handler);
-    }
-
-    fn delete<F>(&mut self, path: &str, handler: F)
-    where
-        F: Fn(&Request) -> Response + 'static,
-    {
-        self.add_route("DELETE", path, handler);
-    }
-
-    fn match_path(pattern: &str, path: &str) -> Option<HashMap<String, String>> {
-        let pattern_segments: Vec<&str> = pattern.split('/').collect();
-        let path_segments: Vec<&str> = path.split('/').collect();
-
-        if pattern_segments.len() != path_segments.len() {
-            return None;
-        }
-
-        let mut params = HashMap::new();
-
-        for (pattern_seg, path_seg) in pattern_segments.iter().zip(path_segments.iter()) {
-            if let Some(param_name) = pattern_seg.strip_prefix(':') {
-                params.insert(param_name.to_string(), path_seg.to_string());
-            } else if pattern_seg != path_seg {
-                return None;
-            }
-        }
-
-        Some(params)
-    }
-
-    fn route(&self, request: &mut Request) -> Response {
-        for route in &self.routes {
-            if route.method != request.method {
-                continue;
-            }
-            if let Some(params) = Router::match_path(&route.path, &request.path) {
-                request.params = params;
-                return (route.handler)(request);
-            }
-        }
-        Response::new(404, "Not Found", "404 Not Found")
-    }
-}
-
-// ── Request Parsing ─────────────────────────────────────────────────
-
-fn parse_request(stream: &mut TcpStream) -> Option<Request> {
-    let mut buffer = [0u8; 4096];
-    let bytes_read = stream.read(&mut buffer).ok()?;
-    if bytes_read == 0 {
-        return None;
-    }
-
-    let request_str = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
-    let mut lines = request_str.lines();
-
-    let request_line = lines.next()?;
-    let mut parts = request_line.split_whitespace();
-    let method = parts.next()?.to_string();
-    let path = parts.next()?.to_string();
-    let version = parts.next()?.to_string();
-
-    let mut headers = HashMap::new();
-    let mut body_start = false;
-    let mut body_lines: Vec<&str> = Vec::new();
-
-    for line in lines {
-        if body_start {
-            body_lines.push(line);
-        } else if line.is_empty() {
-            body_start = true;
-        } else if let Some((key, value)) = line.split_once(':') {
-            headers.insert(key.trim().to_string(), value.trim().to_string());
-        }
-    }
-
-    Some(Request {
-        method,
-        path,
-        version,
-        headers,
-        body: body_lines.join("\n"),
-        params: HashMap::new(),
-    })
-}
-
-// ── Main ────────────────────────────────────────────────────────────
-
-fn main() {
-    let mut router = Router::new();
-
-    router.get("/", |_req| {
-        Response::html(200, "OK", "<h1>Welcome to Forja</h1>")
-    });
-
-    router.get("/health", |_req| {
-        Response::new(200, "OK", "OK")
-    });
-
-    router.get("/users/:id", |req| {
-        match req.param_as::<u64>("id") {
-            Some(id) => Response::new(200, "OK", &format!("User #{}", id)),
-            None => Response::new(400, "Bad Request", "Invalid user ID"),
-        }
-    });
-
-    router.get("/users/:id/posts/:post_id", |req| {
-        let user_id = req.params.get("id").unwrap();
-        let post_id = req.params.get("post_id").unwrap();
-        Response::new(200, "OK", &format!("Post {} by user {}", post_id, user_id))
-    });
-
-    let listener = TcpListener::bind("127.0.0.1:7878").expect("Failed to bind to port 7878");
-    println!("Listening on http://127.0.0.1:7878");
-
-    for stream in listener.incoming() {
-        match stream {
-            Ok(mut stream) => {
-                if let Some(mut request) = parse_request(&mut stream) {
-                    let response = router.route(&mut request);
-                    let _ = stream.write_all(&response.to_bytes());
-                }
-            }
-            Err(e) => eprintln!("Connection error: {}", e),
-        }
-    }
-}
-```
+> [!check] Checkpoint
+> Your router now extracts dynamic values from URLs — the same pattern-matching engine inside API Gateway and every web framework. But URLs carry more than just the path: query strings like `?page=2&limit=10` are how clients pass optional parameters. That's next.
+>
+> Full `main.rs` at this point:
+>
+> ```rust
+> use std::collections::HashMap;
+> use std::io::{Read, Write};
+> use std::net::{TcpListener, TcpStream};
+>
+> // ── Request & Response ──────────────────────────────────────────────
+>
+> struct Request {
+>     method: String,
+>     path: String,
+>     version: String,
+>     headers: HashMap<String, String>,
+>     body: String,
+>     params: HashMap<String, String>,
+> }
+>
+> impl Request {
+>     fn param(&self, name: &str) -> Option<&String> {
+>         self.params.get(name)
+>     }
+>
+>     fn param_as<T: std::str::FromStr>(&self, name: &str) -> Option<T> {
+>         self.params.get(name)?.parse().ok()
+>     }
+> }
+>
+> struct Response {
+>     status_code: u16,
+>     status_text: String,
+>     headers: HashMap<String, String>,
+>     body: String,
+> }
+>
+> impl Response {
+>     fn new(status_code: u16, status_text: &str, body: &str) -> Self {
+>         let mut headers = HashMap::new();
+>         headers.insert("Content-Length".to_string(), body.len().to_string());
+>         headers.insert("Content-Type".to_string(), "text/plain".to_string());
+>         Response {
+>             status_code,
+>             status_text: status_text.to_string(),
+>             headers,
+>             body: body.to_string(),
+>         }
+>     }
+>
+>     fn html(status_code: u16, status_text: &str, body: &str) -> Self {
+>         let mut resp = Response::new(status_code, status_text, body);
+>         resp.headers
+>             .insert("Content-Type".to_string(), "text/html".to_string());
+>         resp
+>     }
+>
+>     fn to_bytes(&self) -> Vec<u8> {
+>         let mut output = format!("HTTP/1.1 {} {}\r\n", self.status_code, self.status_text);
+>         for (key, value) in &self.headers {
+>             output.push_str(&format!("{}: {}\r\n", key, value));
+>         }
+>         output.push_str("\r\n");
+>         output.push_str(&self.body);
+>         output.into_bytes()
+>     }
+> }
+>
+> // ── Route & Router ──────────────────────────────────────────────────
+>
+> struct Route {
+>     method: String,
+>     path: String,
+>     handler: Box<dyn Fn(&Request) -> Response>,
+> }
+>
+> struct Router {
+>     routes: Vec<Route>,
+> }
+>
+> impl Router {
+>     fn new() -> Self {
+>         Router { routes: Vec::new() }
+>     }
+>
+>     fn add_route<F>(&mut self, method: &str, path: &str, handler: F)
+>     where
+>         F: Fn(&Request) -> Response + 'static,
+>     {
+>         self.routes.push(Route {
+>             method: method.to_string(),
+>             path: path.to_string(),
+>             handler: Box::new(handler),
+>         });
+>     }
+>
+>     fn get<F>(&mut self, path: &str, handler: F)
+>     where
+>         F: Fn(&Request) -> Response + 'static,
+>     {
+>         self.add_route("GET", path, handler);
+>     }
+>
+>     fn post<F>(&mut self, path: &str, handler: F)
+>     where
+>         F: Fn(&Request) -> Response + 'static,
+>     {
+>         self.add_route("POST", path, handler);
+>     }
+>
+>     fn delete<F>(&mut self, path: &str, handler: F)
+>     where
+>         F: Fn(&Request) -> Response + 'static,
+>     {
+>         self.add_route("DELETE", path, handler);
+>     }
+>
+>     fn match_path(pattern: &str, path: &str) -> Option<HashMap<String, String>> {
+>         let pattern_segments: Vec<&str> = pattern.split('/').collect();
+>         let path_segments: Vec<&str> = path.split('/').collect();
+>
+>         if pattern_segments.len() != path_segments.len() {
+>             return None;
+>         }
+>
+>         let mut params = HashMap::new();
+>
+>         for (pattern_seg, path_seg) in pattern_segments.iter().zip(path_segments.iter()) {
+>             if let Some(param_name) = pattern_seg.strip_prefix(':') {
+>                 params.insert(param_name.to_string(), path_seg.to_string());
+>             } else if pattern_seg != path_seg {
+>                 return None;
+>             }
+>         }
+>
+>         Some(params)
+>     }
+>
+>     fn route(&self, request: &mut Request) -> Response {
+>         for route in &self.routes {
+>             if route.method != request.method {
+>                 continue;
+>             }
+>             if let Some(params) = Router::match_path(&route.path, &request.path) {
+>                 request.params = params;
+>                 return (route.handler)(request);
+>             }
+>         }
+>         Response::new(404, "Not Found", "404 Not Found")
+>     }
+> }
+>
+> // ── Request Parsing ─────────────────────────────────────────────────
+>
+> fn parse_request(stream: &mut TcpStream) -> Option<Request> {
+>     let mut buffer = [0u8; 4096];
+>     let bytes_read = stream.read(&mut buffer).ok()?;
+>     if bytes_read == 0 {
+>         return None;
+>     }
+>
+>     let request_str = String::from_utf8_lossy(&buffer[..bytes_read]).to_string();
+>     let mut lines = request_str.lines();
+>
+>     let request_line = lines.next()?;
+>     let mut parts = request_line.split_whitespace();
+>     let method = parts.next()?.to_string();
+>     let path = parts.next()?.to_string();
+>     let version = parts.next()?.to_string();
+>
+>     let mut headers = HashMap::new();
+>     let mut body_start = false;
+>     let mut body_lines: Vec<&str> = Vec::new();
+>
+>     for line in lines {
+>         if body_start {
+>             body_lines.push(line);
+>         } else if line.is_empty() {
+>             body_start = true;
+>         } else if let Some((key, value)) = line.split_once(':') {
+>             headers.insert(key.trim().to_string(), value.trim().to_string());
+>         }
+>     }
+>
+>     Some(Request {
+>         method,
+>         path,
+>         version,
+>         headers,
+>         body: body_lines.join("\n"),
+>         params: HashMap::new(),
+>     })
+> }
+>
+> // ── Main ────────────────────────────────────────────────────────────
+>
+> fn main() {
+>     let mut router = Router::new();
+>
+>     router.get("/", |_req| {
+>         Response::html(200, "OK", "<h1>Welcome to Forja</h1>")
+>     });
+>
+>     router.get("/health", |_req| {
+>         Response::new(200, "OK", "OK")
+>     });
+>
+>     router.get("/users/:id", |req| {
+>         match req.param_as::<u64>("id") {
+>             Some(id) => Response::new(200, "OK", &format!("User #{}", id)),
+>             None => Response::new(400, "Bad Request", "Invalid user ID"),
+>         }
+>     });
+>
+>     router.get("/users/:id/posts/:post_id", |req| {
+>         let user_id = req.params.get("id").unwrap();
+>         let post_id = req.params.get("post_id").unwrap();
+>         Response::new(200, "OK", &format!("Post {} by user {}", post_id, user_id))
+>     });
+>
+>     let listener = TcpListener::bind("127.0.0.1:7878").expect("Failed to bind to port 7878");
+>     println!("Listening on http://127.0.0.1:7878");
+>
+>     for stream in listener.incoming() {
+>         match stream {
+>             Ok(mut stream) => {
+>                 if let Some(mut request) = parse_request(&mut stream) {
+>                     let response = router.route(&mut request);
+>                     let _ = stream.write_all(&response.to_bytes());
+>                 }
+>             }
+>             Err(e) => eprintln!("Connection error: {}", e),
+>         }
+>     }
+> }
+> ```
 
 ---
 
@@ -1006,7 +992,9 @@ GET /users?sort=name&order=asc
 
 In Express: `req.query.q`. In Flask: `request.args.get('q')`. We need the same.
 
-**AWS connection:** API Gateway passes query string parameters to Lambda in `event.queryStringParameters`. CloudFront uses query strings for cache keys. When you configure "Forward query strings" in a CloudFront distribution, this is the parsing that happens at the edge.
+> [!info] AWS Connection
+> API Gateway passes query string parameters to Lambda in `event.queryStringParameters`. CloudFront uses query strings for cache keys. When you configure "Forward query strings" in a CloudFront distribution, this is the parsing that happens at the edge.
+
 
 ### HTTP Concept: Query String Format
 
@@ -1222,16 +1210,15 @@ The router's `match_path` compares against `request.path`, which no longer inclu
 
 This matches how every framework works: Express, Flask, API Gateway — they all route on the path and pass query params separately.
 
-### Checkpoint — Stage 11
-
-Your server now handles the full URL — path, parameters, and query strings. But so far, all data flows from client to server through the URL. POST requests carry data in the *body*, and that's how forms submit and APIs receive JSON payloads. Time to read the other half of HTTP.
-
-You now have:
-- Query string parsing with percent-decoding
-- `request.query` HashMap for raw access
-- `query_param()` and `query_param_or()` helpers
-- Type-safe parsing via `.parse()` with defaults
-- Clean separation of path routing and query parameters
+> [!check] Checkpoint
+> Your server now handles the full URL — path, parameters, and query strings. But so far, all data flows from client to server through the URL. POST requests carry data in the *body*, and that's how forms submit and APIs receive JSON payloads. Time to read the other half of HTTP.
+>
+> You now have:
+> - Query string parsing with percent-decoding
+> - `request.query` HashMap for raw access
+> - `query_param()` and `query_param_or()` helpers
+> - Type-safe parsing via `.parse()` with defaults
+> - Clean separation of path routing and query parameters
 
 ---
 
@@ -1248,7 +1235,9 @@ So far we've only handled GET requests — data flows through the URL. POST, PUT
 1. **Form data** (`application/x-www-form-urlencoded`) — same format as query strings, but in the body. HTML `<form>` submissions use this by default.
 2. **JSON** (`application/json`) — the standard for APIs. What you send to Lambda, DynamoDB, every AWS API.
 
-**AWS connection:** Every AWS API call is either a query-string request (older services like EC2, SQS) or a JSON body request (newer services like DynamoDB, Lambda). When you call `aws lambda invoke`, the CLI sends a JSON body. When you call `aws ec2 describe-instances`, it sends form-encoded parameters. You're building parsers for both.
+> [!info] AWS Connection
+> Every AWS API call is either a query-string request (older services like EC2, SQS) or a JSON body request (newer services like DynamoDB, Lambda). When you call `aws lambda invoke`, the CLI sends a JSON body. When you call `aws ec2 describe-instances`, it sends form-encoded parameters. You're building parsers for both.
+
 
 ### HTTP Concept: Content-Length and Content-Type
 
@@ -1285,7 +1274,7 @@ That's it. The `application/x-www-form-urlencoded` format is literally `key=valu
 
 Now for JSON. We *could* write a JSON parser from scratch, but that's a course in itself. Instead, we'll use **serde** and **serde_json** — the standard Rust serialization framework. This is your first external crate.
 
-**What is serde?** It's Rust's equivalent of Python's `json` module or JavaScript's `JSON.parse()`/`JSON.stringify()`, but it works with *any* data format (JSON, YAML, TOML, MessagePack, etc.) and *any* Rust type. The name comes from **ser**ialize/**de**serialize.
+**What is serde?** It's Rust's equivalent of Python's `json` module, but it works with *any* data format (JSON, YAML, TOML, MessagePack, etc.) and *any* Rust type. The name comes from **ser**ialize/**de**serialize.
 
 Add the dependencies:
 
@@ -1381,7 +1370,7 @@ The `#[derive(...)]` attribute auto-generates implementations:
 - `Serialize` — enables converting to JSON
 - `Deserialize` — enables parsing from JSON
 
-In Python, you'd write a class and manually handle `json.loads()`. In TypeScript, you'd define an interface and cast. In Rust, serde generates type-safe parsing code at compile time — if the JSON doesn't match the struct, you get a clear error at runtime, not a silent `undefined`.
+In Python, you'd write a class and manually handle `json.loads()`. In Rust, serde generates type-safe parsing code at compile time — if the JSON doesn't match the struct, you get a clear error at runtime, not a silent failure.
 
 ### Wire Up POST Routes
 
@@ -1463,7 +1452,7 @@ fn main() {
 }
 ```
 
-**`serde_json::Value`** — an untyped JSON value. Like Python's `json.loads()` returning a dict, or JavaScript's `JSON.parse()` returning `any`. Useful when you don't know the structure ahead of time.
+**`serde_json::Value`** — an untyped JSON value. Like Python's `json.loads()` returning a dict. Useful when you don't know the structure ahead of time.
 
 ### Test It
 
@@ -1497,19 +1486,19 @@ curl -s -X POST http://localhost:7878/echo \
 # → {"anything":"works","nested":{"values":true}}
 ```
 
-Notice the error message for the missing `email` field — serde gives you precise, helpful errors for free. In JavaScript, you'd get `undefined` and find out three function calls later. In Rust, the error is immediate and descriptive.
+Notice the error message for the missing `email` field — serde gives you precise, helpful errors for free. In Python, you'd get a `KeyError`. In Rust, the error is immediate and descriptive.
 
-### Common Mistake: Forgetting `derive` Feature
+> [!warning] Common Mistake: Forgetting `derive` Feature
+> If you see this error:
+>
+> ```
+> error: cannot find derive macro `Serialize` in this scope
+> ```
+>
+> You forgot the `derive` feature. Check your `Cargo.toml`:
+>
+> ```toml
 
-If you see this error:
-
-```
-error: cannot find derive macro `Serialize` in this scope
-```
-
-You forgot the `derive` feature. Check your `Cargo.toml`:
-
-```toml
 # WRONG — missing derive feature
 serde = "1"
 
@@ -1517,95 +1506,93 @@ serde = "1"
 serde = { version = "1", features = ["derive"] }
 ```
 
-### Common Mistake: Owned vs Borrowed in HashMap
+> [!warning] Common Mistake: Owned vs Borrowed in HashMap
+> This won't compile:
+>
+> ```rust
+> let mut map = HashMap::new();
+> map.insert("status", "created");
+> map.insert("name", &user.name);  // ERROR: &String vs &str
+> ```
+>
+> The issue: `"status"` is `&str` (string literal), but `&user.name` is `&String`. They're different types. Fix by being consistent:
+>
+> ```rust
+> // Option 1: all &str
+> let mut map = HashMap::new();
+> map.insert("status", "created");
+> map.insert("name", user.name.as_str());
+>
+> // Option 2: use serde_json::json! macro
+> let response = serde_json::json!({
+>     "status": "created",
+>     "name": user.name
+> });
+> Response::json(201, "Created", &response)
+> ```
+>
+> The `json!` macro is usually cleaner for building JSON responses. It accepts any type that implements `Serialize` and handles the type juggling for you.
 
-This won't compile:
-
-```rust
-let mut map = HashMap::new();
-map.insert("status", "created");
-map.insert("name", &user.name);  // ERROR: &String vs &str
-```
-
-The issue: `"status"` is `&str` (string literal), but `&user.name` is `&String`. They're different types. Fix by being consistent:
-
-```rust
-// Option 1: all &str
-let mut map = HashMap::new();
-map.insert("status", "created");
-map.insert("name", user.name.as_str());
-
-// Option 2: use serde_json::json! macro
-let response = serde_json::json!({
-    "status": "created",
-    "name": user.name
-});
-Response::json(201, "Created", &response)
-```
-
-The `json!` macro is usually cleaner for building JSON responses. It accepts any type that implements `Serialize` and handles the type juggling for you.
-
-### Checkpoint — Stage 12
-
-Your server can now receive data in every way HTTP allows — URL paths, query strings, form bodies, and JSON payloads. You have all the pieces to build a real API. Next, we'll assemble them into a complete REST API for a todo list, which will also force you to solve the shared mutable state problem.
-
-Full `main.rs` at this point — I'll show just the new/changed parts since the checkpoint code is getting long. The full structure is:
-
-```rust
-use serde::{Deserialize, Serialize};
-use std::collections::HashMap;
-use std::io::{Read, Write};
-use std::net::{TcpListener, TcpStream};
-
-struct Request {
-    method: String,
-    path: String,
-    query_string: String,
-    version: String,
-    headers: HashMap<String, String>,
-    body: String,
-    params: HashMap<String, String>,
-    query: HashMap<String, String>,
-}
-
-impl Request {
-    fn param(&self, name: &str) -> Option<&String> { self.params.get(name) }
-    fn param_as<T: std::str::FromStr>(&self, name: &str) -> Option<T> {
-        self.params.get(name)?.parse().ok()
-    }
-    fn query_param(&self, name: &str) -> Option<&String> { self.query.get(name) }
-    fn query_param_or<'a>(&'a self, name: &str, default: &'a str) -> &'a str {
-        self.query.get(name).map(|s| s.as_str()).unwrap_or(default)
-    }
-    fn form_data(&self) -> HashMap<String, String> { parse_query_string(&self.body) }
-    fn json_body<T: serde::de::DeserializeOwned>(&self) -> Result<T, String> {
-        serde_json::from_str(&self.body).map_err(|e| format!("JSON parse error: {}", e))
-    }
-}
-
-struct Response { /* status_code, status_text, headers, body */ }
-
-impl Response {
-    fn new(status_code: u16, status_text: &str, body: &str) -> Self { /* ... */ }
-    fn html(status_code: u16, status_text: &str, body: &str) -> Self { /* ... */ }
-    fn json<T: Serialize>(status_code: u16, status_text: &str, data: &T) -> Self { /* ... */ }
-    fn to_bytes(&self) -> Vec<u8> { /* ... */ }
-}
-
-// Route, Router (with match_path, get/post/delete, route)
-// decode_percent, parse_query_string, parse_request
-// CreateUser struct with derive(Debug, Serialize, Deserialize)
-// main with all routes
-```
-
-You now have a server that can:
-- Route GET and POST requests to handlers
-- Extract path parameters and query strings
-- Parse form-encoded and JSON request bodies
-- Return JSON responses
-- Give helpful error messages for malformed input
-
-This is a real web framework. Small, but real.
+> [!check] Checkpoint
+> Your server can now receive data in every way HTTP allows — URL paths, query strings, form bodies, and JSON payloads. You have all the pieces to build a real API. Next, we'll assemble them into a complete REST API for a todo list, which will also force you to solve the shared mutable state problem.
+>
+> Full `main.rs` at this point — I'll show just the new/changed parts since the checkpoint code is getting long. The full structure is:
+>
+> ```rust
+> use serde::{Deserialize, Serialize};
+> use std::collections::HashMap;
+> use std::io::{Read, Write};
+> use std::net::{TcpListener, TcpStream};
+>
+> struct Request {
+>     method: String,
+>     path: String,
+>     query_string: String,
+>     version: String,
+>     headers: HashMap<String, String>,
+>     body: String,
+>     params: HashMap<String, String>,
+>     query: HashMap<String, String>,
+> }
+>
+> impl Request {
+>     fn param(&self, name: &str) -> Option<&String> { self.params.get(name) }
+>     fn param_as<T: std::str::FromStr>(&self, name: &str) -> Option<T> {
+>         self.params.get(name)?.parse().ok()
+>     }
+>     fn query_param(&self, name: &str) -> Option<&String> { self.query.get(name) }
+>     fn query_param_or<'a>(&'a self, name: &str, default: &'a str) -> &'a str {
+>         self.query.get(name).map(|s| s.as_str()).unwrap_or(default)
+>     }
+>     fn form_data(&self) -> HashMap<String, String> { parse_query_string(&self.body) }
+>     fn json_body<T: serde::de::DeserializeOwned>(&self) -> Result<T, String> {
+>         serde_json::from_str(&self.body).map_err(|e| format!("JSON parse error: {}", e))
+>     }
+> }
+>
+> struct Response { /* status_code, status_text, headers, body */ }
+>
+> impl Response {
+>     fn new(status_code: u16, status_text: &str, body: &str) -> Self { /* ... */ }
+>     fn html(status_code: u16, status_text: &str, body: &str) -> Self { /* ... */ }
+>     fn json<T: Serialize>(status_code: u16, status_text: &str, data: &T) -> Self { /* ... */ }
+>     fn to_bytes(&self) -> Vec<u8> { /* ... */ }
+> }
+>
+> // Route, Router (with match_path, get/post/delete, route)
+> // decode_percent, parse_query_string, parse_request
+> // CreateUser struct with derive(Debug, Serialize, Deserialize)
+> // main with all routes
+> ```
+>
+> You now have a server that can:
+> - Route GET and POST requests to handlers
+> - Extract path parameters and query strings
+> - Parse form-encoded and JSON request bodies
+> - Return JSON responses
+> - Give helpful error messages for malformed input
+>
+> This is a real web framework. Small, but real.
 
 ---
 
@@ -1626,11 +1613,13 @@ REST (Representational State Transfer) maps CRUD operations to HTTP methods:
 | Create | POST | `/api/todos` | Creates a new todo |
 | Delete | DELETE | `/api/todos/:id` | Deletes a todo |
 
-**AWS connection:** This is exactly how you'd design a Lambda-backed API Gateway. Each row becomes an API Gateway resource + method, wired to a Lambda handler. DynamoDB stores the items. You're building the API Gateway + Lambda layer.
+> [!info] AWS Connection
+> This is exactly how you'd design a Lambda-backed API Gateway. Each row becomes an API Gateway resource + method, wired to a Lambda handler. DynamoDB stores the items. You're building the API Gateway + Lambda layer.
+
 
 ### The Challenge: Shared Mutable State
 
-Here's the problem. Each route handler is a closure stored in the router. Multiple handlers need to access the *same* todo list — one handler adds items, another reads them, another deletes. In JavaScript, you'd just use a module-level variable. In Python, a global list.
+Here's the problem. Each route handler is a closure stored in the router. Multiple handlers need to access the *same* todo list — one handler adds items, another reads them, another deletes. In Python, you'd use a global list.
 
 In Rust, the borrow checker won't let multiple closures mutably borrow the same data. This is where you meet one of Rust's most important patterns.
 
@@ -1648,7 +1637,7 @@ Together, `Arc<Mutex<Vec<Todo>>>` means: "a reference-counted pointer to a locke
 use std::sync::{Arc, Mutex};
 ```
 
-In Python, you'd use `threading.Lock()`. In JavaScript (single-threaded), you don't need locks. In Rust, the type system *forces* you to use them — you literally cannot share mutable data between closures without `Mutex`.
+In Python, you'd use `threading.Lock()`. In Rust, the type system *forces* you to use locks — you literally cannot share mutable data between closures without `Mutex`.
 
 **Why not just `Mutex`?** Because `Mutex<T>` has a single owner. When you `move` it into one closure, the other closures can't use it. `Arc` (Atomic Reference Count) lets multiple closures each hold a reference to the *same* `Mutex`.
 
@@ -1879,32 +1868,30 @@ curl -s http://localhost:7878/api/todos
 
 You just built a REST API from scratch. No framework, no magic — just TCP, HTTP parsing, routing, and JSON serialization.
 
-### Common Mistake: Deadlock with Multiple Locks
+> [!warning] Common Mistake: Deadlock with Multiple Locks
+> If you lock `next_id` and `todos` in different orders in different handlers, you can deadlock:
+>
+> ```rust
+> // Handler A: locks todos, then next_id
+> let todos = todos.lock().unwrap();
+> let id = next_id.lock().unwrap();  // DEADLOCK if Handler B holds next_id
+>
+> // Handler B: locks next_id, then todos
+> let id = next_id.lock().unwrap();
+> let todos = todos.lock().unwrap();  // DEADLOCK if Handler A holds todos
+> ```
+>
+> **Fix:** Always lock in the same order, or lock one at a time and release before locking the next. In our solution, the POST handler locks `next_id` first, then `todos` — and no other handler locks both, so we're safe.
 
-If you lock `next_id` and `todos` in different orders in different handlers, you can deadlock:
-
-```rust
-// Handler A: locks todos, then next_id
-let todos = todos.lock().unwrap();
-let id = next_id.lock().unwrap();  // DEADLOCK if Handler B holds next_id
-
-// Handler B: locks next_id, then todos
-let id = next_id.lock().unwrap();
-let todos = todos.lock().unwrap();  // DEADLOCK if Handler A holds todos
-```
-
-**Fix:** Always lock in the same order, or lock one at a time and release before locking the next. In our solution, the POST handler locks `next_id` first, then `todos` — and no other handler locks both, so we're safe.
-
-### Checkpoint — Stage 13
-
-You've forged a complete REST API with shared state — the same architecture behind every Lambda + DynamoDB service. But right now, every request is a black box: you can't see what's happening, how long it takes, or what went wrong. Next, we add visibility with logging middleware.
-
-You now have a working REST API with:
-- CRUD operations (Create, Read, Delete)
-- Shared mutable state via `Arc<Mutex<T>>`
-- JSON request parsing and response serialization
-- Proper HTTP status codes (200, 201, 204, 400, 404)
-- Error handling for invalid input
+> [!check] Checkpoint
+> You've forged a complete REST API with shared state — the same architecture behind every Lambda + DynamoDB service. But right now, every request is a black box: you can't see what's happening, how long it takes, or what went wrong. Next, we add visibility with logging middleware.
+>
+> You now have a working REST API with:
+> - CRUD operations (Create, Read, Delete)
+> - Shared mutable state via `Arc<Mutex<T>>`
+> - JSON request parsing and response serialization
+> - Proper HTTP status codes (200, 201, 204, 400, 404)
+> - Error handling for invalid input
 
 ---
 
@@ -1918,13 +1905,14 @@ Your API works, but you're flying blind. When a request is slow, you don't know.
 
 Middleware is code that runs *around* your route handlers — before and/or after. It's the same concept everywhere:
 
-- **Express.js:** `app.use((req, res, next) => { ... })`
 - **Python/Flask:** `@app.before_request` / `@app.after_request`
 - **AWS:** API Gateway has "request/response transformations" and Lambda authorizers — both are middleware
 
 Common uses: logging, authentication, CORS headers, rate limiting, request ID injection.
 
-**AWS connection:** CloudFront Functions and Lambda@Edge are literally middleware — they intercept requests before they reach your origin, and responses before they reach the client. API Gateway's request validators, authorizers, and usage plans are all middleware patterns. You're building the same interception mechanism.
+> [!info] AWS Connection
+> CloudFront Functions and Lambda@Edge are literally middleware — they intercept requests before they reach your origin, and responses before they reach the client. API Gateway's request validators, authorizers, and usage plans are all middleware patterns. You're building the same interception mechanism.
+
 
 ### The Approach
 
@@ -1934,7 +1922,7 @@ For now, we'll keep it simple — a logging wrapper around the dispatch.
 
 ### Concept: `std::time::Instant`
 
-Rust's `std::time::Instant` is a monotonic clock for measuring durations. Like Python's `time.monotonic()` or JavaScript's `performance.now()`.
+Rust's `std::time::Instant` is a monotonic clock for measuring durations. Like Python's `time.monotonic()`.
 
 ```rust
 use std::time::Instant;
@@ -2052,14 +2040,13 @@ GET /nonexistent → 404 (0.01ms)
 
 Every request logged with method, path, status, and timing. This is what you see in CloudWatch Logs for API Gateway — method, resource, status, latency. You just built the logger.
 
-### Checkpoint — Stage 14
-
-Every request now leaves a trace — method, path, status, and timing. You've built the same logging pipeline that CloudWatch captures for API Gateway. One more piece remains for Act 2: serving static files from a directory, so your server can host a complete website alongside the API.
-
-You now have:
-- Request logging with method, path, status code, and duration
-- Understanding of the middleware pattern
-- `std::time::Instant` for performance measurement
+> [!check] Checkpoint
+> Every request now leaves a trace — method, path, status, and timing. You've built the same logging pipeline that CloudWatch captures for API Gateway. One more piece remains for Act 2: serving static files from a directory, so your server can host a complete website alongside the API.
+>
+> You now have:
+> - Request logging with method, path, status code, and duration
+> - Understanding of the middleware pattern
+> - `std::time::Instant` for performance measurement
 
 ---
 
@@ -2073,7 +2060,9 @@ Your API routes return JSON, but a real web application also needs HTML pages, C
 
 In Act 1, you served individual files. Now we want to serve an entire directory — like `python -m http.server` or S3 static website hosting. Point the server at a `public/` folder and it serves whatever's in there.
 
-**AWS connection:** S3 static website hosting does exactly this. When you enable "Static website hosting" on a bucket, S3 becomes a file server with index document support, error documents, and MIME type detection. CloudFront sits in front as a CDN. You're building the S3 static hosting engine.
+> [!info] AWS Connection
+> S3 static website hosting does exactly this. When you enable "Static website hosting" on a bucket, S3 becomes a file server with index document support, error documents, and MIME type detection. CloudFront sits in front as a CDN. You're building the S3 static hosting engine.
+
 
 ### Setup: Create Test Files
 
@@ -2138,7 +2127,9 @@ A quick reference for common MIME types:
 | `.ico` | `image/x-icon` |
 | `.wasm` | `application/wasm` |
 
-**AWS connection:** CloudFront and S3 use the same MIME type mapping. When you upload a file to S3, you set `ContentType` in the metadata. If you don't, S3 defaults to `application/octet-stream` and browsers won't render HTML or apply CSS. Your server needs to get this right too.
+> [!info] AWS Connection
+> CloudFront and S3 use the same MIME type mapping. When you upload a file to S3, you set `ContentType` in the metadata. If you don't, S3 defaults to `application/octet-stream` and browsers won't render HTML or apply CSS. Your server needs to get this right too.
+
 
 ### Hints
 
@@ -2365,16 +2356,15 @@ The `safe_path` function is critical. Without it, a request for `/../../../etc/p
 
 This is the same protection S3 has — you can't access objects outside your bucket, no matter what key you request. CloudFront adds another layer by only forwarding requests that match your origin path pattern.
 
-### Checkpoint — Stage 15
-
-Your server is now a complete web platform — API routes for dynamic data, static file serving for the frontend. You've built the equivalent of API Gateway + S3 static hosting in a single binary. But there's a fundamental limitation: everything runs on a single thread. In Act 3, you'll feel that pain and fix it with concurrency.
-
-You now have a complete static file server with:
-- File serving with MIME type detection
-- `index.html` fallback for directories
-- Directory listing
-- Path traversal prevention
-- Fallback after API routes (API takes priority)
+> [!check] Checkpoint
+> Your server is now a complete web platform — API routes for dynamic data, static file serving for the frontend. You've built the equivalent of API Gateway + S3 static hosting in a single binary. But there's a fundamental limitation: everything runs on a single thread. In Act 3, you'll feel that pain and fix it with concurrency.
+>
+> You now have a complete static file server with:
+> - File serving with MIME type detection
+> - `index.html` fallback for directories
+> - Directory listing
+> - Path traversal prevention
+> - Fallback after API routes (API takes priority)
 
 ---
 

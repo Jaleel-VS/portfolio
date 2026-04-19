@@ -8,6 +8,45 @@ In Act 2, we bring the Map to life. You'll place a player on the map, move them 
 
 This act introduces some of Rust's most important concepts: the **game loop** pattern, **mutable borrowing** across structs, and **event-driven programming**. These aren't abstract lessons — they emerge naturally from the problem of "how do I move `@` around a grid without the compiler yelling at me?"
 
+> [!info] Tile Enum Evolution: Simple → Data-Carrying
+> In Act 1, our `Tile` enum was deliberately simple — five plain variants with no data:
+>
+> ```rust
+> // Act 1's Tile — simple labels
+> enum Tile {
+>     Wall,
+>     Floor,
+>     Door,
+>     Stairs,
+>     Empty,
+> }
+> ```
+>
+> That was enough for rendering a static map. But now that we need *interaction* — collision detection, door opening, stair transitions — those plain variants aren't enough. A door that can't be locked isn't much of a door. Stairs that don't know where they lead are just decoration. A secret passage that can't be discovered is just a wall.
+>
+> Act 2 evolves the `Tile` enum to carry data inside its variants:
+>
+> ```rust
+> // Act 2's Tile — variants carry data
+> enum Tile {
+>     Wall,
+>     Floor,
+>     Door { locked: bool, room_id: Option<u32> },
+>     Stairs { destination_floor: u8, destination_pos: (usize, usize) },
+>     SecretPassage { discovered: bool, destination_floor: u8, destination_pos: (usize, usize) },
+>     Entrance { room_id: u32 },
+> }
+> ```
+>
+> **What changed:**
+> - **`Door`** gains `locked: bool` — collision detection needs to know if you can walk through it
+> - **`Stairs`** gains destination info — floor transitions need to know *where* the stairs lead
+> - **`SecretPassage`** is new — a hidden tile that acts as a wall until discovered, then becomes a teleporter
+> - **`Entrance`** is new — marks room entry points for the room detection system
+> - **`Empty`** is removed — every tile is now either a wall, floor, or something interactive
+>
+> This is one of Rust's superpowers: **enums with data** (algebraic data types). Each variant can carry different fields, and `match` forces you to handle every case. You saw simple enums in Act 1 — now you'll see why Rust programmers reach for data-carrying enums constantly.
+
 **What you have from Act 1:**
 - `Tile` enum: `Wall`, `Floor`, `Door`, `Stairs`, `SecretPassage`, `Entrance`
 - `Floor` struct with `grid: Vec<Vec<Tile>>`, `rooms: Vec<Room>`, `name: String`, `id: u8`
@@ -71,7 +110,7 @@ impl Player {
 }
 ```
 
-`impl Player` is where we attach methods to our struct — like adding methods to a class in Python/TypeScript. `Self` (capital S) is shorthand for the type we're implementing (`Player`). The function returns a new `Player` with the given coordinates.
+`impl Player` is where we attach methods to our struct — like adding methods to a class in Python. `Self` (capital S) is shorthand for the type we're implementing (`Player`). The function returns a new `Player` with the given coordinates.
 
 ### Rendering the Player
 
@@ -117,8 +156,6 @@ Let's break this down:
 2. **World-to-screen conversion** — The player's position is in *world* coordinates (their actual grid position). The screen only shows a window into that world. Subtracting the viewport offset converts world → screen. The `as u16` cast is needed because `Rect` coordinates are `u16` in ratatui.
 
 3. **Buffer cell access** — `buf[(x, y)]` gives us direct access to a terminal cell. We set its character to `@` and style it green. This is ratatui's `Buffer` API — each cell in the buffer represents one character on screen.
-
-> **TypeScript comparison:** Think of the buffer like a 2D canvas context. Instead of `ctx.fillText('@', x, y)`, you're writing directly to a cell grid. Same concept, different API.
 
 ### Placing the Player on the Map
 
@@ -188,30 +225,31 @@ fn center_viewport_on_player(
 
 **`saturating_sub`** is a Rust method on integers that subtracts without underflowing. Since `usize` can't go negative, `0usize - 1` would panic in debug mode (or wrap to `usize::MAX` in release). `saturating_sub` clamps to zero instead. You'll use this *constantly* when working with grid coordinates.
 
-### Checkpoint: Stage 9 Complete
+> [!check] Checkpoint
+> Your project structure now looks like:
+>
+> ```
+> src/
+> ├── main.rs          // entry point, game loop (coming next stage)
+> ├── map.rs           // HogwartsMap, Floor, Tile, Room
+> ├── player.rs        // Player struct — NEW
+> └── render.rs        // TUI rendering with viewport
+> ```
+>
+> The player exists, has a position, renders as `@`, and the viewport centers on them. But they can't move yet — that's next. In Stage 10, we build the game loop that reads keypresses and translates them into movement, bringing the `@` to life.
+>
+> [!warning] Common Mistake
+> Trying to store a reference to the map inside `Player`:
+> ```rust
+> // DON'T do this:
+> struct Player<'a> {
+>     map: &'a HogwartsMap,  // lifetime headache incoming
+>     x: usize,
+>     y: usize,
+> }
+> ```
+> This introduces **lifetimes** — Rust's way of tracking how long references are valid. It's tempting to give the player a reference to the map so it can check tiles, but this creates a web of borrow-checker constraints. Instead, pass the map as a parameter to methods that need it (like `spawn`). Keep your structs simple; pass context through function arguments.
 
-Your project structure now looks like:
-
-```
-src/
-├── main.rs          // entry point, game loop (coming next stage)
-├── map.rs           // HogwartsMap, Floor, Tile, Room
-├── player.rs        // Player struct — NEW
-└── render.rs        // TUI rendering with viewport
-```
-
-The player exists, has a position, renders as `@`, and the viewport centers on them. But they can't move yet — that's next. In Stage 10, we build the game loop that reads keypresses and translates them into movement, bringing the `@` to life.
-
-**Common mistake:** Trying to store a reference to the map inside `Player`:
-```rust
-// DON'T do this:
-struct Player<'a> {
-    map: &'a HogwartsMap,  // lifetime headache incoming
-    x: usize,
-    y: usize,
-}
-```
-This introduces **lifetimes** — Rust's way of tracking how long references are valid. It's tempting to give the player a reference to the map so it can check tiles, but this creates a web of borrow-checker constraints. Instead, pass the map as a parameter to methods that need it (like `spawn`). Keep your structs simple; pass context through function arguments.
 
 ---
 
@@ -235,7 +273,7 @@ loop {
 }
 ```
 
-In Python/JS, you might use `pygame.event.get()` or `requestAnimationFrame`. In Rust with crossterm, we use `event::poll()` and `event::read()`.
+In Python, you might use `pygame.event.get()`. In Rust with crossterm, we use `event::poll()` and `event::read()`.
 
 Here's the critical insight: **`poll()` checks if an event is available without blocking, while `read()` blocks until one arrives.** For a game loop, we want `poll()` with a timeout — this lets us update the screen at a fixed rate even when no keys are pressed (important later for NPC movement and animations).
 
@@ -285,8 +323,6 @@ fn main() -> io::Result<()> {
 ```
 
 **Why separate `run()` from `main()`?** If `run()` returns an error via `?`, we still need `ratatui::restore()` to execute. By putting the game loop in its own function, `main()` always reaches the restore call. This is a common pattern in ratatui apps.
-
-> **TypeScript comparison:** This is like wrapping your app in a `try/finally` block where `finally` always cleans up the terminal. Rust doesn't have `finally`, but structuring the code this way achieves the same guarantee.
 
 Now the actual loop:
 
@@ -424,24 +460,25 @@ Three parameters, two kinds of references:
 
 **The key rule:** You can have *either* one `&mut` reference *or* any number of `&` references to the same data, but never both at the same time. This is Rust's **borrowing rule**, and it's the source of most beginner frustration. We'll see it bite us in later stages.
 
-### Checkpoint: Stage 10 Complete
+> [!check] Checkpoint
+> You now have:
+> - A game loop running at 5 ticks per second
+> - Arrow keys (and WASD) moving the player
+> - `q` or `Esc` to quit cleanly
+> - The viewport following the player
+>
+> Try it: `cargo run`. You should see your `@` symbol moving around the map. It walks through walls, off the edge of the map, into the void — we'll fix that next. Stage 11 adds collision detection so the castle's walls actually *stop* you.
+>
+> [!warning] Common Mistake
+> Forgetting `KeyEventKind::Press` filtering:
+> ```rust
+> // BUG: responds to press AND release, double-moving the player
+> if let Event::Key(key) = event::read()? {
+>     match key.code { ... }
+> }
+> ```
+> Always check `key.kind == KeyEventKind::Press`.
 
-You now have:
-- A game loop running at 5 ticks per second
-- Arrow keys (and WASD) moving the player
-- `q` or `Esc` to quit cleanly
-- The viewport following the player
-
-Try it: `cargo run`. You should see your `@` symbol moving around the map. It walks through walls, off the edge of the map, into the void — we'll fix that next. Stage 11 adds collision detection so the castle's walls actually *stop* you.
-
-**Common mistake:** Forgetting `KeyEventKind::Press` filtering:
-```rust
-// BUG: responds to press AND release, double-moving the player
-if let Event::Key(key) = event::read()? {
-    match key.code { ... }
-}
-```
-Always check `key.kind == KeyEventKind::Press`.
 
 ---
 
@@ -541,8 +578,6 @@ usize → i32 (for arithmetic with negatives) → bounds check → i32 → usize
 
 **Variable shadowing:** Notice `let new_x = new_x as usize;` — we declare a *new* variable with the same name, shadowing the previous `i32` version. This is idiomatic Rust. After the bounds check, we know the value is non-negative, so we shadow it with the `usize` version. The old `i32` variable is no longer accessible.
 
-> **TypeScript comparison:** TypeScript would let you use `number` for everything. Rust's type system forces you to think about signedness and overflow at every step. It's annoying at first, but it catches real bugs — like the Ariane 5 rocket that exploded because of an integer overflow in a type conversion.
-
 ### Updating the Game Loop
 
 Replace the direct position manipulation in `run()` with `try_move()`:
@@ -614,17 +649,18 @@ let mut map = HogwartsMap::load("hogwarts.json")?;
 
 **This is the borrow checker teaching you something:** when you need to modify data, Rust forces you to declare that intent at every level — from the variable binding (`let mut`) to the function parameter (`&mut`). Nothing is silently mutable.
 
-### Checkpoint: Stage 11 Complete
+> [!check] Checkpoint
+> Run the game. Try walking into walls — you bounce off. Try walking through corridors — smooth. The castle has substance now. Hogwarts feels *solid*. But every corridor looks the same — an anonymous maze. Next, we'll label the rooms so you know whether you're in the Great Hall or Filch's Office.
+>
+> [!warning] Common Mistake
+> Forgetting to update `map` from `&HogwartsMap` to `&mut HogwartsMap` in the `run()` signature when you add door interaction. The compiler error will say something like:
+>
+> ```
+> error[E0596]: cannot borrow `*map` as mutable, as it is behind a `&` reference
+> ```
+>
+> This means: "you're trying to modify something through an immutable reference." Change `&` to `&mut` in the function signature and at the call site.
 
-Run the game. Try walking into walls — you bounce off. Try walking through corridors — smooth. The castle has substance now. Hogwarts feels *solid*. But every corridor looks the same — an anonymous maze. Next, we'll label the rooms so you know whether you're in the Great Hall or Filch's Office.
-
-**Common mistake:** Forgetting to update `map` from `&HogwartsMap` to `&mut HogwartsMap` in the `run()` signature when you add door interaction. The compiler error will say something like:
-
-```
-error[E0596]: cannot borrow `*map` as mutable, as it is behind a `&` reference
-```
-
-This means: "you're trying to modify something through an immutable reference." Change `&` to `&mut` in the function signature and at the call site.
 
 ---
 
@@ -755,8 +791,6 @@ impl Floor {
 
 The `.find()` method on iterators searches for the first element matching a predicate. The closure `|room| { ... }` checks if `(x, y)` falls within the room's bounding rectangle.
 
-> **TypeScript comparison:** This is like `rooms.find(room => ...)` returning `Room | undefined`. Rust's `Option` is the same concept but enforced by the type system — you *cannot* forget to handle `None`.
-
 ### Using the Current Room
 
 In your game state, you can now query the current room:
@@ -833,11 +867,12 @@ pub fn draw_map(
 
 **`frame.buffer_mut()`** — gives us mutable access to the underlying `Buffer` for direct cell manipulation. This is lower-level than `frame.render_widget()` but gives us precise control over individual cells.
 
-### Checkpoint: Stage 12 Complete
+> [!check] Checkpoint
+> Room names now float inside their boundaries on the map. Walk into the Great Hall and see its name. Step into a corridor and it disappears. The map is starting to feel like a real place. But you're still trapped on one floor — time to connect the staircases and let you climb through the castle.
+>
+> [!warning] Common Mistake
+> Rendering labels *after* the player, which makes the label text overwrite the `@` symbol when the player stands in a room. Always render the player last.
 
-Room names now float inside their boundaries on the map. Walk into the Great Hall and see its name. Step into a corridor and it disappears. The map is starting to feel like a real place. But you're still trapped on one floor — time to connect the staircases and let you climb through the castle.
-
-**Common mistake:** Rendering labels *after* the player, which makes the label text overwrite the `@` symbol when the player stands in a room. Always render the player last.
 
 ---
 
@@ -968,15 +1003,6 @@ pub enum MoveResult {
 
 **Enums with data:** `ChangedFloor(usize)` carries the destination floor index inside the variant. This is an **algebraic data type** — the enum variant *is* the data. No separate fields, no nullable properties, just the variant and its payload.
 
-> **TypeScript comparison:** This is like a discriminated union:
-> ```typescript
-> type MoveResult =
->   | { kind: 'moved' }
->   | { kind: 'blocked' }
->   | { kind: 'changedFloor'; floor: number };
-> ```
-> Rust's version is more concise and the compiler enforces exhaustive matching.
-
 ### Updating the Game Loop
 
 The game loop now handles the result:
@@ -1058,28 +1084,29 @@ match tile {
 
 The `≡` character (triple horizontal bar) suggests "stairs" visually. Cyan makes it stand out from the gray corridors. Discovered secret passages get `◊` in magenta — mysterious and inviting.
 
-### Checkpoint: Stage 13 Complete
+> [!check] Checkpoint
+> Walk to a staircase, step onto it, and — whoosh — you're on a different floor. The floor name flashes briefly, then you're exploring new corridors. Try finding the stairs from the Ground Floor up to the First Floor, then keep climbing. The castle is now fully navigable vertically. One thing is missing: a status bar that tells you where you are, what time it is, and how close you are to getting caught.
+>
+> Your project structure:
+>
+> ```
+> src/
+> ├── main.rs          // game loop with floor transition handling
+> ├── map.rs           // HogwartsMap, Floor, Tile, Room, RoomBounds
+> ├── player.rs        // Player, MoveResult, try_move with stairs
+> └── render.rs        // tiles, labels, player, transition message
+> ```
+>
+> [!warning] Common Mistake
+> Borrowing `map.floors[self.floor]` and then trying to modify `self.floor`:
+> ```rust
+> let floor = &map.floors[self.floor];  // immutable borrow of map
+> self.floor = dest_floor;               // modifying self is fine
+> self.x = dest_x;                       // this is fine too
+> // floor is still valid — we borrowed map, not self
+> ```
+> This actually works because `floor` borrows from `map` and we're modifying `self` — they're different data. But if you tried to modify `map` while `floor` exists, the borrow checker would stop you. Understanding *what* is borrowed and *from where* is the key to working with the borrow checker.
 
-Walk to a staircase, step onto it, and — whoosh — you're on a different floor. The floor name flashes briefly, then you're exploring new corridors. Try finding the stairs from the Ground Floor up to the First Floor, then keep climbing. The castle is now fully navigable vertically. One thing is missing: a status bar that tells you where you are, what time it is, and how close you are to getting caught.
-
-Your project structure:
-
-```
-src/
-├── main.rs          // game loop with floor transition handling
-├── map.rs           // HogwartsMap, Floor, Tile, Room, RoomBounds
-├── player.rs        // Player, MoveResult, try_move with stairs
-└── render.rs        // tiles, labels, player, transition message
-```
-
-**Common mistake:** Borrowing `map.floors[self.floor]` and then trying to modify `self.floor`:
-```rust
-let floor = &map.floors[self.floor];  // immutable borrow of map
-self.floor = dest_floor;               // modifying self is fine
-self.x = dest_x;                       // this is fine too
-// floor is still valid — we borrowed map, not self
-```
-This actually works because `floor` borrows from `map` and we're modifying `self` — they're different data. But if you tried to modify `map` while `floor` exists, the borrow checker would stop you. Understanding *what* is borrowed and *from where* is the key to working with the borrow checker.
 
 ---
 
@@ -1235,13 +1262,6 @@ ratatui builds text from three layers:
 
 **`Style::new().fg(Color::Cyan).bold()`** — styles are built with a builder pattern. `.fg()` sets foreground color, `.bg()` sets background, `.bold()` adds the bold modifier. `Color::Cyan`, `Color::Yellow`, `Color::Rgb(60, 60, 60)` — ratatui supports named ANSI colors and 24-bit RGB.
 
-> **TypeScript comparison:** This is like building a React component from styled spans:
-> ```tsx
-> <span style={{color: 'cyan', fontWeight: 'bold'}}> Floor 3 </span>
-> <span style={{color: 'gray'}}>(12,5)</span>
-> ```
-> Same concept, different syntax.
-
 ### The Detection Meter
 
 The detection meter is a visual bar made of Unicode block characters:
@@ -1344,15 +1364,14 @@ fn run(
 }
 ```
 
-### Checkpoint: Stage 14 Complete
-
-The bottom of your screen now shows:
-
-```
- Ground Floor  (23,15) │ Great Hall │ ⏰ 23:07 │ ★ 30 │ Detection ████░░░░░░░░░░░░░░░░
-```
-
-Floor name in a cyan badge. Coordinates in gray. Current room in white. Game time ticking. Score accumulating. Detection meter pulsing green-to-red as you move. Act 2 is complete — you have a fully interactive Hogwarts explorer. In Act 3, the corridors won't be empty much longer: pathfinding algorithms will give NPCs the intelligence to patrol, scout, and chase you through the castle.
+> [!check] Checkpoint
+> The bottom of your screen now shows:
+>
+> ```
+>  Ground Floor  (23,15) │ Great Hall │ ⏰ 23:07 │ ★ 30 │ Detection ████░░░░░░░░░░░░░░░░
+> ```
+>
+> Floor name in a cyan badge. Coordinates in gray. Current room in white. Game time ticking. Score accumulating. Detection meter pulsing green-to-red as you move. Act 2 is complete — you have a fully interactive Hogwarts explorer. In Act 3, the corridors won't be empty much longer: pathfinding algorithms will give NPCs the intelligence to patrol, scout, and chase you through the castle.
 
 ### Final Project Structure
 
