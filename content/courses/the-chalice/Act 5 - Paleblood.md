@@ -14,6 +14,8 @@
 
 ### The Idea
 
+Until now, our dungeon has been raw `println!` output — functional but ugly. A roguelike's UI is its interface with the player's instincts: HP bars that flash red, stamina gauges that drain visibly, combat logs that scroll with the rhythm of battle. We build the layout system now because every subsequent stage (gauges, animations, boss UI, death screens) needs a structured screen to render into. The layout is the canvas; everything else is paint.
+
 Until now, our dungeon has been raw `println!` output — functional but ugly. Time to build a proper terminal UI. The design spec (section 10) defines our target layout:
 
 ```
@@ -310,7 +312,7 @@ fn render_actions(frame: &mut Frame, area: ratatui::layout::Rect) {
 
 ### Checkpoint: What You Should Have
 
-Run `cargo run` and you should see a bordered dungeon viewport on the left, a message log on the right, and a status/action bar at the bottom. The dungeon renders with colored tiles, the player is a cyan `@`, and enemies are colored letters. It's not pretty yet — we'll add gauges and animations next.
+Run `cargo run` and you should see a bordered dungeon viewport on the left, a message log on the right, and a status/action bar at the bottom. The dungeon renders with colored tiles, the player is a cyan `@`, and enemies are colored letters. It's not pretty yet — we'll add gauges and animations next. The skeleton is in place; now we give it flesh with HP bars, stamina gauges, and the visual feedback that makes combat feel visceral.
 
 ---
 
@@ -319,6 +321,8 @@ Run `cargo run` and you should see a bordered dungeon viewport on the left, a me
 **Difficulty:** Easy · **New concepts:** `Gauge` widget, `Span` composition, conditional styling, `Color::Rgb`
 
 ### The Idea
+
+Numbers are for spreadsheets. Hunters need *gauges* — colored bars that communicate danger at a glance. A red bar draining toward zero creates urgency that "HP: 23/100" never will. The rally indicator (an orange segment showing recoverable HP) is especially important: it makes the rally mechanic *visible*, teaching the player to attack after taking damage without reading a manual. We build gauges now because the layout from Stage 29 has empty status areas waiting to be filled, and because every subsequent stage (combat animations, boss UI) assumes the HUD exists.
 
 Numbers are for spreadsheets. Hunters need *gauges* — colored bars that you can read at a glance. We'll build three: an HP bar (red, flashes on damage), a stamina bar (green), and a rally indicator (orange, decaying). The design spec (section 4.2a) defines the rally window as a 2-turn orange segment on the HP bar.
 
@@ -506,7 +510,7 @@ frame.render_widget(stamina_gauge, stamina_area);
 
 ### Checkpoint
 
-Your status bar now shows colored HP (with orange rally segment), green stamina, vial count, weapon info, insight, echoes, dodge status, and equipped runes. HP flashes red when you take damage and pulses when low. The dungeon is starting to feel alive.
+Your status bar now shows colored HP (with orange rally segment), green stamina, vial count, weapon info, insight, echoes, dodge status, and equipped runes. HP flashes red when you take damage and pulses when low. The dungeon is starting to feel alive. But combat still resolves instantly — one frame you're at full HP, the next you're at 60. Next, we add the temporal dimension: animations that let the player *see* the blow land, the damage number flash, and the enemy stagger.
 
 ---
 
@@ -515,6 +519,8 @@ Your status bar now shows colored HP (with orange rally segment), green stamina,
 **Difficulty:** Medium · **New concepts:** Frame-based animation state machine, `std::time::Instant`, interleaved rendering, `Span` styling for emphasis
 
 ### The Idea
+
+Combat in a roguelike is turn-based, but it shouldn't *feel* instant. A swing that resolves in a single frame robs the player of the satisfaction of landing a hit. Animations — even simple text-based ones — create rhythm: the attack text appears, a brief pause, the damage number flashes, the enemy reacts. This stage builds an animation queue that plays out over multiple frames, transforming instantaneous state changes into a sequence the player can *feel*. We build this now because the gauges from Stage 30 need something to react to, and because boss fights in Stage 32 will be incomprehensible without telegraphs that linger on screen.
 
 Combat in a roguelike is turn-based, but it shouldn't *feel* instant. When you swing the Saw Cleaver, you want to see: the attack text appear, a brief pause, the damage number flash, and the enemy's reaction. When an enemy dies, you want a death message that lingers. We'll build a simple animation queue that plays out over multiple frames.
 
@@ -747,7 +753,7 @@ if !game.animation_queue.is_playing() && !game.animation_queue.events.is_empty()
 
 ### Checkpoint
 
-Combat now has visual rhythm. Attacks display sequentially with pauses between each step. Death messages linger. Rally heals flash orange. The message log accumulates a history of the fight. The dungeon feels dangerous.
+Combat now has visual rhythm. Attacks display sequentially with pauses between each step. Death messages linger. Rally heals flash orange. The message log accumulates a history of the fight. The dungeon feels dangerous. With animations in place, we can now build the most dramatic UI moment in the game: the boss fight screen, where a massive HP gauge dominates the viewport and telegraphs flash in red.
 
 ---
 
@@ -756,6 +762,8 @@ Combat now has visual rhythm. Attacks display sequentially with pauses between e
 **Difficulty:** Medium · **New concepts:** Conditional layout regions, `LineGauge`, phase-driven styling, telegraph rendering
 
 ### The Idea
+
+Boss fights are the climax of each floor — they deserve a UI that communicates their gravity. A regular enemy is a red letter on the map; a boss needs a named HP gauge that dominates the screen, phase indicators that shift color as the fight escalates, and telegraph warnings that give the player exactly one turn to react. We build the boss UI as a separate stage because it requires conditional layout changes (the boss bar appears and disappears), phase-driven styling (colors change with the boss's state), and telegraph rendering that integrates with the animation system from Stage 31.
 
 Boss fights are the climax of each floor. The UI needs to communicate three things at a glance: the boss's remaining HP, its current phase, and what it's about to do (the telegraph). We'll add a boss bar at the top of the viewport that only appears during boss encounters, with phase-colored styling and red telegraph warnings.
 
@@ -930,7 +938,7 @@ fn render_message_log(frame: &mut Frame, area: ratatui::layout::Rect, game: &Gam
 
 ### Checkpoint
 
-Enter a boss room and the UI transforms: a large HP gauge appears at the top with the boss's name and title, phase indicators color-shift as the boss weakens, telegraph warnings flash in red before attacks, and the message log border turns crimson. The boss fight *feels* different from regular combat.
+Enter a boss room and the UI transforms: a large HP gauge appears at the top with the boss's name and title, phase indicators color-shift as the boss weakens, telegraph warnings flash in red before attacks, and the message log border turns crimson. The boss fight *feels* different from regular combat. The UI is complete — but the game has no consequences yet. Die, and you just... stop. Next, we build the roguelike death loop that gives death meaning: lost echoes, bloodstains, and the desperate run to recover what you dropped.
 
 ---
 
@@ -939,6 +947,8 @@ Enter a boss room and the UI transforms: a large HP gauge appears at the top wit
 **Difficulty:** Medium · **New concepts:** Roguelike death loop, state reset vs. persistence, `Option<(u8, usize, usize)>` for echo recovery, seed reuse
 
 ### The Idea
+
+Without consequences, death is just a loading screen. The bloodstain system transforms death into a *mechanic* — you lose your echoes at the spot where you fell, restart on floor 1, and must reach that spot again to recover them. Die before you get there, and they're gone forever. This creates the tension that defines roguelikes: every step deeper is a gamble, every retreat is a calculation, and every death is a story. We build this now because it's the core loop that gives the game replayability — without it, there's no reason to play again after your first run.
 
 Death is not the end — it's the *loop*. The design spec (section 12) defines the core roguelike cycle:
 
@@ -1119,7 +1129,7 @@ The bloodstain is always visible on the minimap (if you've discovered that room)
 
 ### Checkpoint
 
-Die in the dungeon and watch: "YOU DIED" fills the screen in red, your echoes drop as a golden `$` at your death spot, you restart on floor 1 with a fresh hunter (but the same dungeon layout), and a yellow marker on the minimap shows where your echoes wait. Reach the spot and they're yours again. Die first and they vanish. The hunt continues.
+Die in the dungeon and watch: "YOU DIED" fills the screen in red, your echoes drop as a golden `$` at your death spot, you restart on floor 1 with a fresh hunter (but the same dungeon layout), and a yellow marker on the minimap shows where your echoes wait. Reach the spot and they're yours again. Die first and they vanish. The hunt continues. But right now, death resets everything — there's no sense of progress between runs. Next, we add persistence: saved stats, permanent upgrades, and the Hunter's Dream that makes each death a step forward rather than a step back.
 
 ---
 
@@ -1128,6 +1138,8 @@ Die in the dungeon and watch: "YOU DIED" fills the screen in red, your echoes dr
 **Difficulty:** Medium · **New concepts:** `serde::Serialize`/`Deserialize` derive, `serde_json::to_writer_pretty`/`from_reader`, `#[serde(default)]`, file I/O with `std::fs`, meta-progression
 
 ### The Idea
+
+A roguelike without persistence is a roguelike without hope. The Hunter's Dream is the meta-progression layer that makes death feel like progress rather than punishment: spend lifetime echoes on permanent stat upgrades, unlock new weapons, expand the loot table. All of this must survive between runs — which means serializing game state to disk. We build persistence now because it's the bridge between individual runs and the larger game: without it, every death truly is the end, and the player has no reason to keep descending.
 
 Between runs, the Hunter's Dream awaits. This is the meta-progression layer (section 12.1): spend lifetime echoes on permanent stat upgrades, unlock new weapons for the starting pool, and expand the loot table. All of this must persist to disk as JSON.
 
@@ -1442,7 +1454,7 @@ impl Hunter {
 
 ### Checkpoint
 
-Die and your stats persist. Start a new run and your upgrades apply. Open the Hunter's Dream between runs to spend echoes on permanent power. The save file at `~/.local/share/chalice/save.json` is human-readable JSON — you can inspect (or edit) it directly.
+Die and your stats persist. Start a new run and your upgrades apply. Open the Hunter's Dream between runs to spend echoes on permanent power. The save file at `~/.local/share/chalice/save.json` is human-readable JSON — you can inspect (or edit) it directly. The game now has a reason to keep playing — but every run uses the same weapon. Next, we give the Hunter an arsenal: six trick weapons with unique playstyles, blood gems that modify them, and runes that define a build.
 
 ---
 
@@ -1451,6 +1463,8 @@ Die and your stats persist. Start a new run and your upgrades apply. Open the Hu
 **Difficulty:** Medium · **New concepts:** Enum-driven polymorphism, trait-like behavior via match, modifier stacking, `Vec` with capacity limits
 
 ### The Idea
+
+A hunter with one weapon has one playstyle. Six weapons with blood gems and runes create dozens of viable builds — each run can feel fundamentally different based on what you find and equip. The Saw Cleaver rewards beast-hunting aggression; the Kirkhammer rewards patient, heavy-hitting boss interrupts; the Blade of Mercy rewards frantic double-hit rally builds. We build the full weapon system now because it's the final layer of player expression: the dungeon is generated, the enemies are smart, the UI is polished, persistence works — all that's missing is the *identity* of each run.
 
 A hunter is defined by their weapon. The design spec (section 9) defines six weapons, each encouraging a different playstyle. Section 8.1 adds Blood Gems (permanent weapon modifiers with tradeoffs), and section 9a adds Runes (passive modifiers, max 3 equipped). Together, these create *build identity* within a run.
 
@@ -1780,7 +1794,7 @@ The beauty of this system is emergent builds:
 
 ### Checkpoint
 
-Your dungeon now drops weapons, blood gems, and runes as loot. Each weapon plays differently — the Blade of Mercy's double-hit feels frantic, the Kirkhammer's stun feels powerful. Blood gems create permanent tradeoffs. Runes stack with weapons and gems for emergent builds. The Chalice has depth.
+Your dungeon now drops weapons, blood gems, and runes as loot. Each weapon plays differently — the Blade of Mercy's double-hit feels frantic, the Kirkhammer's stun feels powerful. Blood gems create permanent tradeoffs. Runes stack with weapons and gems for emergent builds. The Chalice has depth. One final feature remains: the Daily Chalice, where every hunter in the world faces the same dungeon on the same day.
 
 ---
 
@@ -1789,6 +1803,8 @@ Your dungeon now drops weapons, blood gems, and runes as loot. Each weapon plays
 **Difficulty:** Easy · **New concepts:** Date-based seed generation, `chrono::Local`, display formatting, leaderboard persistence
 
 ### The Idea
+
+The seeded dungeon generator we built in Act 1 was always leading here. The Daily Chalice is the social layer — the feature that transforms a solo experience into a shared one. Every player faces the same dungeon on the same day, and the best run is recorded. It's surprisingly easy to implement because all the hard work (seeded generation, persistence, the full game loop) is already done. We build it last because it's the capstone: the feature that ties together every system in The Chalice and gives players a reason to come back tomorrow.
 
 Every day, every hunter faces the same dungeon. The Daily Chalice generates a seed from today's date — same seed means same dungeon layout, same enemy placement, same boss. You get one shot. Your best run is recorded. Compare with friends: "Did you beat today's Chalice? I got to floor 4 with 3,200 echoes."
 

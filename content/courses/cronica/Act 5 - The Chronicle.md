@@ -21,6 +21,8 @@ flowchart LR
 
 > **Difficulty: Medium**
 
+Every player's quest runs in isolation — Player A slays a dragon and Player B never hears about it. The world has no memory beyond individual sessions. We need shared mutable state that multiple async tasks can read and write safely across threads. This stage confronts Rust's concurrency model head-on: `Arc<RwLock<T>>`, the `Send` and `Sync` traits, and the design patterns that make multiplayer possible without data races.
+
 > [!tip] What You'll Learn
 > - `Arc<RwLock<T>>` for shared mutable state across async tasks
 > - The `Send` and `Sync` traits — what they mean and why the compiler checks them
@@ -68,6 +70,8 @@ A type is `Sync` if `&T` is `Send`. In plain English: if it's safe to hand a ref
 `rusqlite::Connection` is `Send` (you can move it to a thread) but **not** `Sync` (you can't share `&Connection` across threads). That's why we wrapped it in `Mutex` in Stage 23 — `Mutex<Connection>` is `Sync` because the lock ensures only one thread accesses it at a time.
 
 ### Arc<RwLock<T>> — The Multiplayer Pattern
+
+Right now we understand the concurrency problem and the `Send`/`Sync` traits, but we don't have a data structure for the shared world. We need a world state type wrapped in `Arc<RwLock<T>>` that any task can clone a handle to and read or write safely.
 
 For world state, we want many readers and occasional writers. `RwLock` is perfect:
 
@@ -189,6 +193,8 @@ let world = Arc::new(RwLock::new(WorldState {
 > - **Holding the write lock too long** — every reader blocks while you hold a write lock. Keep writes short: clone data out, drop the lock, then process.
 > - **Forgetting `Clone` on `WorldEvent`** — you need to clone events out of the `RwLock` before the lock is released. Derive `Clone` on all shared data types.
 
+The world remembers now — events ripple across quests and realms shift in response to player actions. But shared state is just the foundation. Next stage, we'll build party quests where multiple players share a single narrative in real time.
+
 > [!check] Checkpoint
 > Start two quests in the same realm. Complete a combat encounter in Quest A. Verify that Quest B's next AI response references the aftermath as a rumor or visible change.
 
@@ -198,6 +204,8 @@ let world = Arc::new(RwLock::new(WorldState {
 
 > **Difficulty: Hard**
 
+World events propagate between quests, but every adventure is still a solo affair — one player, one character, one narrative thread. The most memorable RPG moments happen when friends play together: coordinating tactics, roleplaying off each other, sharing the triumph of a hard-won battle. We need a party system that manages turn order, handles player disconnects, and teaches the AI to narrate for multiple characters simultaneously. This is the most complex flow in the entire bot.
+
 > [!tip] What You'll Learn
 > - Managing 2–4 players in a single quest
 > - Turn order and initiative in multiplayer
@@ -206,6 +214,8 @@ let world = Arc::new(RwLock::new(WorldState {
 > - Concurrent message collection from multiple Discord users
 
 ### The Party Model
+
+Right now we have single-player quests and shared world state, but no way to put multiple characters into the same narrative. We need a `Party` struct that tracks members, manages turn order, and handles the messy reality of players going silent mid-quest.
 
 A party quest has 2–4 characters sharing one narrative. The AI manages all of them, but each player controls only their own character's actions.
 
@@ -431,6 +441,8 @@ impl Repo {
 > - **Not handling the "all players disconnected" case** — if everyone times out, the quest should auto-pause, not spin forever.
 > - **Sending party messages to the wrong channel** — each player might be in a different Discord channel. Track `channel_id` per member and send targeted messages.
 
+Parties quest together, take turns, and survive disconnects. But the world still feels empty — no echoes of fallen heroes, no legendary figures from other players' stories. Next stage, we'll build the rival system that turns dead characters into living legends.
+
 > [!check] Checkpoint
 > Start a party quest with 2 characters. Verify turn order follows initiative rolls. Have one player time out and confirm the other can continue. Check that both sessions are recorded in the database.
 
@@ -440,6 +452,8 @@ impl Repo {
 ## Stage 31 — The Rival System
 
 > **Difficulty: Medium**
+
+Players share a world and quest in parties, but fallen heroes simply vanish — no ghost haunting the Ashlands, no statue in the town square, no whispered legend. The world has no memory of its dead. We need a system that queries the database for notable characters and injects them into other players' quests as AI-controlled NPCs. This creates the emergent shared narrative that makes Crónica feel like a living world: "I met the ghost of your old character in the Ashlands."
 
 > [!tip] What You'll Learn
 > - Querying the database for dead/notable characters
@@ -455,6 +469,8 @@ When a character dies (or achieves something notable), they don't vanish — the
 This creates an emergent shared narrative: "I met the ghost of Kael the Fallen in the Ashlands — wasn't that your old character?"
 
 ### Querying for Rival Candidates
+
+Right now we have a database full of characters — some alive, some dead — but no way to surface them as NPCs in other players' quests. We need a query that finds suitable rival candidates and a struct to represent them.
 
 ```rust
 #[derive(Debug, Clone)]
@@ -586,6 +602,8 @@ impl Repo {
 > - **Overloading the AI with too many rival candidates** — limit to 3 candidates and instruct the AI to use at most one per quest.
 > - **Not handling the LEFT JOIN returning NULL** — when a character has no sessions/turns, the joined columns are NULL. Use `Option<String>` in the row mapping.
 
+The dead walk again and legends echo across quests. The game mechanics are complete — but the visual experience is still plain text and default embeds. Next stage, we'll polish the presentation with ANSI colors and realm-themed embeds.
+
 > [!check] Checkpoint
 > Create a character, kill them (set `alive = 0` in the DB), then start a new quest in the same realm with a different character. Verify the dead character appears as a rival candidate and the AI can reference them.
 
@@ -594,6 +612,8 @@ impl Repo {
 ## Stage 32 — ANSI & Embeds Polish
 
 > **Difficulty: Easy**
+
+The game works — multiplayer, rivals, progression, the full package. But it *looks* like a prototype: plain text, default embed colors, no visual distinction between combat narration and tavern dialogue. Presentation matters. A well-formatted combat exchange with red ANSI text *feels* more dangerous than the same words in gray. This stage builds the visual language that makes Crónica atmospheric before we ship it.
 
 > [!tip] What You'll Learn
 > - ANSI color codes in Discord code blocks
@@ -724,6 +744,8 @@ pub fn format_ai_response(raw: &str, realm: &str) -> Vec<String> {
 > - **Exceeding Discord's 2000-character message limit** — split long responses into multiple messages. Each `ansi` code block adds overhead.
 > - **Using colors that are invisible in light mode** — test your color choices in both Discord light and dark themes. Yellow on white is unreadable.
 
+Crónica looks the part now — combat bleeds red, narration glows cyan, and each realm has its own visual identity. But it's still running on your laptop. Next stage, we'll cross-compile for Linux and deploy to EC2.
+
 > [!check] Checkpoint
 > Send a test message with each formatter (combat, narration, dialogue, system). Verify colors render correctly in Discord. Check both light and dark themes.
 
@@ -733,6 +755,8 @@ pub fn format_ai_response(raw: &str, realm: &str) -> Vec<String> {
 ## Stage 33 — Deploy to EC2
 
 > **Difficulty: Hard**
+
+Crónica runs beautifully — on your laptop. Close the lid and the bot goes dark. We need it running 24/7 on a server, surviving reboots, logging structured data, and loading secrets from the environment instead of hardcoded strings. This stage covers the full deployment pipeline: cross-compilation from macOS to Linux, replacing `println!` with production-grade `tracing`, writing a systemd service file, and shipping the binary to EC2.
 
 > [!tip] What You'll Learn
 > - Cross-compiling Rust for Linux x86_64 (from macOS or other hosts)
@@ -952,6 +976,8 @@ RUST_LOG=cronica=info
 > - **Not setting `ReadWritePaths` in systemd** — with `ProtectSystem=strict`, the filesystem is read-only by default. The bot needs write access to the database directory.
 > - **Hardcoding the Discord token in source** — never commit secrets. Use environment variables or a secrets manager.
 
+The bot runs on a server now, surviving reboots and logging structured data. But a deployed binary isn't a launched game — we still need to invite real players, verify every feature end-to-end, and monitor the first session. Next stage: launch day.
+
 > [!check] Checkpoint
 > Cross-compile the binary, `scp` it to an EC2 instance, start the systemd service, and verify the bot comes online in Discord. Check `journalctl -u cronica -f` for structured JSON logs.
 
@@ -960,6 +986,8 @@ RUST_LOG=cronica=info
 ## Stage 34 — Launch Day
 
 > **Difficulty: Medium**
+
+The binary runs on EC2, the systemd service restarts on failure, and structured logs flow to journald. But a deployed bot isn't a launched game. We need to verify every feature end-to-end with real players, set up monitoring for the critical paths, and know what to watch for in the first hour of production. This final stage is the difference between "it works on my machine" and "it works in the world."
 
 > [!tip] What You'll Learn
 > - Discord bot invite flow and permissions
@@ -1110,6 +1138,8 @@ Watch the logs during play. Note any errors, slow responses, or unexpected behav
 > - **Not registering slash commands** — poise registers commands on startup, but it can take up to an hour for Discord to propagate globally. Use guild-specific registration for instant testing.
 > - **Forgetting AWS credentials on EC2** — use an IAM instance profile (role attached to the EC2 instance) instead of hardcoded credentials. The AWS SDK auto-discovers instance profile credentials.
 > - **Not setting up log rotation** — journald handles this by default, but if you're also writing to files, use `logrotate` or tracing's rolling file appender.
+
+The chronicle is complete. Every system has been tested, every feature verified, every log monitored. What began as `println!("Hello, Crónica")` is now a deployed multiplayer AI RPG with persistent storage, structured errors, a talent system, language learning, shared world state, and production monitoring.
 
 > [!check] Checkpoint
 > Complete the full launch checklist. Run a real play session with at least one other person. If everything works — congratulations, Crónica is live.

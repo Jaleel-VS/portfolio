@@ -17,6 +17,8 @@ This is where Ironvault becomes real.
 
 ## Stage 25 — The Trade Routes (Medium)
 
+A vault you can't export from is a prison. If you decide to switch tools, lose access to your machine, or need to share credentials with a team migration, locked-in data is lost data. This stage builds import and export in JSON and CSV formats — but with extreme caution, because export produces plaintext files containing every password you own. The safety gates (re-authentication and explicit confirmation) exist because this is the single most dangerous operation in the entire tool.
+
 > *"The merchant spreads a map across the table. 'Your relics are valuable,' she says. 'But a treasure locked in a single vault is a treasure one disaster away from being lost forever. Let me show you the trade routes — how to move your wealth safely between vaults.'"*
 
 Data portability matters. If you can't export your passwords, you're locked into your own tool forever. If you can't import, migrating from another password manager means manually re-entering every credential.
@@ -116,6 +118,8 @@ pub fn import_relics(
 4. Import a file with a duplicate relic name — verify your conflict strategy works
 5. **Delete the export file when you're done testing.** Seriously. It contains all your passwords in plaintext.
 
+Data can flow in and out of the vault, but what happens when the vault file itself is lost — disk failure, accidental deletion, a bad password change? Stage 26 builds the backup system that protects against data loss.
+
 ### Common Mistakes
 
 **Leaving the export file on disk.** Print a reminder after export: "Remember to securely delete this file when you're done." Better yet, print the path so the user can `shred` or `rm` it.
@@ -125,6 +129,8 @@ pub fn import_relics(
 ---
 
 ## Stage 26 — The Vault Backup (Medium)
+
+Your vault file is a single point of failure. One accidental `rm`, one disk corruption, one interrupted password change, and every credential is gone forever. Backups are the most boring and most important feature in any system that stores irreplaceable data. The elegant part: since the vault is already encrypted, backups are just copies of opaque ciphertext — no additional encryption needed, no master password required to create them.
 
 > *"The archivist pulls a leather-bound ledger from the shelf. 'Every vault worth protecting has copies,' she says. 'Not of the relics themselves — of the sealed vault. The copies are just as impenetrable as the original. But if the original is lost to fire or flood, the copies remain.'"*
 
@@ -238,6 +244,8 @@ The backup contains the old salt, old Argon2 parameters, and ciphertext encrypte
 3. Create 12 backups, run `iv backup rotate` — should keep 10, delete 2
 4. Change your master password, create a backup, change it again, restore the first backup — verify you need the *first* password
 
+The vault is backed up and recoverable. But there's a hidden flaw in everything you've built so far: when Rust drops a value, the memory isn't cleared. Your master password and derived key linger in freed memory. Stage 27 fixes this with secure memory handling.
+
 ### Common Mistakes
 
 **Using `fs::copy` directly to the vault path for restore.** If the copy fails halfway (disk full), you've corrupted the vault and lost the backup's data. Always copy to a temp file first, then atomic rename.
@@ -247,6 +255,8 @@ The backup contains the old salt, old Argon2 parameters, and ciphertext encrypte
 ---
 
 ## Stage 27 — The Warding Runes (Hard)
+
+Every secret your program has ever held — master passwords, derived keys, decrypted credentials — lingers in freed memory until something else overwrites it. A core dump, a swap file, or a cold boot attack can recover these ghosts. This stage is the most important security improvement in the entire course: it ensures that when a secret is no longer needed, the memory is actively overwritten with zeros, not just "freed" back to the allocator. The `zeroize` and `secrecy` crates make this guarantee enforceable at compile time.
 
 > *"The runesmith traces glowing sigils along the vault walls. 'These are warding runes,' she explains. 'When a secret is no longer needed, the runes don't just hide it — they burn it from existence. No trace remains. No echo. No ghost in the stone.' She pauses. 'Without these wards, every secret you've ever held still lingers in the walls, waiting for someone with the right tools to read them.'"*
 
@@ -452,6 +462,8 @@ Go through your codebase and apply these changes:
 5. Try `println!("{:?}", secret_password)` — should print `SecretBox([REDACTED])`
 6. Run your full test suite — everything should still pass
 
+Secrets are now actively destroyed when they leave scope. But the codebase is still littered with `unwrap()` calls that can panic and crash the program with a stack trace. Stage 28 replaces every panic point with proper error handling.
+
 ### What to Try
 
 - Add a `dbg!()` call on a `SecretString` — notice it prints `[REDACTED]`, not the value
@@ -480,6 +492,8 @@ These limitations are real, and Stage 29 (Threat Model) is where you'll document
 ---
 
 ## Stage 28 — The Armorer's Finish (Medium)
+
+Every `unwrap()` in your codebase is a potential panic — an uncontrolled crash that dumps a stack trace to the terminal. Stack traces are useful for developers but terrifying and useless for users. A password manager that crashes with `thread 'main' panicked at 'called unwrap() on an Err value'` destroys user trust instantly. This stage replaces every panic point with a custom error type that produces clear, actionable messages — the difference between "file error: permission denied" and a wall of Rust internals.
 
 > *"The armorer runs a gloved hand along the blade. 'The edge is true,' she says. 'But look here — a rough spot where the tang meets the guard. And here — a stress point that will crack under pressure. These aren't flaws in the steel. They're flaws in the finishing.' She picks up a fine file. 'Let's fix them.'"*
 
@@ -660,6 +674,8 @@ Search your codebase for every `unwrap()` and `expect()`. Replace each one:
 4. Run `iv get nonexistent-relic` — should print "Relic 'nonexistent-relic' not found."
 5. Disconnect from the internet and run `iv breach-check` — should print a network error, not a panic
 
+The code is now panic-free with clear user-facing messages. But a security tool that doesn't document its own limitations is a security tool that misleads its users. Stage 29 builds the threat model — an honest accounting of what Ironvault protects against and what it doesn't.
+
 ### Common Mistakes
 
 **Using `thiserror` without understanding what it does.** The `thiserror` crate auto-generates `Display` and `From` impls from attributes. It's convenient, but for a learning project, writing them by hand teaches you what's actually happening. Consider `thiserror` for your next project.
@@ -671,6 +687,8 @@ Search your codebase for every `unwrap()` and `expect()`. Replace each one:
 ---
 
 ## Stage 29 — The Cartographer's Map (Medium)
+
+A security tool that claims to protect against everything is either lying or delusional. Every system has boundaries — threats it mitigates and threats it doesn't. Documenting these boundaries honestly is what separates professional security engineering from wishful thinking. This stage produces a threat model that tells users exactly where Ironvault's protection ends, so they can make informed decisions about their own security posture. It's the same principle behind AWS's Shared Responsibility Model.
 
 > *"The cartographer unrolls a vast parchment. It shows the vault, the surrounding lands, the roads, the borders. But what makes this map remarkable isn't what it shows — it's the areas marked 'Here be dragons.' The cartographer doesn't pretend the dragons don't exist. She marks them clearly so travelers know where the protection ends."*
 
@@ -901,6 +919,8 @@ Copy this template into your project and fill in any details specific to your im
 3. Does every mitigation in Section 3 correspond to code you've actually written?
 4. Are the trust boundaries accurate for your implementation?
 
+The threat model is written. The security boundaries are documented. Stage 30 adds the final polish — shell completions, version flags, color control, and the grand review of everything you've built.
+
 ### Common Mistakes
 
 **Claiming more protection than you provide.** If you didn't implement `mlock()`, don't claim protection against swap leaks. If your clipboard clear has a 30-second window, say so.
@@ -910,6 +930,8 @@ Copy this template into your project and fill in any details specific to your im
 ---
 
 ## Stage 30 — The Grand Seal (Medium)
+
+The vault works, the security is solid, the errors are handled, the threats are documented. But the details are what make people trust software — shell completions that save keystrokes, a `--version` flag that confirms what's installed, color control for accessibility and piping. This final stage adds the professional polish that transforms a project into a tool, and then looks back at everything you've built to understand the complete security architecture.
 
 > *"The master smith examines the finished blade. She turns it in the light, checking the edge, the balance, the temper. Then she nods. 'It is ready,' she says. She heats the seal — a circle of interlocking runes — and presses it into the pommel. The metal hisses. When she lifts the seal, the mark glows faintly, then fades to a permanent impression. 'This blade bears your mark now. It is yours. It is complete.'"*
 

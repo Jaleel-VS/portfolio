@@ -88,6 +88,8 @@ pub enum SpellChoice {
 
 > *"Troll... in the dungeons... thought you ought to know."* — Professor Quirrell
 
+Your duel engine works, but playing against yourself gets old fast. Every game needs an opponent, and the simplest AI is one that picks randomly — like a panicked first-year flinging whatever spell comes to mind. This stage is deliberately simple because the *real* lesson isn't the AI logic; it's learning how to add external crates and filter iterators, patterns you'll use in every stage that follows.
+
 Our first AI is as sophisticated as a mountain troll: it picks a random spell it can actually afford. Simple — but it teaches you how to add external crates and filter with iterators.
 
 ### Adding the `rand` Crate
@@ -250,11 +252,15 @@ match affordable.choose(&mut rng) { ... }
 
 This is Rust's philosophy: the type system *forces* you to handle edge cases that would be runtime crashes in Python or TypeScript.
 
+The First Year AI works, but it's trivially beatable — just cast your strongest spell every turn. Stage 10 builds an AI that actually *watches* what you do and counters it.
+
 ---
 
 ## Stage 10 — The Counter
 
 > *"Honestly, am I the only person who's ever bothered to read Hogwarts, A History?"* — Hermione Granger
+
+A random AI is a punching bag. The Counter AI is the first opponent that makes you *think* — it tracks your recent spells and picks the type that beats your favorite. This teaches you sliding-window analysis over history data and weighted randomness, both of which are building blocks for the smarter AIs ahead.
 
 A First Year flails randomly. An O.W.L.-level student *watches* you. They track your last three spells and pick the type that counters your favorite. Remember the type triangle from Act 1:
 
@@ -539,11 +545,15 @@ if affordable.is_empty() {
 }
 ```
 
+The Counter AI reacts to what you *did*, but it doesn't think about what it *should* do. Stage 11 builds a Strategist that evaluates the current game state — HP, mana, status effects — and makes proactive decisions.
+
 ---
 
 ## Stage 11 — The Strategist
 
 > *"It does not do to dwell on dreams and forget to live."* — Albus Dumbledore
+
+The Counter AI is reactive — it looks backward at what you did. The Strategist looks *inward* at the current game state and makes decisions based on priorities: survive when low, press advantage when the opponent is suffering, conserve mana when running dry. This is where AI starts feeling intelligent, and where you learn to score and rank options using floating-point math and iterator adapters like `min_by_key` and `max_by`.
 
 The O.W.L. AI reacts to what you *did*. The N.E.W.T. AI thinks about what it *should* do. It evaluates the current game state — HP, mana, status effects — and makes strategic decisions.
 
@@ -850,11 +860,15 @@ fn newt_picks_cheapest_when_mana_low() {
 cargo test newt
 ```
 
+The Strategist evaluates the present, but it can't anticipate the future. Stage 12 builds the Predictor — an AI that detects your patterns, predicts your next move, and even baits you into wasting counters.
+
 ---
 
 ## Stage 12 — The Predictor
 
 > *"It is our choices, Harry, that show what we truly are, far more than our abilities."* — Albus Dumbledore
+
+The Dumbledore AI is the culmination of everything you've built — it combines counter-analysis, state evaluation, *and* pattern prediction into one opponent. It detects your habits, baits you into wasting counters, and plans multi-turn combos. This is the hardest AI to implement and the most satisfying to beat. It also teaches you sliding windows (`.windows(2)`), opponent profiling, and how to balance determinism with controlled randomness.
 
 The Dumbledore AI doesn't just react to what you did or evaluate the current state — it *predicts what you'll do next* and plans multiple moves ahead. This is the hardest AI to implement and the most satisfying to beat.
 
@@ -885,6 +899,8 @@ graph TD
 ```
 
 ### Pattern Detection
+
+Right now our AIs look at raw history — individual turns. But to predict behavior, we need to distill that history into a *profile*: how often does the opponent favor each type? Do they repeat themselves? Do they panic when low on HP? This struct captures those tendencies so the Dumbledore AI can reason about them.
 
 ```rust
 /// Analyze the opponent's full history to detect patterns.
@@ -1236,11 +1252,15 @@ assert_eq!(profile.type_frequency[0], 0.33);
 assert!((profile.type_frequency[0] - 0.33).abs() < 0.02);
 ```
 
+You now have four AI strategies of increasing sophistication — but they're all standalone functions with different signatures. Stage 13 unifies them behind a single trait, unlocking Rust's most powerful abstraction: trait objects and dynamic dispatch.
+
 ---
 
 ## Stage 13 — Trait Objects
 
 > *"Differences of habit and language are nothing at all if our aims are identical and our hearts are open."* — Albus Dumbledore
+
+You have four AI functions that all do the same thing — pick a spell — but with different signatures and strategies. Without a shared interface, every place that calls an AI needs an ugly `match` on the difficulty level, and adding a fifth AI means updating every call site. Traits solve this by defining a contract that all AIs must follow, and trait objects let you store and swap different AI types at runtime. This is the stage where Rust's type system goes from "helpful guardrails" to "powerful abstraction tool."
 
 We have four AI functions: `first_year_choose`, `owl_choose`, `newt_choose`, `dumbledore_choose`. They all do the same thing — pick a spell — but with different signatures and strategies. Right now, if you want to switch between them, you need ugly `match` statements everywhere:
 
@@ -1771,17 +1791,23 @@ trait DuelAI {
 
 For our duel engine, trait objects are the right choice — we want to store different AI types and swap them at runtime.
 
+With a unified AI interface in hand, Stage 14 wraps each strategy in a named character — complete with personality, custom spell loadouts, and taunts — using composition instead of inheritance.
+
 ---
 
 ## Stage 14 — Named Opponents
 
 > *"After all this time?" "Always."* — Severus Snape
 
+AI difficulties are abstract — "First Year" and "Dumbledore" are labels, not characters. This stage gives each opponent a face, a voice, and a fighting style. More importantly, it teaches **composition over inheritance**: instead of creating a class hierarchy, you wrap an AI strategy inside a character struct. This is idiomatic Rust and produces code that's easier to extend — add a new character without touching any existing code.
+
 We have four AI difficulties. Now let's give them *personality*. Each named opponent wraps a difficulty level with character-specific behavior: spell preferences, taunts, and quirks.
 
 This stage teaches **composition over inheritance** — a core Rust pattern. Instead of creating a class hierarchy (`NamedOpponent extends DuelAI`), we *compose* a named character from an AI strategy plus personality data.
 
 ### The Opponent Struct
+
+Right now we have `Box<dyn DuelAI>` for strategy and `Wizard` for stats, but no way to bundle a character's personality — their name, quotes, preferred spell type — alongside their AI. We need a wrapper that composes all of these into a single "opponent" value the game loop can work with.
 
 ```rust
 /// A named opponent with personality and an AI strategy.

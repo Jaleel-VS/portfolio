@@ -21,6 +21,8 @@ flowchart LR
 
 > **Difficulty: Medium**
 
+Every hero created in Act 3 lives only in memory — restart the bot and they're gone, as if they never existed. Two players acting simultaneously could corrupt a JSON file. We need a real database: atomic writes, indexed queries, and transactions, all without the overhead of running a separate server. This stage introduces SQLite through `rusqlite` and confronts the `Send`/`Sync` puzzle that every async Rust database integration must solve.
+
 > [!tip] What You'll Learn
 > - Adding `rusqlite` with the `bundled` feature
 > - Creating tables that match the spec §13 data model
@@ -69,7 +71,7 @@ The `bundled` feature compiles SQLite from source into your binary — no system
 
 ### The Data Model (Spec §13)
 
-The spec defines four core tables. Here's the schema:
+The spec defines four core tables. The four-table design separates concerns cleanly: characters persist across quests, quests track narrative arcs, sessions link characters to quests (enabling party play later), and turns record the full conversation history for chronicle compilation. Here's the schema:
 
 ```rust
 use rusqlite::{Connection, Result};
@@ -190,6 +192,8 @@ pub fn open_db(path: &str) -> Result<Db> {
 > - **Calling rusqlite from async context without `spawn_blocking`** — SQLite operations block the thread. In tokio, blocking the runtime thread starves other tasks. Always use `spawn_blocking` for DB calls.
 > - **Using `Arc<Connection>` without `Mutex`** — `Connection` is not `Sync`, so `Arc` alone won't compile. You need `Arc<Mutex<Connection>>`.
 
+The database schema is forged and the tables stand ready, but they're empty — we have no way to create, read, update, or delete records from Rust code. Next stage, we'll build the `Repo` layer with typed CRUD operations.
+
 > [!check] Checkpoint
 > Write a small `main()` that calls `init_db("test.db")`, then open the file with `sqlite3 test.db` and run `.tables`. You should see `characters`, `quests`, `sessions`, `turns`.
 
@@ -198,6 +202,8 @@ pub fn open_db(path: &str) -> Result<Db> {
 ## Stage 24 — CRUD Operations
 
 > **Difficulty: Medium**
+
+Tables exist but they're empty vaults — we have no way to save a character, load one back, or record a quest turn from Rust code. We need a typed database layer that encapsulates every SQL operation behind safe Rust methods, replacing the fragile JSON file persistence from Act 1. This stage builds the `Repo` struct that becomes the backbone of every command in the bot.
 
 > [!tip] What You'll Learn
 > - Parameterized queries with `?1` placeholders and the `params!` macro
@@ -208,6 +214,8 @@ pub fn open_db(path: &str) -> Result<Db> {
 > - The `last_insert_rowid()` method
 
 ### The Database Layer
+
+Right now we have tables in SQLite but no Rust code to interact with them. We need a `Repo` struct that wraps the database connection and exposes typed methods for every operation — creating characters, loading them, recording turns, completing quests.
 
 Create a new file `src/db.rs` that encapsulates all database operations. We'll build a `Repo` struct that holds the connection and exposes typed methods.
 
@@ -414,6 +422,8 @@ impl Repo {
 > - **Holding the Mutex lock across `.await`** — this deadlocks. Always drop the lock before any `.await` point, or use `spawn_blocking`.
 > - **Using string formatting instead of `params!`** — `format!("... WHERE id = {id}")` is a SQL injection vulnerability. Always use `?1` placeholders.
 
+Characters persist, quests record, and turns are logged — but errors are still a mess of `unwrap()` calls and cryptic panics. Next stage, we'll build a proper error system that separates internal diagnostics from user-friendly Discord messages.
+
 > [!check] Checkpoint
 > Write a test that creates a character, loads it back, and asserts the fields match. Use `Connection::open_in_memory()` for tests so they don't touch disk.
 
@@ -423,6 +433,8 @@ impl Repo {
 ## Stage 25 — Error Handling
 
 > **Difficulty: Medium**
+
+Right now, errors are a minefield of `.unwrap()` calls and raw `Box<dyn Error>` types — a database timeout dumps a stack trace into Discord, and a missing character panics the bot. We need a unified error system that knows the difference between "show the player a helpful message" and "log the technical details for debugging." This stage introduces the `thiserror`/`anyhow` pattern that production Rust applications rely on.
 
 > [!tip] What You'll Learn
 > - The `thiserror` crate for defining custom error enums with `#[derive(Error)]`
@@ -481,6 +493,8 @@ try {
 Rust doesn't have exceptions — errors are values returned via `Result<T, E>`. The `?` operator propagates them up the call stack, and `thiserror` makes defining the error types painless.
 
 ### Defining CronicaError
+
+Right now we have errors scattered across multiple types — `rusqlite::Error`, `String`, `Box<dyn Error>` — with no unified way to handle them or present them to users. We need a single error enum that captures every failure mode in the bot.
 
 ```rust
 use thiserror::Error;
@@ -585,6 +599,8 @@ async fn on_error(error: poise::FrameworkError<'_, Data, CronicaError>) {
 > - **Forgetting `#[from]` and writing manual `From` impls** — `thiserror` generates these for you. If you have `#[from] rusqlite::Error`, you don't need `impl From<rusqlite::Error>`.
 > - **Leaking internal errors to users** — never send `{error:?}` to Discord. Use the `user_message()` pattern to separate internal diagnostics from user-facing text.
 
+Errors are tamed — players see friendly messages while we see full diagnostics. But the bot still crashes ungracefully on Ctrl+C, losing in-flight sessions, and idle quests hang forever. Next stage, we'll add graceful shutdown, session timeouts, and disconnect recovery.
+
 > [!check] Checkpoint
 > Trigger each error variant from a test command. Verify that `user_message()` returns something friendly and that the `Debug` output contains the technical details.
 
@@ -593,6 +609,8 @@ async fn on_error(error: poise::FrameworkError<'_, Data, CronicaError>) {
 ## Stage 26 — Graceful Everything
 
 > **Difficulty: Medium**
+
+Ctrl+C kills the bot and the current turn is lost. A player who walks away leaves their session "active" forever. A Discord gateway hiccup panics the process. We need the bot to handle interruptions like a seasoned adventurer handles ambushes — save what matters, clean up, and live to fight another day. This stage teaches signal handling, timeouts, and the limits of Rust's `Drop` trait in async code.
 
 > [!tip] What You'll Learn
 > - Tokio signal handlers (`tokio::signal::ctrl_c`)
@@ -745,6 +763,8 @@ The solution is explicit cleanup via the signal handler and timeout patterns sho
 > - **Forgetting `tokio::select!` cancellation** — when one branch completes, the other is dropped. Make sure your framework handles being dropped gracefully (poise does).
 > - **Not handling the `JoinError` from `spawn_blocking`** — the double `?` in `spawn_blocking(...).await??` handles both the join error and the inner `Result`.
 
+The bot survives shutdowns, timeouts, and disconnects with grace. But characters still don't grow — no leveling, no talents, no sense of progression. Next stage, we'll build the full level-up and talent system that makes every quest feel earned.
+
 > [!check] Checkpoint
 > Start the bot, begin a quest, then Ctrl+C. Check the database — the session should have an `ended_at` timestamp. Restart the bot and verify `/resume` can pick up where you left off.
 
@@ -754,6 +774,8 @@ The solution is explicit cleanup via the signal handler and timeout patterns sho
 ## Stage 27 — Level Up & Talents
 
 > **Difficulty: Medium**
+
+Characters persist and survive restarts, but they never grow — a level 1 hero after 20 quests feels the same as a fresh recruit. Without progression, there's no reason to keep playing. We need an XP table, a level-up flow, and a talent system that gives players meaningful choices about how their character evolves. This stage implements the full progression mechanics that transform Crónica from a one-shot adventure into a campaign.
 
 > [!tip] What You'll Learn
 > - Implementing the XP table from spec §4.3 (levels 1–10)
@@ -765,7 +787,7 @@ The solution is explicit cleanup via the signal handler and timeout patterns sho
 
 ### The XP Table (Spec §4.3)
 
-Progression is deliberately slow — each level should feel earned across multiple quests.
+Progression is deliberately slow — each level should feel earned across multiple quests. The exponential curve exists because early levels should come quickly (rewarding new players) while later levels require sustained commitment (giving veterans long-term goals).
 
 ```rust
 /// XP required to reach each level. Index 0 = level 1 (always 0).
@@ -798,7 +820,7 @@ pub fn xp_to_next_level(level: i32, xp: i32) -> Option<i32> {
 
 ### Fortune Token Pool (Spec §4.5)
 
-Fortune tokens are the "luck" resource. The pool grows with level:
+Fortune tokens are the "luck" resource — but unlike a passive Luck stat, they give players *agency* over when to be lucky. The pool grows with level so higher-level characters can take more risks, and the per-session regen of 1 token prevents hoarding while ensuring every session starts with at least some fortune to spend:
 
 ```rust
 pub fn fortune_pool_max(level: i32) -> i32 {
@@ -814,7 +836,7 @@ At level 1: pool = 2. At level 3: pool = 3. At level 9: pool = 5. Players regene
 
 ### The Talent System (Spec §4.4)
 
-Each talent has one of four **shapes** that determines when and how it activates:
+Each talent has one of four **shapes** that determines when and how it activates. The four shapes exist to create different gameplay rhythms: passives reward consistent playstyle, reactions create exciting "gotcha" moments, synergies encourage party play, and archetypes define long-term character identity:
 
 | Shape | Trigger | Example |
 |-------|---------|---------|
@@ -1021,6 +1043,8 @@ The `ai_hints` are injected into the AI prompt so the narrator can weave talent 
 > - **Not updating `fortune_max` on level up** — the pool formula changes with level. Recalculate on every level-up.
 > - **Hardcoding talent effects in the dice roller** — keep talent logic separate from core dice mechanics. Use the modifier pattern shown above.
 
+Heroes level up, choose talents, and grow stronger with every quest. But Crónica has one more trick up its sleeve — a language-learning system that weaves real-world vocabulary into the fantasy narrative. Next stage, we'll build it.
+
 > [!check] Checkpoint
 > Create a character, give them 300 XP (enough for level 3), and verify: level updates to 3, fortune pool becomes 3, and a talent selection prompt appears.
 
@@ -1029,6 +1053,8 @@ The `ai_hints` are injected into the AI prompt so the narrator can weave talent 
 ## Stage 28 — Language System
 
 > **Difficulty: Medium**
+
+Crónica is a game, but it can also be a teacher. Right now the AI narrates entirely in English — a missed opportunity when the narrator could weave Spanish, Japanese, or any target language into the story naturally. We need a language system with difficulty tiers that controls how much foreign vocabulary the AI introduces, tracks what the player has learned, and adjusts over time. This transforms Crónica from pure entertainment into an immersive learning tool.
 
 > [!tip] What You'll Learn
 > - Implementing the language system from spec §10
@@ -1039,7 +1065,7 @@ The `ai_hints` are injected into the AI prompt so the narrator can weave talent 
 
 ### The Language System (Spec §10)
 
-Crónica doubles as a language-learning tool. The AI narrator can weave vocabulary from a target language into the story, with difficulty controlling how much:
+Crónica doubles as a language-learning tool. The AI narrator can weave vocabulary from a target language into the story, with difficulty controlling how much. The three-tier system mirrors proven language acquisition theory: beginners need explicit translations (comprehensible input), intermediate learners benefit from context clues with occasional scaffolding, and advanced learners acquire best through full immersion:
 
 | Level | Behavior |
 |-------|----------|
@@ -1048,6 +1074,8 @@ Crónica doubles as a language-learning tool. The AI narrator can weave vocabula
 | **Advanced** | Full sentences in target language with no translation. The story itself teaches through immersion. |
 
 ### Data Model
+
+Right now we have no way to store a player's language preference or track which words they've encountered. We need structs for the language configuration and vocabulary tracking.
 
 ```rust
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -1190,6 +1218,8 @@ async fn language(
 > - **Not passing vocab history to the AI** — without the "known words" list, the AI can't distinguish new vs. familiar vocabulary. Always include it in the prompt for Intermediate difficulty.
 > - **Regex matching too greedily** — `*bold*` in markdown uses single asterisks. If the AI uses `**double**` for bold, your regex won't match. Handle both patterns.
 > - **Storing language config separately from character** — keep it in the same `characters` table as a JSON TEXT column. One source of truth.
+
+The language system breathes a second life into every quest — learning while adventuring. Act 4 is complete: persistence, errors, graceful shutdown, progression, and language learning. In Act 5, we'll take Crónica multiplayer and deploy it to the cloud.
 
 > [!check] Checkpoint
 > Set language to Spanish/Beginner. Start a quest and verify the AI response contains 1–2 Spanish words with translations in parentheses. Run `/vocab` and confirm the words were tracked.

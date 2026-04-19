@@ -47,6 +47,8 @@ rand = "0.8"
 
 ## Stage 25 — The Combat System
 
+A horror game where monsters are just scenery is a haunted house tour, not a survival experience. Combat is where the game's data model gets tested under pressure: player state must transition between exploring, fighting, and dead; damage must be calculated with randomness; items must have effects. More importantly, modeling combat as a state machine with Rust enums shows you how the type system prevents impossible states — a dead player can't attack, a fleeing player can't use items. The compiler enforces the horror's rules.
+
 **Difficulty: Hard (60-90 min)**
 
 ### Story Beat
@@ -62,6 +64,8 @@ Combat is a state machine. A player is either exploring, fighting, or dead. Rust
 ### Instructions
 
 **Step 1: Define combat types**
+
+Right now monsters are just descriptions — they appear in rooms but can't hurt you and you can't hurt them. We need stats (HP, attack, defense), a state machine that tracks whether the player is exploring, fighting, or dead, and a combat engine that resolves attacks. The player's state determines which commands are valid — you can't `go north` mid-fight, and you can't `attack` while exploring.
 
 Create `src/combat.rs`:
 
@@ -495,6 +499,8 @@ Rust's enum is closest to the TS version, but with a critical difference: **the 
 
 This is called **exhaustive matching**, and it's one of the reasons Rust code tends to have fewer bugs at runtime.
 
+Monsters fight back, players can die and respawn. But every room interaction is still hardcoded in Rust — adding a new puzzle means recompiling. The castle needs a way to script its own behaviors.
+
 ### Checkpoint: Cargo.toml additions
 
 ```toml
@@ -509,6 +515,8 @@ The complete file is everything from Steps 1-3 above combined into a single modu
 ---
 
 ## Stage 26 — Room Scripts
+
+Hardcoding every room interaction in Rust means recompiling for every new puzzle, trap, or secret passage. Data-driven design separates *what happens* (YAML files) from *how it happens* (the Rust engine). This is the same pattern used by Unity, Godot, and every real game engine — designers create content without touching code. You're building a mini scripting engine, and the serde skills you learned in Act 1 make it almost trivial.
 
 **Difficulty: Hard (60-90 min)**
 
@@ -525,6 +533,8 @@ Instead of writing Rust code for every room event, you'll define room behaviors 
 ### Instructions
 
 **Step 1: Define the script data model**
+
+Right now every room interaction is hardcoded in Rust — if you want the library candles to ignite on entry, you write an `if room_id == "library"` check in the game loop. Adding a new puzzle means editing Rust code and recompiling. We need a data format that describes *when* something triggers and *what* happens, so the engine can execute arbitrary room behaviors from external files.
 
 Create `src/room_script.rs`:
 
@@ -927,6 +937,8 @@ This is called **internally tagged** representation. It's much more natural for 
 
 In Python, you'd parse this manually with `if data["type"] == "on_enter"`. In TypeScript, you'd use a discriminated union with a `type` field — which is actually the same pattern, but without compile-time exhaustiveness checking.
 
+Rooms come alive with scripts — candles ignite, secrets reveal themselves, traps spring. But there's no record of who survived. The castle needs a wall of names: a leaderboard that remembers the fastest, the bravest, and the dead.
+
 ### Checkpoint: Cargo.toml additions
 
 ```toml
@@ -940,6 +952,8 @@ The complete file is Steps 1 + 3 combined. Add `pub mod room_script;` to `src/ma
 ---
 
 ## Stage 27 — The Leaderboard
+
+A game without stakes is a sandbox. The leaderboard gives players a reason to replay — to escape faster, kill more monsters, explore more rooms. Building it teaches you `chrono` for time handling (a skill every backend developer needs), sorted collections, and the full persistence cycle: load from disk, update in memory, save back. The leaderboard is also the first feature that persists across server restarts, proving your save system works end-to-end.
 
 **Difficulty: Medium (30-60 min)**
 
@@ -956,6 +970,8 @@ You'll use the `chrono` crate for timestamps and durations, and learn how Rust h
 ### Instructions
 
 **Step 1: Define the leaderboard data model**
+
+Right now the game has no memory of past runs — every session starts fresh, and escaping the castle has no lasting consequence. We need a persistent record of who escaped, how fast, and what they accomplished, sorted by speed so the best runs rise to the top.
 
 Create `src/leaderboard.rs`:
 
@@ -1217,6 +1233,8 @@ In Python, you'd use `datetime.now()` and `timedelta` — chrono is the closest 
 
 The key insight: `Utc::now()` returns a `DateTime<Utc>`, and subtracting two `DateTime` values gives you a `TimeDelta`. This is type-safe — you can't accidentally subtract a date from a duration.
 
+Escape times are tracked, names are etched in stone. But the terminal is still monochrome — white text on black void. It's time to paint the darkness in shades of blood and shadow.
+
 ### Checkpoint: src/leaderboard.rs
 
 The complete file is Steps 1 + 2 combined. Add `pub mod leaderboard;` to `src/main.rs`.
@@ -1224,6 +1242,8 @@ The complete file is Steps 1 + 2 combined. Add `pub mod leaderboard;` to `src/ma
 ---
 
 ## Stage 28 — ANSI Colors
+
+Plain white text on a black terminal is functional but lifeless. ANSI colors transform the experience — red for damage, green for healing, dim grey for whispers, bold magenta for monster names. This stage is deliberately easy after the complexity of combat and scripting. It's a reward: a few lines of code that make everything you've built *feel* like a horror game. The crossterm crate's `Stylize` trait is also a beautiful example of Rust's extension trait pattern.
 
 **Difficulty: Easy (5-10 min)**
 
@@ -1426,6 +1446,8 @@ Rust's approach is cleaner — the trait is opt-in (you must `use Stylize`), typ
 
 **Important:** These ANSI codes are just bytes in the string. They work over TCP because netcat/telnet pass raw bytes to the terminal. If you were building an HTTP API, you'd strip them and use HTML/CSS instead.
 
+The castle bleeds color. But underneath the paint, messages are still raw text — no structure, no types, no way to tell where one ends and another begins. Time to speak in runes.
+
 ### Checkpoint: src/colors.rs
 
 The complete file is Step 1 above. Add `pub mod colors;` to `src/main.rs`.
@@ -1433,6 +1455,8 @@ The complete file is Step 1 above. Add `pub mod colors;` to `src/main.rs`.
 ---
 
 ## Stage 29 — The Protocol
+
+Raw text over TCP works for netcat, but it's fragile — you can't tell where one message ends and another begins, you can't distinguish message types, and you can't send binary data. Every production network service uses a framing protocol, and building one from scratch teaches you byte-level thinking: endianness, length prefixes, type tags. This is the same pattern behind HTTP/2 frames, WebSocket frames, and every binary protocol at AWS.
 
 **Difficulty: Hard (60-90 min)**
 
@@ -1472,6 +1496,8 @@ For a real-time game where the server pushes events constantly (player moved, mo
 ### Instructions
 
 **Step 1: Define message types**
+
+Right now the server sends raw text strings over TCP — there's no way for the client to know whether incoming text is a room description, a combat event, a chat message, or a system notification. And there's no framing — if two messages arrive in the same TCP segment, the client can't tell where one ends and the next begins. We need a typed, length-prefixed protocol.
 
 Create `src/protocol.rs`:
 
@@ -1793,6 +1819,8 @@ Rust makes this explicit and safe — there's no way to accidentally use the wro
 
 **The `read_u8()` and `read_u32()` methods** come from Tokio's `AsyncReadExt` trait. `read_u32()` reads 4 bytes in big-endian order by default — matching our wire format perfectly.
 
+The protocol is defined, frames flow cleanly, and netcat still works alongside the binary client. The castle speaks two languages now. There's only one thing left: open the gates to the world.
+
 ### Checkpoint: src/protocol.rs
 
 The complete file is Steps 1-4 combined. Add `pub mod protocol;` to `src/main.rs`.
@@ -1800,6 +1828,8 @@ The complete file is Steps 1-4 combined. Add `pub mod protocol;` to `src/main.rs
 ---
 
 ## Stage 30 — Release Day
+
+Code that only runs on your laptop isn't a game — it's a prototype. Deploying to a real server where friends can connect is the difference between "I'm learning Rust" and "I built something." Release builds, cross-compilation, systemd services, and security groups are the last-mile skills that turn a project into a product. Rust's single-binary deployment story makes this dramatically simpler than Python or Node — one `scp`, one `systemctl start`, and the castle is open to the world.
 
 **Difficulty: Hard (60-90 min)**
 

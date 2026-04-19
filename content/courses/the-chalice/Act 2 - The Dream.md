@@ -25,9 +25,13 @@ This is where the game becomes a *game*.
 
 > *"A hunter is a hunter, even in a dream."*
 
+The dungeon exists, but no one walks its halls. Every roguelike needs a protagonist — a bundle of state that represents the player's health, resources, position, and capabilities. We define the Hunter now because every system in Act 2 (movement, combat, items) needs a central struct to read from and write to. The Hunter is the lens through which the player experiences the labyrinth.
+
 Every roguelike needs a protagonist. Ours is the Hunter — a lone figure descending into procedurally generated chalice dungeons. In code, the Hunter is a struct that holds every piece of state the player cares about: health, stamina, items, position, and the weapon they wield.
 
 ### 11.1 — The Weapon Enum
+
+Right now we have a dungeon full of tiles but no entity to inhabit it. Before we can define the Hunter, we need to define what they carry — because a hunter without a weapon is just prey.
 
 Before we define the Hunter, we need to define what they carry. Each weapon in The Chalice has different base damage, speed, and a special property. We model this as an enum:
 
@@ -292,7 +296,7 @@ src/
   render.rs        // rendering functions
 ```
 
-The Hunter exists, has stats, and renders as `@` on the map. But they can't move yet — that's next.
+The Hunter exists, has stats, and renders as `@` on the map. But they're frozen in place — a statue in the labyrinth. Next, we teach them to walk, and the dungeon transforms from a painting into a world.
 
 ---
 
@@ -302,9 +306,13 @@ The Hunter exists, has stats, and renders as `@` on the map. But they can't move
 
 > *"The labyrinth shifts around you. Or perhaps it is you who shifts within it."*
 
+A dungeon you can see but not explore is a museum exhibit. Movement is the first real interaction between the player and the world — and it's deceptively complex. We need to read keyboard input, translate it into game actions, check what's at the destination tile, handle walls and doors differently, and reveal fog as the hunter enters new rooms. This stage exists because movement is the foundation of every other interaction: you must reach an enemy to fight it, step on loot to pick it up, and walk through a door to discover what lies beyond.
+
 A dungeon you can't explore is just a painting. In this stage we wire up WASD movement, make the Hunter collide with walls, open doors by walking into them, and reveal fog as rooms are entered.
 
 ### 12.1 — Modeling Player Actions
+
+Right now the Hunter has a position but no way to change it. Before we handle keyboard input, let's define what the player *can do* — because modeling actions as data (an enum) rather than ad-hoc function calls means the game loop can process any action uniformly, and we can add new actions later without restructuring the input handler.
 
 Before we handle keyboard input, let's define what the player *can do*. This is a perfect use for an enum:
 
@@ -705,6 +713,8 @@ You now have a playable (if empty) dungeon:
 - Fog reveals as you explore
 - The game loop runs: draw → input → update → repeat
 
+The `@` moves. The fog parts. But every action is free — there's no cost, no consequence, no tension. Next, we introduce the resource that makes every decision matter: stamina.
+
 ```
   ████████████
   █··········█
@@ -722,6 +732,8 @@ The `@` moves. The fog parts. The dungeon awaits.
 **Difficulty:** Easy | **Concepts:** Resource management, game balance, conditional logic
 
 > *"Every swing, every dodge, every desperate lunge — it all costs something. The blood remembers."*
+
+Without a limiting resource, the player can attack endlessly and dodge forever — there's no decision-making, no tension, no skill expression. Stamina is the invisible hand that forces the player to *choose*: attack now or save stamina for a dodge? Press the advantage or rest and risk an enemy's free turn? We introduce stamina before combat because every combat action (light attack, heavy attack, dodge) needs a cost, and that cost must exist before the actions do.
 
 Stamina is the invisible hand that shapes every decision in The Chalice. Without it, the player could attack endlessly, dodge forever, never face consequences. Stamina creates *tension* — the feeling of "I have enough for one more swing, but if I miss, I'm vulnerable."
 
@@ -950,7 +962,7 @@ The Hunter now has a stamina economy:
 - The HUD shows HP and stamina bars with color-coded warnings
 - Dodge cooldown is tracked and displayed
 
-The pressure is real. Every action matters.
+The pressure is real. Every action matters. Now that actions have costs, we need something worth spending stamina on — the first blow against the beasts that haunt these halls.
 
 ---
 
@@ -960,9 +972,13 @@ The pressure is real. Every action matters.
 
 > *"Steel meets flesh. The beast staggers. You press forward — there is no mercy in the hunt."*
 
+Movement and stamina are the skeleton; combat is the muscle. The light attack is the simplest, most reliable way to deal damage — and it's the vehicle for introducing Bloodborne's signature rally mechanic, where attacking after taking damage recovers HP. We build the light attack first because it establishes the damage pipeline (find target → calculate damage → apply damage → check death → award echoes) that heavy attacks and dodge rolls will reuse and extend.
+
 We've been building toward this moment. The Hunter can move, has stamina to spend, and now they need something to spend it *on*. In this stage we introduce the simplest form of combat: walk up to an enemy, hit it, take a hit back, and see who dies first.
 
 ### 14.1 — A Minimal Enemy (Placeholder)
+
+Right now the Hunter can swing at empty air, but there's nothing to hit. We need a minimal enemy struct — just enough HP, damage, and position to test the combat pipeline. The full enemy system comes in Act 3; here we build the simplest possible target dummy that can take damage and die.
 
 We'll build the full enemy system in Act 3. For now, we need just enough to test combat:
 
@@ -1296,7 +1312,7 @@ Combat works at its most basic level:
 - Dead enemies are removed from the map
 - Combat messages appear in a log
 
-The Hunt has begun.
+The Hunt has begun. But the light attack is safe and predictable — the hunter needs riskier options that create real tactical decisions. Next: the heavy attack that staggers but leaves you exposed, and the dodge roll that saves your life but costs precious stamina.
 
 ---
 
@@ -1305,6 +1321,8 @@ The Hunt has begun.
 **Difficulty:** Medium | **Concepts:** State transitions, cooldown systems, invulnerability frames, stagger mechanics
 
 > *"The heavy blow lands with the weight of purpose. The beast stumbles. For one precious moment, the world holds its breath."*
+
+Light attacks are the bread and butter, but a game with only one combat option is a game without decisions. Heavy attacks and dodge rolls create the tactical triangle that defines Bloodborne's combat: do you play safe (light attack), commit to a big punish (heavy attack, but enemies act first), or evade entirely (dodge, but it has a cooldown)? We introduce both now because they complete the player's action vocabulary — after this stage, every combat turn is a meaningful choice.
 
 Light attacks are reliable but predictable. Heavy attacks and dodge rolls add *decision depth* — moments where the right choice turns a losing fight into a victory.
 
@@ -1632,7 +1650,7 @@ The combat system now has real depth:
 - **Rally:** attacking after taking damage recovers HP (30% of damage dealt)
 - **Stagger:** heavy attacks make enemies skip their next turn
 
-The Hunter has options. Every turn is a decision.
+The Hunter has options. Every turn is a decision. But even the finest swordplay means nothing if you bleed out in a corridor with no way to heal. Next, we give the Hunter their most precious resource: blood vials and the items that keep them alive.
 
 ---
 
@@ -1641,6 +1659,8 @@ The Hunter has options. Every turn is a decision.
 **Difficulty:** Medium | **Concepts:** Inventory management, item effects, loot pickup, Vec operations
 
 > *"The blood heals. The blood sustains. The blood is everything in this wretched place."*
+
+Combat without healing is a countdown to death. Blood vials are the Hunter's lifeline — finite, precious, and the source of agonizing decisions ("Do I heal now or save this vial for the boss?"). Items beyond vials add tactical options that let the player solve problems creatively rather than just hitting harder. We build the item system now because it completes the player's toolkit: move, attack, dodge, heal, use items. After this stage, the Hunter has everything they need to survive — the question is whether they're skilled enough to use it.
 
 Blood vials are the Hunter's lifeline — 30 HP per vial, 5 to start, 10 max. But vials are finite. Every vial used is one you won't have for the boss fight. Items add tactical options beyond "hit it harder": molotovs for area damage, antidotes for poison, fire paper for a damage boost.
 

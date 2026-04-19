@@ -27,6 +27,8 @@ src/
 
 ## Stage 1 — Hello Lexicon
 
+Before you can write a single line of trie logic, you need a workspace that compiles. This stage exists because Rust's toolchain — `cargo`, crates, editions, feature flags — is the scaffolding every subsequent stage builds on. Getting it right now means zero friction later.
+
 **Difficulty:** Very Easy
 **Goal:** Create the project, set up the file structure, and add dependencies.
 
@@ -160,11 +162,13 @@ lexicon/
     trie.rs            -- empty, ready for Stage 2
 ```
 
-You have a compiling Rust project with all dependencies. Stage 2 begins the real work.
+You have a compiling Rust project with all dependencies. The scaffolding is in place — now we need something to put inside it. Stage 2 defines the data structure at the heart of every trie operation.
 
 ---
 
 ## Stage 2 — The Node
+
+A spell checker lives or dies by how it stores its word list. Before we can insert, search, or suggest, we need to decide on the shape of the data. This stage forces you to confront Rust's ownership model head-on: a node that *owns* its children, recursively, with no garbage collector in sight.
 
 **Difficulty:** Easy
 **Goal:** Define the `TrieNode` struct and the `Trie` wrapper. Understand why we use `HashMap<char, TrieNode>`.
@@ -208,6 +212,8 @@ A fixed-size array would need to cover all of Unicode — wasteful. `HashMap<cha
 > **Python comparison:** In Python you'd write `children: dict[str, TrieNode]`. Rust's `HashMap<char, TrieNode>` is the same idea, but the key is a `char` (a single Unicode scalar value, 4 bytes) instead of a one-character string.
 
 ### The code
+
+Right now we have a project that compiles but stores nothing. We need a recursive data structure — a node that can contain more nodes — to represent the branching paths of a trie. Let's define `TrieNode` and `Trie`.
 
 Open `src/trie.rs` and replace its contents:
 
@@ -347,11 +353,13 @@ You now have:
 - `Trie` — a wrapper holding the root node
 - Two passing tests confirming the defaults
 
-The trie exists but it's empty. Stage 3 teaches it to learn words.
+The trie exists but it's empty. A dictionary that can't learn words isn't much of a dictionary — Stage 3 teaches it to absorb vocabulary, one character at a time.
 
 ---
 
 ## Stage 3 — Insert
+
+A trie that can't store words is just an empty tree. Insertion is the first operation that makes the data structure *useful* — and the first place you'll wrestle with Rust's borrow checker in earnest. The `entry` API pattern you learn here will follow you through every Rust project you ever write.
 
 **Difficulty:** Easy
 **Goal:** Insert words into the trie character by character. Trace the tree after inserting Spanish words.
@@ -611,11 +619,15 @@ test result: ok. 6 passed; 0 failed
 
 The trie can now learn words. `insert` walks the tree character by character, creating nodes as needed, and marks the final node. Shared prefixes are stored once. Unicode characters like `ñ` and `ç` work because we use `HashMap<char, TrieNode>` — each `char` is a full Unicode scalar value.
 
+A dictionary that can store words but can't answer "is this a word?" is only half-built. Stage 4 adds the query that makes the trie a real lookup structure.
+
 Next: asking the trie "do you know this word?"
 
 ---
 
 ## Stage 4 — Search
+
+Insert without search is a write-only data structure — useful for benchmarks, useless for spell checking. This stage completes the fundamental contract of a dictionary: you put words in, you ask if words exist. It also introduces `match` on `Option`, the pattern that replaces null checks in every other language.
 
 **Difficulty:** Easy
 **Goal:** Implement `contains()` — walk the trie and check if a word exists. Test with Spanish words.
@@ -778,11 +790,15 @@ test result: ok. 11 passed; 0 failed
 
 The trie now supports exact-match lookup. `contains` walks the tree and checks `is_word` at the end. Misspelled words are rejected because their character path either dead-ends or reaches a node that isn't marked as a word.
 
+With insert and search in hand, we have a working dictionary — but we're not yet exploiting the trie's structural advantage over a hash set. Stage 5 unlocks the feature that justifies the entire data structure: prefix search.
+
 Next: finding all words that share a prefix.
 
 ---
 
 ## Stage 5 — Prefix Matching
+
+This is the stage that justifies choosing a trie over a `HashSet`. A hash set can answer "is this a word?" but it cannot efficiently answer "what words start with this?" — and that question is the backbone of autocomplete, tab completion, and finding correction candidates. Here you'll also encounter your first recursive traversal with backtracking, a pattern that reappears in the BK-tree (Act 3).
 
 **Difficulty:** Medium
 **Goal:** Implement `prefix_search()` — find all words starting with a given prefix. This is the feature that makes tries special.
@@ -1023,11 +1039,15 @@ test result: ok. 17 passed; 0 failed
 
 The trie now supports prefix search — the killer feature that makes it better than a hash set. `prefix_search("com")` walks to the `m` node and recursively collects all words in the subtree. The push/pop backtracking pattern builds words without extra allocations.
 
+The trie is functionally complete, but it lives only in memory. Every time you restart the program, you'd rebuild it from scratch. Stage 6 teaches the trie to remember itself between runs.
+
 Next: saving the trie to disk so we don't rebuild it every time.
 
 ---
 
 ## Stage 6 — Serialize
+
+A spell checker that takes half a second to start every time you invoke it will never feel like a native tool. Serialization bridges the gap between "correct" and "usable" — you build the trie once from a word list, then save the compiled structure to disk so subsequent launches are near-instant. This stage also introduces Rust's serde ecosystem, the serialization framework you'll use in virtually every real-world Rust project.
 
 **Difficulty:** Medium
 **Goal:** Save the compiled trie to disk with serde + bincode. Load it back. Measure the speed difference.
@@ -1062,6 +1082,8 @@ bincode 2 made serde an optional feature. Since we enabled `features = ["serde"]
 Both take a config argument. We'll use `bincode::config::standard()` which gives sensible defaults (variable-length integers, little-endian).
 
 ### The code
+
+Right now we have a trie that can insert, search, and prefix-match — but it exists only in RAM. Kill the process and the dictionary vanishes. We need to teach our structs how to describe themselves as bytes, and how to reconstruct themselves from those bytes.
 
 First, add serde derives to our structs. Update the top of `src/trie.rs`:
 
@@ -1288,7 +1310,9 @@ Check that your `Cargo.toml` has `features = ["derive"]` on serde and `features 
 
 The trie can now persist to disk. `save()` serializes the entire tree to a compact binary file using serde + bincode. `load()` deserializes it back. The roundtrip preserves all words, frequencies, and structure. Loading from cache is significantly faster than rebuilding from a word list.
 
-Full `src/trie.rs` so far (imports and struct definitions):
+The trie is now a fully functional, persistent dictionary. But when something goes wrong — a word isn't found, a prefix search returns unexpected results — you need to *see* the structure. Stage 7 gives the trie a voice.
+
+Next: seeing the trie with your own eyes.
 
 ```rust
 use serde::{Deserialize, Serialize};
@@ -1326,6 +1350,8 @@ Next: seeing the trie with your own eyes.
 ---
 
 ## Stage 7 — Trie Visualization
+
+Data structures are invisible by default — you interact with them through method calls and return values, never seeing the internal shape. Visualization turns the abstract into the concrete. When a bug hides in your trie, printing the tree is worth a hundred `assert!` calls. This stage also introduces Rust's `Display` trait, the idiomatic way to give any type a human-readable representation.
 
 **Difficulty:** Easy
 **Goal:** Print the trie as an ASCII tree for debugging. See how "casa", "caso", "casi" share the "cas" prefix.
@@ -1559,6 +1585,8 @@ test result: ok. 22 passed; 0 failed
 ### Checkpoint
 
 The trie can now print itself as a readable ASCII tree. This is invaluable for debugging — when a word isn't found or a prefix search returns unexpected results, print the trie and trace the path visually.
+
+With the dictionary complete — insert, search, prefix match, serialize, and visualize — Act 1 is done. But a trie that checks every word by walking nodes is doing more work than necessary. Act 2 introduces a probabilistic shortcut: a bloom filter that rejects non-words before the trie is ever consulted.
 
 ---
 

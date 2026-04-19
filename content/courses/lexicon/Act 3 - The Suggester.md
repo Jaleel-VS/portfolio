@@ -28,6 +28,8 @@ The math here is real. You'll fill in dynamic programming matrices cell by cell,
 
 ## Stage 14 — The DP Matrix
 
+Edit distance is the mathematical backbone of every spell checker, autocorrect engine, and DNA sequence aligner on the planet. This stage builds it from scratch using dynamic programming — the technique of solving a problem by breaking it into overlapping subproblems and storing their solutions in a table. You'll fill in the matrix cell by cell, trace the optimal edit path, and understand *why* the naive recursive approach explodes exponentially while the table approach runs in polynomial time.
+
 *Difficulty: Medium* | *New concepts: dynamic programming, edit distance, 2D vectors*
 
 ### The Problem
@@ -339,6 +341,8 @@ test levenshtein::tests::completely_different ... ok
 
 **Confusing row/column orientation.** In our table, rows are characters of `a` (the source) and columns are characters of `b` (the target). Swapping them gives the same answer (edit distance is symmetric) but makes the code confusing to read.
 
+The algorithm is correct and the tests pass, but the full matrix allocates O(m×n) memory — wasteful when we only ever look at two adjacent rows. Stage 15 slashes the space cost without changing the result.
+
 ### What We Built
 
 You now have a working Levenshtein distance function. It's correct, handles Unicode, and runs in O(m×n) time. But it allocates an entire (m+1)×(n+1) matrix — for two 20-character words, that's 441 `usize` values (3.5 KB on 64-bit). Not a problem for one comparison, but when the BK-tree queries thousands of words per suggestion, those allocations add up.
@@ -348,6 +352,8 @@ Next stage: we'll cut the space from O(m×n) down to O(min(m,n)) by keeping only
 ---
 
 ## Stage 15 — Space Optimization
+
+The full DP matrix works, but it's profligate with memory — storing an entire grid when only two rows are ever live at once. This stage teaches a fundamental optimization pattern: when a recurrence only looks back one step, you can collapse the table to a sliding window. The `std::mem::swap` trick you learn here is idiomatic Rust for zero-allocation buffer rotation, and it cuts memory from O(m×n) to O(min(m,n)).
 
 *Difficulty: Medium* | *New concepts: `std::mem::swap`, two-row DP, ensuring the shorter string is the inner loop*
 
@@ -498,6 +504,8 @@ fn asymmetric_lengths() {
 
 **Not handling the empty string edge case.** If `short` is empty (length 0), the loop body never executes and `prev` is still `[0]`. You'd return 0 instead of `long.len()`. The early return handles this.
 
+Same algorithm, same results, dramatically less memory. But we can do even better — right now, we always compute the full distance even when we only care whether it's ≤ 2. When the BK-tree fires thousands of distance queries per suggestion, most of them will exceed the threshold. Stage 16 adds the escape hatch: bail out early when the answer is already too large.
+
 ### What Changed
 
 Same algorithm, same results, dramatically less memory. For two 100-character strings, the full matrix uses 10,201 cells (80 KB). The two-row version uses 202 cells (1.6 KB). When the BK-tree fires off thousands of distance calculations per query, this matters.
@@ -507,6 +515,8 @@ But we can do even better. Right now, we always compute the full distance — ev
 ---
 
 ## Stage 16 — Early Termination
+
+In the BK-tree (Stage 19), we'll ask "is the distance ≤ 2?" thousands of times per suggestion lookup, and the answer is usually "no." Computing the exact distance for words that are clearly 10 edits apart is wasted work. This stage adds a threshold parameter that lets the algorithm bail out mid-computation when the minimum possible result already exceeds the bound — turning a 3-4x speedup into the difference between a responsive tool and a sluggish one.
 
 *Difficulty: Medium* | *New concepts: bounded edit distance, row minimum tracking, `Option` return for "exceeded threshold"*
 
@@ -714,6 +724,8 @@ Speedup: 3.8x
 
 The speedup depends on how many pairs exceed the threshold. For distant words (most dictionary comparisons), early termination bails after 2-3 rows instead of filling the full matrix. In the BK-tree, where ~93% of comparisons exceed the threshold, the real-world speedup is even larger.
 
+We now have three progressively optimized versions of edit distance. The bounded version is the one the BK-tree will call on its hot path. But even with fast distance computation, scanning every word in a 300,000-word dictionary is too slow. We need a data structure that prunes the search space — and that's the BK-tree, starting in Stage 17.
+
 ### Common Mistakes
 
 **Using `usize` subtraction without checking.** If you try to compute `m - n` when `m < n`, you get a panic (usize underflow in debug mode, wrapping in release). Our code avoids this by always putting the shorter string in `short` — so `m >= n` is guaranteed. But if you skip the short/long swap, `m - n` will underflow for inputs like `levenshtein_bounded("elephant", "cat", 2)`.
@@ -737,6 +749,8 @@ The bounded version is what the BK-tree will call. Now we need a data structure 
 ---
 
 ## Stage 17 — The BK-Tree Node
+
+Linear scan is the brute-force approach to fuzzy search: compare the query against every word in the dictionary. It works, but at 300,000 comparisons per query, it's too slow for interactive use. The BK-tree exploits a deep mathematical property — the triangle inequality of edit distance — to skip entire branches of the search space. This stage defines the node structure; the next two stages add insertion and the search algorithm that makes it all worthwhile.
 
 *Difficulty: Easy* | *New concepts: BK-tree structure, triangle inequality, `HashMap<usize, T>` as sparse children*
 
@@ -817,6 +831,8 @@ The key constraint: **each node has at most one child per distance value.** If "
 This is why we use `HashMap<usize, BKNode>` for children — the keys are distances (0, 1, 2, 3, ...) and each key maps to exactly one child subtree.
 
 ### The Implementation
+
+Right now we have edit distance functions but no way to organize dictionary words for efficient fuzzy lookup. We need a tree where each node stores a word and its children are indexed by their edit distance from that word — so that the triangle inequality can prune entire subtrees during search.
 
 Create `src/bktree.rs`:
 
@@ -931,6 +947,8 @@ cargo test -p lexicon --lib bktree
 
 **Trying to derive `Clone` or `Copy`.** `BKNode` contains a `HashMap` and a `String`, neither of which is `Copy`. You can derive `Clone` if you need it, but cloning a BK-tree is expensive (deep copy of the entire tree). For our use case, we'll build the tree once and query it many times — no cloning needed.
 
+The skeleton is in place — a node type and a tree wrapper. But an empty tree is as useful as an empty dictionary. Stage 18 teaches the tree to grow by inserting words, one edit-distance edge at a time.
+
 ### What We Built
 
 The skeleton of a BK-tree: a node type and a tree wrapper. No logic yet — just the data structure. Next stage, we'll implement insertion to actually build a tree from a dictionary.
@@ -938,6 +956,8 @@ The skeleton of a BK-tree: a node type and a tree wrapper. No logic yet — just
 ---
 
 ## Stage 18 — BK-Tree Insert
+
+A tree without insertion is just a type definition. This stage populates the BK-tree from a dictionary, building the distance-indexed structure that search will later exploit. The recursive insertion algorithm is elegant — compute the distance, follow the edge if it exists, create a new leaf if it doesn't — and it naturally handles collisions by pushing words deeper into the tree.
 
 *Difficulty: Medium* | *New concepts: recursive insertion, building a tree from a dictionary, `&mut self` recursion*
 
@@ -1209,6 +1229,8 @@ cargo test -p lexicon --lib bktree
 
 **Confusing insertion order with tree correctness.** The first word inserted becomes the root. Different insertion orders produce different tree shapes. But search correctness doesn't depend on the shape — the triangle inequality holds regardless. A well-balanced tree is faster to search, but even a lopsided tree gives correct results.
 
+The BK-tree is populated and ready. Now comes the payoff: the search algorithm that uses the triangle inequality to visit only a fraction of the tree. Stage 19 is where the 93% pruning happens.
+
 ### What We Built
 
 A BK-tree that can be populated from a dictionary. The tree organizes words by their edit distances, setting up the pruning that makes search fast. Next: the search algorithm that exploits the triangle inequality to find suggestions without scanning every node.
@@ -1216,6 +1238,8 @@ A BK-tree that can be populated from a dictionary. The tree organizes words by t
 ---
 
 ## Stage 19 — BK-Tree Search
+
+This is the stage where the mathematical investment pays off. The triangle inequality — that abstract property you proved in Stage 17 — becomes a concrete pruning rule: only visit children whose edge distance falls within a computable range. The result is a search that touches ~7% of a 300,000-node tree instead of 100%, turning a 300ms linear scan into a 6ms tree traversal. This is the algorithm that makes interactive spell checking possible.
 
 *Difficulty: Hard* | *New concepts: triangle inequality pruning, range iteration with `usize` underflow protection, recursive search with result accumulation*
 
@@ -1565,6 +1589,8 @@ This works but is wasteful when the range is large and the HashMap is sparse. If
 
 **Forgetting that search results are unordered.** The BK-tree returns results in traversal order, which depends on HashMap iteration order (effectively random). Don't assume results are sorted by distance. We'll add ranking in Stage 20.
 
+The BK-tree can now find all words within a given edit distance of a query, visiting only a fraction of the tree. But the results come back as an unranked bag — "recibir" (distance 1, frequency 500) and some obscure word (distance 2, frequency 3) are treated equally. Stage 20 adds the ranking that turns raw results into useful suggestions.
+
 ### What We Built
 
 The BK-tree can now find all words within a given edit distance of a query, visiting only a fraction of the tree. For a 300k-word dictionary at max distance 2, it typically visits ~7% of nodes — turning a 300ms linear scan into a ~6ms tree search.
@@ -1574,6 +1600,8 @@ But the results come back unranked. "recibir" (distance 1, frequency 500) and so
 ---
 
 ## Stage 20 — Suggestion Ranking
+
+A spell checker that returns suggestions in random order is like a dictionary with shuffled pages — technically complete, practically useless. Ranking transforms a bag of candidates into a prioritized list where the most likely correction appears first. This stage introduces multi-key sorting in Rust, the `.then()` combinator for chaining comparison criteria, and the design decision of why distance trumps frequency.
 
 *Difficulty: Medium* | *New concepts: multi-key sorting, `Ord` for custom types, `Reverse`, putting it all together*
 
@@ -1987,6 +2015,8 @@ impl BKTree {
     }
 }
 ```
+
+The suggestion engine is complete — from raw edit distance math to ranked, frequency-weighted corrections. But all of this machinery still lives as library code with unit tests. Act 4 gives it a body: a tokenizer, a CLI, file checking, and an interactive mode that turns Lexicon from a collection of data structures into a tool you'd actually use.
 
 ### What We Built in Act 3
 

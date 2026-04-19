@@ -37,6 +37,8 @@ But first, we lay the foundation stones.
 
 ## Stage 1 — The Foundation Stone
 
+Before you can seal a single secret, you need a vault that compiles. This stage exists because every cryptographic guarantee, every atomic write, every secure memory wipe you'll build later depends on a working Rust toolchain. If the foundation stone is cracked, the entire fortress crumbles.
+
 > *"Every great vault begins with a single stone. Yours begins with `cargo new`."*
 
 **Difficulty:** Very Easy
@@ -142,6 +144,8 @@ You should see:
 
 ### Step 5: Prepare Cargo.toml for the Journey Ahead
 
+Right now we have a bare project with no external libraries — we can't serialize data, parse CLI arguments, or encrypt anything. The Rust ecosystem solves this through crates, and we'll need quite a few before the vault is complete.
+
 We'll need several crates throughout this course. Let's add them all now but **commented out** — we'll uncomment them as we need them. This way you can see the full dependency map upfront.
 
 Replace your `Cargo.toml` with:
@@ -179,6 +183,8 @@ edition = "2021"
 ```
 
 Run `cargo run` again to make sure it still compiles. Comments in TOML use `#`, same as Python.
+
+With the toolchain proven and the dependency map laid out, you're ready to define the core data type that every vault operation revolves around — the Relic.
 
 ### Checkpoint Code
 
@@ -236,12 +242,14 @@ Single quotes are for single characters (`char`). Strings always use double quot
 
 ## Stage 2 — The Relic
 
+A password manager without a data model is just a text file. This stage solves the fundamental question: *what exactly is a credential?* By defining the `Relic` struct, you give the compiler a contract — every credential must have a name, a username, a password, and metadata. Miss a field, and the code won't compile. That's the kind of guarantee Python's dictionaries will never give you.
+
 > *"A relic is more than a name and a password. It carries the memory of where it was forged, what chamber it belongs to, and when it last saw the light."*
 
 **Difficulty:** Easy
 **Concepts introduced:** Structs, derive macros, `String` vs `&str`, `Option<T>`, serde serialization
 **Time estimate:** 20 minutes
-**Spec reference:** §5.1 Core Types — Relic struct
+**Spec reference:** The Relic struct captures every field a credential needs — identity (name, username), the secret (password), context (URL, chamber, tags, notes), and audit trail (timestamps). Each field type is chosen deliberately: `String` for required fields, `Option<String>` for optional ones, `Vec<String>` for multi-value tags.
 
 ### What We're Building
 
@@ -278,6 +286,8 @@ json.dumps({"name": "GitHub"}, indent=2)
 ```
 
 ### Step 2: Define the Relic Struct
+
+Right now we have a project that prints a greeting but can't represent a single credential. We need a structured type that captures everything about a password entry — name, username, password, optional URL, category, tags, and timestamps — and can be serialized to JSON for storage.
 
 Replace `src/main.rs` with:
 
@@ -487,6 +497,8 @@ Output:
 
 Notice how `Option<String>` with `Some(...)` serializes as the plain value, and `None` would serialize as `null`. Serde handles this automatically.
 
+A single relic is useful, but a real vault needs organization — chambers to categorize relics, a top-level structure to hold them all, and proper timestamps instead of raw strings. That's what Stage 3 delivers.
+
 ### Checkpoint Code
 
 **`Cargo.toml`** — serde and serde_json uncommented.
@@ -566,12 +578,14 @@ The compiler error is clear — add `#[derive(Serialize)]`.
 
 ## Stage 3 — The Chamber
 
+A flat list of credentials becomes unmanageable the moment you have more than a dozen. This stage introduces the organizational backbone of the vault — chambers for categorization, a top-level `Vault` struct that owns everything, and real timestamps via `chrono` so you can track when relics were created and modified. Without this structure, searching, filtering, and auditing would be impossible.
+
 > *"A vault without chambers is just a pile. The wise adventurer sorts their relics — weapons in the Armory, gold in the Treasury, scrolls in the Library, and the darkest secrets in the Crypt."*
 
 **Difficulty:** Easy
 **Concepts introduced:** `HashMap`, nested structs, `chrono::DateTime<Utc>`, the `use` statement
 **Time estimate:** 20 minutes
-**Spec reference:** §4.2 Decrypted Payload, §5.1 Core Types
+**Spec reference:** The vault's three-layer structure — `Vault` owns `Chamber`s and `Relic`s — mirrors how real password managers organize data. Chambers provide human-meaningful categories, while the flat `relics` Vec keeps serialization simple and search fast.
 
 ### What We're Building
 
@@ -593,6 +607,8 @@ chrono = { version = "0.4", features = ["serde"] }
 The `"serde"` feature on chrono enables automatic serialization of `DateTime<Utc>` to ISO 8601 strings (like `"2026-04-18T15:00:00Z"`). Without this feature, serde wouldn't know how to convert timestamps to/from JSON.
 
 ### Step 2: Upgrade Relic with Real Timestamps
+
+Right now we have a single `Relic` struct with string timestamps, but no way to group relics into categories or represent the vault as a whole. We need a `Chamber` struct for organization, a `Vault` struct to hold everything together, and proper `DateTime<Utc>` timestamps instead of raw strings that can't be compared or sorted.
 
 Replace `src/main.rs`:
 
@@ -831,6 +847,8 @@ Output (timestamps will differ):
 
 This matches the Design Spec §4.2 decrypted payload format exactly. The vault is taking shape.
 
+The data model is complete, but it only lives in memory. A vault that vanishes when the process exits is no vault at all — next, we write it to disk and read it back.
+
 ### Checkpoint Code
 
 **`Cargo.toml`** — serde, serde_json, and chrono uncommented.
@@ -872,6 +890,8 @@ Without `features = ["serde"]`, you'll get: `the trait Serialize is not implemen
 
 ## Stage 4 — The Scroll
 
+A vault that exists only in memory dies with the process. This stage solves persistence — writing the vault to disk and reading it back — while introducing Rust's error handling philosophy. Every file operation can fail (missing directory, permission denied, corrupted data), and Rust forces you to handle each failure explicitly. The patterns you learn here carry directly into Act 2's encrypted file I/O.
+
 > *"A vault that exists only in memory is no vault at all. The scroll must be written to stone — and read back without corruption."*
 
 **Difficulty:** Medium
@@ -882,7 +902,7 @@ Without `features = ["serde"]`, you'll get: `the trait Serialize is not implemen
 
 File I/O: writing the vault JSON to `~/.ironvault/vault.json` and reading it back. We'll handle missing directories, missing files, and malformed JSON — all with proper error messages instead of panics.
 
-**Important note:** In Act 1, the vault is stored as **plaintext JSON**. This is intentional — we need to see and debug the data while building the CRUD operations. In Act 2, we'll replace this plaintext file with AES-256-GCM encrypted binary (Design Spec §4.1). The file I/O patterns we learn here carry over directly.
+**Important note:** In Act 1, the vault is stored as **plaintext JSON**. This is intentional — we need to see and debug the data while building the CRUD operations. Storing plaintext now lets us verify that serialization, file I/O, and the data model all work correctly before we add the complexity of encryption. In Act 2, we'll replace this plaintext file with AES-256-GCM encrypted binary. The file I/O patterns we learn here carry over directly.
 
 ### Step 1: Understand `Result<T, E>`
 
@@ -1262,6 +1282,8 @@ In Act 2, we'll replace this with the encrypted binary format from Design Spec �
 
 **AWS parallel:** This is like storing secrets in plaintext in an S3 bucket vs. using SSE-KMS encryption. The bucket (file) is the same — the encryption layer wraps the data transparently.
 
+The vault persists to disk and survives restarts, but there's no way to interact with it except by editing `main()`. Next, we build the Gatekeeper — a real CLI that lets you create, add, and list relics from the terminal.
+
 ### Checkpoint Code
 
 **`Cargo.toml`** — serde, serde_json, chrono uncommented.
@@ -1304,12 +1326,14 @@ Use `std::env::var("HOME")` to get the home directory portably.
 
 ## Stage 5 — The Gatekeeper
 
+A vault you can only interact with by recompiling `main.rs` is no tool at all. This stage transforms Ironvault from a library exercise into a real CLI application. The Gatekeeper parses commands from the terminal, dispatches them to handler functions, and gives users a proper interface — `iv init`, `iv add`, `iv list`. This is where the vault becomes something you'd actually use.
+
 > *"The Gatekeeper stands at the entrance, interpreting the adventurer's commands. 'Init,' you say, and a new vault springs into existence. 'Add,' and a relic is forged. 'List,' and the ledger opens."*
 
 **Difficulty:** Medium
 **Concepts introduced:** clap derive API (`Parser`, `Subcommand`), enums for subcommands, `match` expressions, reading from stdin
 **Time estimate:** 30 minutes
-**Spec reference:** §6 CLI Commands
+**Spec reference:** The CLI uses subcommands (not flags) because each operation is distinct — `init` creates, `add` writes, `list` reads. Subcommands make the interface discoverable via `--help` and prevent ambiguous flag combinations.
 
 ### What We're Building
 
@@ -1339,6 +1363,8 @@ clap = { version = "4", features = ["derive"] }
 The `"derive"` feature enables `#[derive(Parser)]` — the same derive macro pattern we used with serde, but for CLI argument parsing.
 
 ### Step 2: Define the CLI Structure
+
+Right now we have file I/O functions but no way for a user to invoke them from the terminal. We need a command parser that turns `iv init`, `iv add`, and `iv list` into function calls — with argument validation, help text, and error messages all handled automatically.
 
 Here's the key insight: with clap's derive API, your CLI structure is defined as Rust types. Subcommands are enum variants. Arguments are struct fields. The compiler checks everything at compile time.
 
@@ -1817,6 +1843,8 @@ GitHub               adventurer@example.com    Armory
 1 relic(s) total.
 ```
 
+The CLI skeleton is in place with create, add, and list. But a vault that can only add and list is incomplete — you need to retrieve individual relics, edit them, and delete them. The Ledger in Stage 6 completes the CRUD interface.
+
 ### Checkpoint Code
 
 **`Cargo.toml`** — serde, serde_json, chrono, and clap uncommented.
@@ -1862,12 +1890,14 @@ Always call `io::stdout().flush().unwrap()` after `print!`.
 
 ## Stage 6 — The Ledger
 
+A vault you can only add to is a vault you can't maintain. Passwords change, accounts get deleted, credentials need updating. This stage completes the CRUD interface — get, edit, and delete — so you can manage the full lifecycle of every relic. It also introduces the critical UX pattern of hiding passwords by default, because a password manager that displays secrets on every lookup defeats its own purpose.
+
 > *"The Ledger knows all. It can reveal a relic's secrets, strike an entry from the record, or amend what was written. But it guards its knowledge — passwords are shown only to those who ask explicitly."*
 
 **Difficulty:** Medium
 **Concepts introduced:** Pattern matching on `Option`, iterators (`find`, `position`, `retain`), `--show-password` flag, confirmation prompts
 **Time estimate:** 30 minutes
-**Spec reference:** §6.2 Relic CRUD
+**Spec reference:** CRUD operations follow the principle of least surprise — `get` shows details, `edit` modifies in place, `delete` requires confirmation. The `--show-password` flag defaults to hidden because the most common use case (copying a password) doesn't require seeing it on screen.
 
 ### What We're Building
 
@@ -1877,6 +1907,8 @@ Three new commands:
 - `iv edit <name>` — edit a relic's fields interactively
 
 ### Step 1: Extend the CLI Definition
+
+Right now we have `init`, `add`, and `list` — but we can't retrieve a specific relic's details, update a password that's changed, or remove an account we've closed. We need three new commands that complete the CRUD lifecycle.
 
 Add the new subcommands to the `Commands` enum. Replace the existing `Commands` enum and add the new handler functions.
 
@@ -2166,9 +2198,9 @@ cargo run -- delete "AWS Console"
 cargo run -- list
 ```
 
-### Checkpoint Code
+The full CRUD interface is operational — you can create, read, update, and delete relics. But there's a silent danger: if the process crashes mid-write, your vault file could be corrupted or empty. Stage 7 introduces atomic writes to make the vault crash-proof.
 
-The full `src/main.rs` is the Stage 5 code with these additions:
+### Checkpoint Code
 1. Three new variants in `Commands` enum (`Get`, `Delete`, `Edit`)
 2. `find_relic()` helper function
 3. `cmd_get()`, `cmd_delete()`, `cmd_edit()` handler functions
@@ -2208,12 +2240,14 @@ Use `relic.url.as_deref() == Some("https://github.com")` or pattern match.
 
 ## Stage 7 — The Atomic Quill
 
+Your vault file is the single source of truth for every credential you own. If a power failure, crash, or disk error corrupts it mid-write, you lose everything. This stage replaces the naive `fs::write()` with an atomic write strategy that guarantees the vault is either fully written or completely untouched — never half-corrupted. This is the same pattern used by SQLite, Git, and every serious database.
+
 > *"A careless scribe once lost an entire vault when lightning struck mid-sentence. The Atomic Quill writes to a shadow scroll first, then swaps it into place in a single, indivisible motion. The old scroll is never touched until the new one is complete."*
 
 **Difficulty:** Medium
 **Concepts introduced:** `File::sync_all()`, `std::fs::rename()`, atomic file operations, `#[cfg(test)]`, `#[test]`, unit testing
 **Time estimate:** 30 minutes
-**Spec reference:** §4.3 Write Strategy
+**Spec reference:** The write-tmp-fsync-rename strategy is the industry standard for crash-safe file updates. It's used by SQLite (WAL mode), Git (loose objects), and PostgreSQL (WAL). The key insight: never modify the original file — always write a complete replacement and atomically swap it in.
 
 ### What We're Building
 
@@ -2617,6 +2651,8 @@ All five tests pass. The atomic write strategy works:
 - Missing files produce errors
 - Corrupted JSON produces errors
 - A simulated crash (partial temp file) doesn't corrupt the original
+
+The vault's walls are raised, its data is crash-proof, and its CRUD interface is complete. But every secret still sits in plaintext on disk — readable by anyone with filesystem access. In Act 2, you'll forge the Master Key and seal the vault with real cryptography.
 
 ### Checkpoint Code
 

@@ -20,6 +20,8 @@ Bosses are where Rust's enum + match pattern truly shines. You'll model a state 
 
 > *"It emerges from the fog at the far end of the arena. The door seals behind you. There is no retreat."*
 
+Bosses are the gatekeepers — the reason every system you've built matters. Without bosses, the dungeon is a sandbox with no climax. We define the `Boss` struct first because it's the skeleton that all boss behavior hangs on: HP, phases, and a cycling list of attack patterns. Getting this data model right means phases, transitions, and the entire boss pool system in later stages will compose cleanly. This is the foundation of Act 4's state machine.
+
 Every boss in The Chalice follows the same structure: a name, a title, hit points, a current phase, and a list of attack patterns it cycles through. This is the skeleton that all boss behavior hangs on.
 
 ### The Design
@@ -41,6 +43,8 @@ Boss {
 Before we write the struct, we need the types it depends on.
 
 ### Attack Patterns
+
+Right now we have enemies with simple "deal X damage when adjacent" behavior. Bosses need something richer — attacks with names, telegraphs, different hit zones, cooldowns, and dodgeability flags. We model each attack as a data-driven `AttackPattern` struct rather than hardcoded behavior, so the boss pool system in Stage 27 can assemble unique bosses from a shared attack library.
 
 Each boss attack is a data-driven pattern. The boss doesn't have custom code per attack — it cycles through a list of `AttackPattern` values, each describing what the attack does:
 
@@ -262,13 +266,15 @@ After Stage 23, your boss module contains:
 - `Boss` struct — HP, patterns, cooldown-aware cycling
 - Tests proving the pattern rotation works
 
-The boss exists, but it doesn't fight yet. That's next.
+The boss exists, but it doesn't fight yet. It has a body and a repertoire of attacks, but no way to use them against the player. That's next — we wire the boss into the combat loop and teach the player to read telegraphs.
 
 ---
 
 ## Stage 24 — Phase 1: The Dance Begins (Medium)
 
 > *"Every beast has a tell. The arm draws back before the claw. The ground trembles before the slam. Learn the rhythm, or die to it."*
+
+The boss struct is inert data until we wire it into the combat loop. Phase 1 is the *teaching phase* — the boss uses predictable, dodgeable attacks that train the player to read telegraphs and respond correctly. We build this first because it establishes the telegraph → response → punish rhythm that Phase 2 and Enraged will subvert. If Phase 1 doesn't feel fair and learnable, the later phases will feel cheap rather than challenging.
 
 A boss fight is a conversation. The boss telegraphs an attack, the player reads the telegraph and responds — dodge, reposition, or tank the hit and rally. In Phase 1, the boss cycles through 2-3 predictable attacks. This is the teaching phase: the player learns the patterns before the boss escalates.
 
@@ -522,13 +528,15 @@ After Stage 24:
 - Telegraph rendering with ratatui styled text
 - A complete Tier 1 boss (Undead Giant) with 3 Phase 1 patterns
 
-The fight works, but it's static. The boss never changes behavior. Time to fix that.
+The fight works, but it's static. The boss never changes behavior — it cycles the same three attacks from full HP to death. Time to shatter that predictability with phase transitions.
 
 ---
 
 ## Stage 25 — Phase Transition: Something Is Changing (Medium)
 
 > *"The Vicar shrieks. Its skin splits along the spine. What emerges is no longer what you were fighting."*
+
+A boss that behaves the same from 100% HP to 0% is a damage sponge, not a fight. Phase transitions are the dramatic pivot that rewards the player for dealing damage while simultaneously raising the stakes. The boss gains new attacks — including at least one undodgeable AoE that forces repositioning instead of dodge-spam. We build transitions now because they're the mechanism that makes boss fights *escalate*, and because Rust's exhaustive matching ensures that adding a new phase forces you to handle it everywhere.
 
 Phase transitions are the dramatic pivot of every boss fight. The boss's HP drops below a threshold, the music changes (in our case, the text changes), and new rules apply. This is where Rust's exhaustive matching pays for itself — when you add a new phase, the compiler finds every place that needs updating.
 
@@ -802,13 +810,15 @@ After Stage 25:
 - Dramatic transition text renders as centered styled paragraphs
 - The combat loop checks for transitions after every damage event
 
-The boss now evolves mid-fight. But Phase 3 is where it gets desperate.
+The boss now evolves mid-fight. But Phase 2 is a warning shot — the real test comes when the boss drops below 30% and enters a desperate, devastating Enraged state.
 
 ---
 
 ## Stage 26 — Enraged: The Final 30% (Medium)
 
 > *"Its eyes burn white. Every movement is faster, harder, desperate. It knows it's dying — and it intends to take you with it."*
+
+Phase 2 introduced undodgeable attacks; Enraged introduces *systemic pressure*. The 1.5x damage multiplier, the increased dodge cost, and the stamina-drain AoE combine to create a death spiral for passive players. This is the skill check — the moment that validates whether the player truly learned the patterns in Phase 1 or was just getting lucky. We build it as a separate stage because the enrage modifiers are *multipliers on existing systems* (damage, stamina, dodge cost), not new systems, and understanding how modifiers compose is a key Rust design pattern.
 
 The Enraged phase is the skill check. The boss deals 50% more damage, dodging costs 25 stamina instead of 20, and a new stamina-drain AoE attack punishes passive play. If the player hasn't learned the patterns by now, they won't survive.
 
@@ -1067,13 +1077,15 @@ After Stage 26:
 - Boss HP bar renders with phase-colored indicators and `[ENRAGED]` blink
 - The stamina economy creates a genuine death spiral for passive players
 
-Two phases down. The boss fights work. But every boss is hand-crafted — time to build a system that generates them.
+Two phases down. The boss fights work. But every boss is hand-crafted — we define each one individually with hardcoded patterns. Time to build a system that *generates* bosses from a shared library, so the same seed always produces the same nightmare.
 
 ---
 
 ## Stage 27 — The Boss Pool: Procedural Nightmares (Hard)
 
 > *"The Chalice does not repeat itself. Each descent brings a new horror, assembled from the bones of those who came before."*
+
+Hand-crafting every boss doesn't scale — and it undermines the roguelike promise of variety. The boss pool system transforms our data-driven `AttackPattern` design into a procedural boss generator: given a seed and a floor tier, it selects an archetype, pulls attacks from a shared library, and assembles a unique boss. This is where the data-driven design from Stage 23 pays off — because attacks are structs, not hardcoded behavior, they can be mixed and matched across archetypes. We build this now because the game needs 5 tiers of bosses, and building them by hand would be both tedious and fragile.
 
 Hand-crafting every boss doesn't scale. The Chalice has 5 floors, each with a tier-appropriate boss selected from a pool. The same seed must always produce the same boss. This stage builds the boss pool system: a library of attack patterns organized by archetype, assembled into unique bosses via seeded RNG.
 
@@ -1512,13 +1524,15 @@ After Stage 27:
 - Seeded RNG guarantees deterministic boss selection
 - The system scales: add a new boss by adding a `BossDefinition` and archetype attacks
 
-One stage left. The boss is dead — what happens next?
+One stage left. The boss is dead — the arena falls silent, echoes drift upward from the corpse, and the stairs beckon. What happens in that moment of victory?
 
 ---
 
 ## Stage 28 — Victory: The Nightmare Ends (Easy)
 
 > *"The beast collapses. Silence fills the arena — the first silence you've heard since the door sealed behind you. Echoes of blood drift upward from the corpse. The stairs beckon."*
+
+A boss fight without a payoff is an anticlimax. Victory rewards — echoes, insight, stair unlocks — are what make the fight *worth* fighting. They're also the bridge between floors: the boss dies, the stairs open, and the player descends into deeper darkness. We build this as a separate stage because the victory event touches multiple systems (hunter stats, dungeon state, narrative text) and deserves its own clean implementation rather than being bolted onto the combat resolver.
 
 The boss is dead. Now the game must reward the player, advance the state, and deliver a moment of catharsis. This stage is mechanically simple but narratively essential — the payoff for everything the player endured.
 

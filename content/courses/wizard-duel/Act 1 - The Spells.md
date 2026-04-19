@@ -33,6 +33,8 @@ graph LR
 
 **Difficulty: Very Easy** | **Concepts: Cargo, project structure, main.rs, println!**
 
+Before you can duel, you need a wand — and before you can write Rust, you need a project. This stage exists because every spell you cast later depends on a properly structured workspace. Think of it as your first visit to Ollivanders: nothing flashy, but without it, nothing else works.
+
 Every Rust project starts with `cargo` — Rust's build tool and package manager. Think of it as `npm` + `webpack` + `jest` rolled into one (or `pip` + `setuptools` + `pytest` if you come from Python).
 
 ### 1.1 — Create the project
@@ -144,6 +146,8 @@ test result: ok. 0 passed; 0 filtered out; finished in 0.00s
 
 ### Checkpoint 1
 
+You have a working wand — now you need spells to cast with it. Stage 2 introduces the data structures that define every spell in the game.
+
 You have a Rust project that compiles and runs. You understand `Cargo.toml`, `fn main()`, `let`, `println!`, and `cargo run`. Time to define some spells.
 
 ---
@@ -152,9 +156,13 @@ You have a Rust project that compiles and runs. You understand `Cargo.toml`, `fn
 
 **Difficulty: Easy** | **Concepts: enums, structs, derive macros, Vec, Option**
 
+A duel engine without spells is just two wizards staring at each other. This stage builds the data backbone of the entire game — every combat calculation, every AI decision, and every UI display will read from the types you define here. Getting the data model right now saves you from painful refactors later.
+
 In Python you might model a spell as a dictionary or a dataclass. In TypeScript, an interface. In Rust, we use **structs** (data) and **enums** (variants).
 
 ### 2.1 — Spell types: your first enum
+
+Right now we have a project that prints text, but we can't represent any game concepts in code. We need a way to categorize spells so the combat engine can compare them — and Rust's enums are the perfect tool for a fixed set of variants.
 
 Every spell in our game belongs to one of three schools. Replace `src/main.rs` entirely:
 
@@ -198,6 +206,8 @@ Spell school: Offensive
 
 ### 2.2 — Status effects (preview)
 
+Right now we have spell types, but spells can't *do* anything beyond raw damage. Real duels need lingering effects — burns, stuns, shields — that change the flow of combat across multiple turns. We define the enum now so spells can reference their effects from the start.
+
 We will flesh these out in Stage 7, but we need the enum now so spells can reference their effects:
 
 ```rust
@@ -222,6 +232,8 @@ enum StatusEffect {
 `Shield(u8)` is a variant that *carries* a value. In Python you would need a separate class; in Rust, enums can hold data directly. `u8` is an unsigned 8-bit integer (0–255) — perfect for shield points.
 
 ### 2.3 — The Spell struct
+
+Right now we have categories (`SpellType`) and effects (`StatusEffect`), but no way to bundle a spell's name, cost, damage, and effect into a single value. A struct gives us that — one `Spell` value carries everything the combat engine needs to resolve a cast.
 
 Now the main event — the `Spell` itself:
 
@@ -572,6 +584,8 @@ You should see all 18 spells printed with their stats.
 
 ### Checkpoint 2
 
+We have a full arsenal of spells, but no rules for how they interact. Stage 3 introduces the type triangle — the rock-paper-scissors mechanic that makes spell choice strategic instead of random.
+
 You have 18 spells organized into three schools. You understand enums, structs, `Option`, `Vec`, `String` vs `&str`, and `derive` macros. Your tests pass. Time to make these types fight.
 
 ---
@@ -579,6 +593,8 @@ You have 18 spells organized into three schools. You understand enums, structs, 
 ## Stage 3 — The Type Triangle
 
 **Difficulty: Easy** | **Concepts: match expressions, impl blocks, methods, unit tests**
+
+Without type advantages, every duel devolves into "cast your highest-damage spell repeatedly." The type triangle forces players to *think* — to read their opponent and counter-pick. It's also your first encounter with `match`, Rust's most powerful control flow tool, and `impl` blocks, which let you attach behavior to your types.
 
 Every spell has a type, and types have advantages — like rock-paper-scissors:
 
@@ -599,6 +615,8 @@ graph TD
 - **Same type = Clash** — neither side has advantage
 
 ### 3.1 — The Advantage enum
+
+Right now we have `SpellType` variants, but no way to express what happens when two types collide. We need a result type that the damage engine can use to scale damage up or down — and that result needs to be testable.
 
 We need a way to express the *result* of a type matchup. Add this below `SpellType`:
 
@@ -801,6 +819,8 @@ cargo run
 
 ### Checkpoint 3
 
+Spells now have strategic weight — but there's nobody to wield them. Stage 4 creates the Wizard struct, complete with HP, mana, house bonuses, and a spell loadout.
+
 The type triangle works and is fully tested. You understand `match`, `impl` blocks, methods with `&self`, and exhaustive pattern matching. Now let's create the wizards who will wield these spells.
 
 ---
@@ -809,9 +829,13 @@ The type triangle works and is fully tested. You understand `match`, `impl` bloc
 
 **Difficulty: Easy** | **Concepts: structs with methods, Display trait, String formatting, House bonuses**
 
+Spells are just data until someone casts them. A wizard bundles together everything the duel engine needs to track a combatant: health, mana, equipped spells, active effects, and win/loss history. This is also where you learn how Rust attaches behavior to data through `impl` blocks and traits — the foundation for every method you'll write from here on.
+
 Time to create the duellists. A wizard has stats, a house, and a spell loadout.
 
 ### 4.1 — The House enum
+
+Right now every wizard would be identical — same stats, same abilities. Houses give each combatant a distinct identity and force different playstyles, which makes the game worth replaying. We model houses as an enum because the set is fixed and each variant maps to specific bonuses.
 
 ```rust
 // Each house grants different combat bonuses.
@@ -825,6 +849,8 @@ enum House {
 ```
 
 ### 4.2 — The Wizard struct
+
+Right now we have spells and houses, but no way to represent a combatant's full state — their health, mana, equipped spells, and active effects all in one place. The `Wizard` struct is the central data type that the entire duel engine revolves around.
 
 ```rust
 #[derive(Debug, Clone)]
@@ -1046,6 +1072,8 @@ All 17 tests should pass. `cargo run` should show both wizards with their stats 
 
 ### Checkpoint 4
 
+Your wizards are ready for battle — but they can't actually cast anything yet. Stage 5 introduces the `cast` method and your first real encounter with Rust's borrow checker.
+
 You have wizards with house bonuses, spell loadouts, and a Display trait. You understand structs, `impl` blocks, constructors, iterator chains, and the `Display` trait. Time to cast some spells.
 
 ---
@@ -1053,6 +1081,8 @@ You have wizards with house bonuses, spell loadouts, and a Display trait. You un
 ## Stage 5 — Cast a Spell
 
 **Difficulty: Medium** | **Concepts: Result type, error handling, &self vs &mut self, borrowing**
+
+Casting a spell is the first action that *changes* game state — it deducts mana and can fail if you're tapped out. This is where Rust's ownership model stops being theoretical and starts being practical. You'll learn how Rust replaces exceptions with `Result`, and you'll meet the borrow checker for real when you try to read a spell and mutate a wizard at the same time.
 
 In Python, if something goes wrong you raise an exception. In JavaScript, you throw an Error. Rust does not have exceptions. Instead, it uses the `Result` type — a value that is either `Ok(success)` or `Err(failure)`. The compiler forces you to handle both cases.
 
@@ -1232,6 +1262,8 @@ All 21 tests should pass.
 
 ### Checkpoint 5
 
+Spells can be cast and mana is tracked — but what happens when the spell actually *hits*? Stage 6 builds the damage resolution engine that turns a cast into concrete HP changes, shield absorption, and status effects.
+
 Wizards can cast spells, mana is deducted, and errors are handled with `Result`. You have met the borrow checker and survived. Now let's resolve what happens when a spell hits.
 
 ---
@@ -1239,6 +1271,8 @@ Wizards can cast spells, mana is deducted, and errors are handled with `Result`.
 ## Stage 6 — Damage Resolution
 
 **Difficulty: Medium** | **Concepts: external crates, Cargo.toml dependencies, rand, f32 math, complex game logic**
+
+This is the heart of the combat engine — the function that turns "wizard casts spell" into actual game consequences. Without resolution, casting a spell is just subtracting mana. Here you wire together type advantages, damage variance, shields, healing, and status effects into a single coherent pipeline. You'll also pull in your first external crate (`rand`), learning how Rust's ecosystem works.
 
 When a spell hits, we need to resolve: type advantage → damage modifier → apply damage → healing → shields → status effects. This is the combat engine.
 
@@ -1266,6 +1300,8 @@ use std::fmt;
 ```
 
 ### 6.2 — The DuelResult struct
+
+Right now `cast()` returns a bare `u8` damage value, but resolution involves much more — healing, shields, mana theft, status effects, and type advantage. We need a struct that captures *everything* that happened so the UI and game loop can report it clearly.
 
 We need to communicate what happened during a spell resolution:
 
@@ -1598,6 +1634,8 @@ All 26 tests should pass. The `rand` crate will be downloaded and compiled on th
 
 ### Checkpoint 6
 
+Spells now deal real damage with all the modifiers applied — but status effects are fire-and-forget. Stage 7 makes them *tick* each turn, adding the persistent pressure that separates a good duelist from a great one.
+
 The combat engine resolves spells with type advantages, damage variance, shields, healing, and mana steal. You understand external crates, `Cargo.toml` dependencies, type casting, and complex game logic. Now let's make status effects tick.
 
 ---
@@ -1605,6 +1643,8 @@ The combat engine resolves spells with type advantages, damage variance, shields
 ## Stage 7 — Status Effects
 
 **Difficulty: Medium** | **Concepts: iterating with mutation, retain(), enum matching with data, turn-based tick logic**
+
+Status effects are what make duels feel like chess instead of coin flips. A well-timed Burn forces your opponent to heal instead of attack; a Stun can swing an entire match. This stage teaches you how Rust handles the tricky problem of modifying a collection while processing it — a pattern that causes bugs in most languages but is made safe by Rust's ownership rules.
 
 Status effects are the spice of combat. They persist across turns, dealing damage, disrupting spells, or increasing costs. Each turn, we "tick" all active effects — apply their per-turn impact and decrement their duration.
 
@@ -1819,6 +1859,8 @@ All 31 tests should pass.
 
 ### Checkpoint 7
 
+Every combat system is in place — spells, types, damage, effects. All that's left is the loop that ties them together. Stage 8 builds the interactive duel: stdin input, turn alternation, and a winner.
+
 Status effects tick each turn, expire after their duration, and stack. You understand functional iteration patterns, `retain`/`filter`, and how Rust handles mutation during iteration. One stage left — the duel itself.
 
 ---
@@ -1826,6 +1868,8 @@ Status effects tick each turn, expire after their duration, and stack. You under
 ## Stage 8 — The Duel Loop
 
 **Difficulty: Medium** | **Concepts: stdin, loop, game loop pattern, String parsing, putting it all together**
+
+Every system you've built — spells, types, wizards, casting, resolution, effects — has been tested in isolation. This stage wires them into a playable game. The duel loop is the classic game programming pattern: read input → update state → check win condition → repeat. It's also where you learn Rust's approach to user input, which is more explicit than Python's `input()` but gives you full control.
 
 This is it — the final stage of Act 1. We wire everything together into a playable terminal game. Two wizards, alternating turns, spell selection via stdin, and a winner.
 
@@ -2234,6 +2278,8 @@ Play a full duel! Try different house combinations. Notice how Slytherin's Cunni
 > **Common mistake:** The `duel` function takes `&mut Wizard` for both parameters. You might try `duel(&mut wizard1, &mut wizard1)` to duel yourself — the compiler will refuse: *"cannot borrow `wizard1` as mutable more than once at a time."* This is the borrow checker protecting you from aliased mutation. Each mutable reference must be unique.
 
 ### Checkpoint 8
+
+Act 1 is complete — you've built a working game from scratch. In Act 2, you'll give your wizard a worthy opponent by building AI strategies of increasing intelligence, culminating in Rust's most powerful abstraction: trait objects.
 
 You have a fully playable Wizard Duel Engine in the terminal. Two players, 18 spells, type advantages, status effects, house bonuses, and a turn-based combat loop.
 

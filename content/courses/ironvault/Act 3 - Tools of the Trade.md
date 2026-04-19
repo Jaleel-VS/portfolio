@@ -30,6 +30,8 @@ totp-rs = { version = "5.7", features = ["otpauth"] }
 
 ## Stage 14 — The Forge
 
+Human-chosen passwords are predictable — pet names, birthdays, keyboard patterns. Even "clever" substitutions like `p@ssw0rd` appear in every breach database. This stage builds a cryptographically secure password generator that draws from true OS entropy, ensuring every generated password is as random as physics allows. Without this, users will store weak passwords in a strong vault — like putting a paper lock on a steel door.
+
 > *Every great vault needs a forge — a place where new relics are born, not from memory or habit, but from pure, unpredictable entropy. The Forge doesn't care about your pet's name or your birthday. It draws from the deepest well of randomness your operating system can provide, and hammers that chaos into passwords that would take civilizations to crack.*
 
 ### What You'll Learn
@@ -358,9 +360,9 @@ impl GeneratorConfig {
 }
 ```
 
-### What to Try
+The Forge produces strong passwords, but displaying them on screen is a security risk. Stage 15 builds the Courier — clipboard copy with automatic clearing — so passwords can travel from vault to login form without ever appearing on screen.
 
-1. `cargo run -- generate` — should print a 20-character password
+### What to Try
 2. `cargo run -- generate --length 32` — longer password
 3. `cargo run -- generate --no-symbols` — alphanumeric only
 4. `cargo run -- generate --allow-ambiguous` — includes 0/O/1/l/I
@@ -378,6 +380,8 @@ impl GeneratorConfig {
 ---
 
 ## Stage 15 — The Courier
+
+Printing a password to the terminal is a liability — it's visible to shoulder surfers, captured by screen recorders, and persisted in terminal scrollback. The clipboard is the standard transport mechanism for passwords, but it's a shared resource readable by every process on the machine. This stage builds a clipboard manager that copies the password and then automatically erases it after 30 seconds, minimizing the window of exposure.
 
 > *A password that sits on screen is a password exposed. The Courier carries your secrets swiftly to the clipboard and then — after a brief window — burns the message. Thirty seconds. That's all you get. Copy it, paste it, and the Courier erases all trace. No clipboard manager will archive it. No shoulder-surfer will catch a second glance.*
 
@@ -605,6 +609,8 @@ pub fn copy_only(text: &str) -> Result<(), String> {
 }
 ```
 
+Passwords can now travel securely from vault to login form. But some doors require more than a password — they require proof that you're present *right now*. Stage 16 adds TOTP two-factor authentication, the same protocol behind every authenticator app and AWS IAM MFA device.
+
 ### What to Try
 
 1. `cargo run -- generate --copy` — paste into a text editor, it should work
@@ -624,6 +630,8 @@ pub fn copy_only(text: &str) -> Result<(), String> {
 ---
 
 ## Stage 16 — The Time Rune
+
+A stolen password grants permanent access — unless the account requires a second factor that changes every 30 seconds. TOTP (Time-based One-Time Passwords) is the industry standard for 2FA, used by GitHub, AWS, Google, and virtually every service that takes security seriously. By storing TOTP secrets alongside credentials, Ironvault becomes a complete authentication tool — password and second factor in one place, one command.
 
 > *Some doors require more than a key. They require proof that you stand before them at this very moment — not yesterday, not tomorrow, but now. The Time Rune is a glyph that changes every thirty seconds, synchronized with a distant oracle. Even if a thief steals your password, without the Time Rune, the door remains sealed.*
 
@@ -879,6 +887,8 @@ pub fn generate_code(totp: &TOTP) -> Result<(String, u64), String> {
 }
 ```
 
+With passwords generated, copied, and TOTP codes available, the vault is feature-rich — but finding a specific relic in a vault with dozens of entries requires scrolling through `iv list`. Stage 17 builds the Seeker — search and filter across all relic fields.
+
 ### What to Try
 
 1. Use a test TOTP secret: `JBSWY3DPEHPK3PXP` (this is a well-known test vector)
@@ -899,6 +909,8 @@ pub fn generate_code(totp: &TOTP) -> Result<(String, u64), String> {
 ---
 
 ## Stage 17 — The Seeker
+
+A vault with a hundred relics is useless if finding the right one takes longer than typing the password from memory. This stage builds search and filter capabilities — substring matching across all fields, chamber filtering, tag filtering — so you can locate any credential in milliseconds. It also introduces Rust's lifetime annotations, which let you return references into existing data without copying.
 
 > *A vault with a hundred relics is useless if you can't find the one you need. The Seeker peers into every corner — names, usernames, URLs, notes, tags — and surfaces what matches. It also knows how to filter by chamber or tag, presenting results in clean, aligned columns worthy of a royal inventory.*
 
@@ -1174,9 +1186,9 @@ pub fn print_relic_table(relics: &[&Relic]) {
 }
 ```
 
-### What to Try
+You can find any relic instantly. But credentials aren't static — passwords rotate, accounts move between teams, URLs change. Stage 18 builds the Scribe, an interactive editor that lets you reshape any relic field by field.
 
-1. Add several relics with different chambers and tags first
+### What to Try
 2. `cargo run -- search github` — should find relics with "github" in any field
 3. `cargo run -- search dev` — should match tags containing "dev"
 4. `cargo run -- list --chamber Armory` — only relics in the Armory
@@ -1195,6 +1207,8 @@ pub fn print_relic_table(relics: &[&Relic]) {
 ---
 
 ## Stage 18 — The Scribe
+
+Credentials are living things — passwords get rotated, usernames change when companies rebrand, accounts move between teams. Deleting and re-creating a relic just to change one field is tedious and loses the creation timestamp. This stage builds an interactive editor that shows current values and lets you overwrite or keep each field with a single keystroke. It also introduces mutable references (`&mut`), Rust's mechanism for controlled in-place mutation.
 
 > *Relics are not carved in stone. Names change, passwords rotate, accounts move between chambers. The Scribe lets you reshape any relic — field by field — showing you what exists and letting you overwrite or keep each value with a single keystroke. Press Enter to keep, type to replace.*
 
@@ -1523,9 +1537,9 @@ pub fn edit_relic(relic: &mut Relic, regenerate_password: bool) {
 }
 ```
 
-### What to Try
+Individual relics can be reshaped, but the chambers themselves — the organizational structure of the vault — are still fixed at creation time. Stage 19 builds the Chamber Architect, letting you create, rename, and safely delete the categories that organize your credentials.
 
-1. `cargo run -- edit GitHub` — walk through each field, pressing Enter to keep most
+### What to Try
 2. `cargo run -- edit GitHub --generate` — regenerate the password automatically
 3. Try setting a URL to "none" — it should become `None`
 4. Try entering tags as "dev, git, work" — should parse into three separate tags
@@ -1543,6 +1557,8 @@ pub fn edit_relic(relic: &mut Relic, regenerate_password: bool) {
 ---
 
 ## Stage 19 — The Chamber Architect
+
+The default chambers (Armory, Treasury, Library, Crypt) won't fit every user's workflow. A developer might need "Infrastructure" and "SaaS"; a finance team might need "Banking" and "Trading." This stage makes the organizational structure dynamic — create new chambers, rename existing ones, and safely delete empty ones. The defensive deletion pattern (requiring `--force` for non-empty chambers) prevents accidental data loss, a principle you'll see in every serious CLI tool.
 
 > *A vault without organization is a vault in chaos. The Chamber Architect designs the rooms where relics are stored — creating new chambers for new purposes, renaming them as needs evolve, and demolishing empty ones when they've served their time. But a chamber full of relics cannot be destroyed without deliberate force.*
 
@@ -1999,9 +2015,9 @@ pub fn delete_chamber(vault: &mut Vault, name: &str, force: bool) -> Result<(), 
 }
 ```
 
-### What to Try
+The vault's toolset is now complete — generate, copy, authenticate, search, edit, and organize. But a vault that only stores secrets without monitoring them is a vault waiting to be breached. In Act 4, you'll build the Watchtower — breach detection, security auditing, and the vigilance tools that keep your credentials safe over time.
 
-1. `cargo run -- chambers` — list all chambers with relic counts
+### What to Try
 2. `cargo run -- chambers add Dungeon` — create a new chamber
 3. `cargo run -- chambers rename Dungeon Catacombs` — rename it
 4. `cargo run -- chambers delete Catacombs` — should work if empty

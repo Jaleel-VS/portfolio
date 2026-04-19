@@ -46,6 +46,8 @@ The `features = ["full"]` flag enables everything: the multi-threaded runtime, T
 
 ## Stage 19 — Tokio Awakens
 
+This is the biggest architectural shift in the course. Your thread-per-connection server works, but each thread costs ~8MB of stack and an OS context switch. With 100 players, that's 800MB of stack doing nothing while players think about their next move. Async I/O lets one thread serve thousands of connections by yielding control during idle waits. This is how production servers at AWS scale — and understanding it transforms you from someone who writes Rust into someone who writes *fast* Rust.
+
 **Difficulty:** Hard (1-2 hours)
 
 ### Story Beat
@@ -565,6 +567,8 @@ Both players should work independently. When one disconnects (Ctrl+C), the serve
 
 **Verify the game tick is running:** Watch the server output — you should see tick-related messages every 5 seconds (monster movements, horror events).
 
+The async foundation is laid — connections are lightweight tasks, not heavy threads. But your handler can only do one thing at a time: wait for input. The castle needs to whisper horrors even when the player is silent, and respond to game events between keystrokes.
+
 ### Checkpoint Code
 
 ```rust
@@ -688,6 +692,8 @@ async fn main() {
 ---
 
 ## Stage 20 — Select Your Fate
+
+Your async handler can read player input, but it can only do one thing at a time — wait for input, then respond. A real game client needs to handle multiple event sources simultaneously: player typing, game tick firing, horror timer expiring, shutdown signal arriving. `select!` is how async Rust multiplexes these concerns onto a single task, and it's the pattern you'll use in every async application you ever write.
 
 **Difficulty:** Medium (30-60 minutes)
 
@@ -901,6 +907,8 @@ The biggest difference: in Rust, when one branch wins, the losing branches are *
 6. Wait again — another horror message after 30 seconds
 7. Connect a second player — both should get independent horror timers
 
+Your handler now juggles multiple concerns simultaneously. But it still locks a shared `Mutex` for every command — and that polling branch checks for events every second whether anything happened or not. Channels will replace both problems.
+
 ### Checkpoint Code
 
 ```rust
@@ -1043,6 +1051,8 @@ async fn main() {
 
 ## Stage 21 — Channels of the Dead
 
+Your tasks still communicate by locking a shared `Mutex` — every player handler fights for the same lock on every command. Channels decouple producers from consumers: player handlers *send* events without waiting, and a single processor *receives* and handles them. This eliminates lock contention and is the foundation of the actor model used by Erlang, Elixir, and every high-performance message-passing system.
+
 **Difficulty:** Medium (30-60 minutes)
 
 ### Story Beat
@@ -1088,6 +1098,8 @@ async def consumer():
 ### Instructions
 
 #### Step 1 — Define game events
+
+Right now, player handlers directly lock the `Mutex` and call methods on `GameState`. Every handler does its own locking, its own state mutation, its own response formatting. We need a single vocabulary of "things that can happen" — typed events that flow through a channel to a central processor, decoupling the input side from the logic side.
 
 First, create an enum for all the events that can flow through the system:
 
@@ -1432,6 +1444,8 @@ Always prefer bounded channels. Unbounded channels can cause out-of-memory if a 
 
 The message delivery might feel slightly delayed (up to 500ms) because we're polling. Stage 22 fixes this with broadcast channels for instant delivery.
 
+Events flow inward through the channel, but responses still crawl back through a polling loop. The castle needs a bell tower — a way to ring once and have every soul hear it instantly.
+
 ### Checkpoint Code
 
 ```rust
@@ -1651,6 +1665,8 @@ async fn main() {
 ---
 
 ## Stage 22 — The Broadcast
+
+Your mpsc channel sends events inward to a processor, but responses flow back through a polling loop — checking every 500ms whether there's a message. That's half a second of latency on every chat message, every monster attack, every room description. Broadcast channels deliver messages *instantly* to every subscriber, completing the event-driven architecture: commands flow in through mpsc, responses fan out through broadcast.
 
 **Difficulty:** Medium (30-60 minutes)
 
@@ -2060,6 +2076,8 @@ enum BroadcastMsg {
 6. Disconnect Alice → Bob sees "Alice has been consumed by darkness." instantly
 7. Wait 5 seconds — tick events should broadcast to both players
 
+Messages flow instantly in both directions. But what happens when you press Ctrl+C? Right now the server dies mid-sentence, connections sever, state is lost. The castle needs to learn how to sleep gracefully.
+
 ### Checkpoint Code
 
 ```rust
@@ -2336,6 +2354,8 @@ async fn main() {
 ---
 
 ## Stage 23 — Graceful Shutdown
+
+A server that dies on Ctrl+C loses game state, drops connections mid-sentence, and leaves players staring at a dead terminal. Graceful shutdown is a production requirement — every AWS service handles SIGTERM cleanly. You're learning it now because the pattern (signal detection → notify tasks → drain work → save state → exit) applies to every long-running process you'll ever build.
 
 **Difficulty:** Medium (30-60 minutes)
 
@@ -2669,6 +2689,8 @@ We use `watch` for the shutdown signal because tasks check it in their `select!`
 7. Check that `shadowkeep_save.json` exists and contains valid game state
 8. Restart the server — it should load the saved state
 
+The castle sleeps and wakes cleanly. But there's one last ghost to exorcise — players who vanish without saying goodbye, their connections hanging open like empty eye sockets. The castle needs to detect the dead.
+
 ### Checkpoint Code
 
 ```rust
@@ -3000,6 +3022,8 @@ async fn main() {
 ---
 
 ## Stage 24 — The Heartbeat
+
+TCP connections can silently die — a player closes their laptop, their WiFi drops, their process crashes. Without active detection, the server thinks they're still connected: their name lingers in the room, their slot is occupied, their data leaks. Heartbeats solve this by periodically probing each connection. If the probe fails, the ghost is exorcised. This is the same keepalive pattern used by load balancers, database connection pools, and every production TCP service.
 
 **Difficulty:** Medium (30-60 minutes)
 
@@ -3360,6 +3384,8 @@ This is incredibly useful for testing timeout behavior. In Python, you'd mock `t
 5. Reconnect and type commands periodically — the activity timer should reset and you should never be kicked
 6. **Simulate a dead connection:** Connect, then kill the netcat process with `kill -9 $(pgrep nc)` from another terminal. Within 30 seconds (next heartbeat), the server should detect the dead connection and clean up
 7. **Ctrl+C the server** — graceful shutdown should still work, with connection duration logged for each player
+
+The async architecture is complete: lightweight tasks, instant messaging, graceful shutdown, and dead connection detection. The castle's infrastructure is production-grade. In Act 4, you'll give it teeth — combat, scripting, color, a custom protocol, and a real deployment.
 
 ### Checkpoint Code
 

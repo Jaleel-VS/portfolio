@@ -242,6 +242,8 @@ Key behaviors to test:
 - Ctrl-C prints a hint, Ctrl-D exits
 - Up arrow recalls previous input
 
+The scrying pool shimmers with single-line incantations. But try defining a function — the `{` hangs open and the parser chokes. Next, we teach the pool to detect incomplete input and wait for the closing `}`.
+
 ### Checkpoint
 
 Your project now has:
@@ -470,6 +472,8 @@ cargo run
 >> (press up arrow — should recall "let x = 42")
 ```
 
+Multi-line incantations flow naturally now — the pool waits patiently for the closing brace. But the pool only works interactively. Next, we add scroll execution: reading `.rune` files from the command line, so dungeon rooms can be scripted and run directly.
+
 ### Checkpoint
 
 Updated files:
@@ -679,6 +683,8 @@ cargo run
 ```
 
 Note the `--` between `cargo run` and the filename — this tells Cargo "everything after `--` is for the program, not for Cargo."
+
+Scrolls execute from the command line and the hunter object awaits within. But when a spell misfires, the error message is bare — no suggestions, no color, no guidance. Next, we polish the diagnostics so miscast spells point the hunter toward the fix.
 
 ### Checkpoint
 

@@ -33,7 +33,11 @@ Let's begin.
 
 **Difficulty:** Medium | **New concepts:** Graph abstraction, neighbor functions, implicit graphs
 
+Before any NPC can patrol a corridor or chase you through the castle, they need to answer a fundamental question: "which tiles can I reach from here?" This stage builds the abstraction layer that every pathfinding algorithm in the game depends on. Without it, BFS, Dijkstra, and A* have nothing to search. The graph is the invisible skeleton beneath every intelligent movement in Hogwarts.
+
 ### Theory: Your Grid Is Already a Graph
+
+Right now we have a 2D grid of tiles and a `is_walkable()` check, but no formal way to ask "given position X, what positions can I move to?" We need a `neighbors()` function — the single abstraction that turns a grid of tiles into a searchable graph.
 
 Here's something that might surprise you: you've been working with a graph this entire time. Every tile on your map is a node. Every pair of adjacent walkable tiles shares an edge. You just haven't formalized it yet.
 
@@ -181,6 +185,8 @@ Implicit graphs appear everywhere:
 
 ### Checkpoint: Stage 15
 
+The graph abstraction is ready — `neighbors()` turns any position into its reachable neighbors, and the implicit graph costs zero extra memory. Now we have something to *search*. In Stage 16, Mrs. Norris will use Breadth-First Search to scout every corridor within her detection radius, expanding outward like ripples in a pond.
+
 Your project should now have:
 
 ```
@@ -235,6 +241,8 @@ The graph is ready. Time to search it.
 ## Stage 16: Breadth-First Search (BFS)
 
 **Difficulty:** Hard | **New concepts:** BFS, VecDeque, visited sets, path reconstruction
+
+BFS is the first real algorithm in our arsenal, and it exists because Mrs. Norris doesn't chase — she *explores*. She needs to check every nook and cranny within a radius, expanding outward in concentric rings. BFS is the simplest correct way to do this, and understanding it deeply is the foundation for Dijkstra and A* that follow. Every pathfinding algorithm in this act is a variation on the theme BFS introduces here.
 
 ### The Story: Mrs. Norris Scouts the Corridors
 
@@ -492,13 +500,15 @@ mod tests {
 }
 ```
 
-Mrs. Norris is prowling. But she explores blindly — every step costs the same. What happens when some paths are more expensive than others?
+Mrs. Norris is prowling. But she explores blindly — every step costs the same. Before we tackle weighted paths with Dijkstra, let's first *see* BFS in action — Stage 17 adds a debug visualization that makes the algorithm's ripple-like expansion visible in real-time. What happens when some paths are more expensive than others?
 
 ---
 
 ## Stage 17: BFS Visualization
 
 **Difficulty:** Medium | **New concepts:** Debug rendering, color gradients, animation timing
+
+Algorithms are invisible by default — you call a function, get a result, and trust it worked. But *seeing* an algorithm think is transformative for understanding. This stage exists because watching BFS expand outward, tile by tile, in concentric cyan ripples will teach you more about how it works than any textbook explanation. It also builds the debug visualization framework we'll reuse for Dijkstra and A*.
 
 ### The Story: Seeing the Search Party
 
@@ -725,13 +735,15 @@ KeyCode::Char('d') => {
 
 And call `game.debug.tick()` in your game loop's update phase. The visualization should animate smoothly at your configured `ticks_per_step` rate.
 
-You now have a visual understanding of BFS. Next: what happens when not all steps cost the same?
+You now have a visual understanding of BFS — watch the concentric ripples expand, flow around walls, and fill dead ends. But BFS treats every step as equal cost. What happens when stairs cost 3 and corridors cost 1? Dijkstra's algorithm enters the scene next, and Snape gets the shortest *weighted* path to his classroom.
 
 ---
 
 ## Stage 18: Dijkstra's Algorithm
 
 **Difficulty:** Hard | **New concepts:** Weighted graphs, priority queues, BinaryHeap, Reverse wrapper
+
+BFS assumes every step costs the same — but Hogwarts doesn't work that way. Climbing a spiral staircase is slower than walking a corridor. Opening a heavy oak door takes longer than striding through an archway. Dijkstra's algorithm is BFS's sophisticated cousin: it finds the cheapest path, not just the shortest one. This is the algorithm that powers GPS navigation, network routing, and Snape's efficient glide between his office and the Potions classroom.
 
 ### The Story: Snape Takes the Shortest Path
 
@@ -1042,13 +1054,15 @@ mod tests {
 }
 ```
 
-Snape glides through the dungeons on the cheapest path. But Dijkstra explores in all directions equally — it doesn't know *where* the goal is. What if we could give it a sense of direction?
+Snape glides through the dungeons on the cheapest path. But Dijkstra explores in all directions equally — it has no idea *where* the goal is. What if we could give it a sense of direction? First, let's see the difference between BFS and Dijkstra side by side in Stage 19, then we'll add that directional intuition with A* in Stage 20.
 
 ---
 
 ## Stage 19: Dijkstra vs BFS — The Comparison
 
 **Difficulty:** Medium | **New concepts:** Side-by-side algorithm comparison, performance metrics
+
+Understanding an algorithm in isolation is one thing; understanding *when to choose it* is another. This stage makes the difference between BFS and Dijkstra visceral — you'll see both algorithms solve the same problem simultaneously and compare their behavior. The visual comparison will burn the distinction into your memory far more effectively than any table of Big-O notation.
 
 ### The Story: Why Dijkstra Exists
 
@@ -1252,6 +1266,8 @@ The visualization makes this obvious: BFS expands in perfect concentric circles.
 
 ### Checkpoint: Stage 19
 
+The comparison mode makes the algorithm trade-offs undeniable. BFS is simpler but blind to costs. Dijkstra respects costs but explores in all directions. Both expand outward without any sense of *where* the goal is. What if the algorithm could look ahead toward the goal? That's exactly what A* does — and it's how Filch will chase you through the castle.
+
 Add the comparison mode to your debug system. The key insight from this stage: **BFS is Dijkstra where all edges cost 1.** Dijkstra is the generalization. But both explore blindly — they don't know where the goal is. They expand in all directions equally.
 
 What if the algorithm could *look ahead* toward the goal?
@@ -1261,6 +1277,8 @@ What if the algorithm could *look ahead* toward the goal?
 ## Stage 20: A* (A-Star)
 
 **Difficulty:** Hard | **New concepts:** Heuristics, f/g/h values, admissibility, Manhattan distance
+
+A* is the crown jewel of this act — the algorithm that powers nearly every game AI you've ever encountered. It exists because Dijkstra wastes time exploring in directions that lead *away* from the goal. A* adds a single brilliant idea: a heuristic that estimates "how far is the goal from here?" This one addition eliminates entire quadrants of wasted exploration. Filch doesn't search every corridor in Hogwarts — he has *intuition* about where you are, and he beelines toward you.
 
 ### The Story: Filch Gives Chase
 
@@ -1646,13 +1664,15 @@ mod tests {
 }
 ```
 
-Filch is on the hunt. But how much faster is A* really? Let's see it with our own eyes.
+Filch is on the hunt. But how much faster is A* really? Let's see it with our own eyes — Stage 21 adds a visualization that shows A*'s f/g/h values in real-time, making the heuristic's pruning power visible.
 
 ---
 
 ## Stage 21: A* Visualization
 
 **Difficulty:** Medium | **New concepts:** f/g/h value display, explored vs skipped nodes
+
+The most powerful insight about A* isn't the nodes it explores — it's the nodes it *skips*. This visualization stage makes that pruning power visible. You'll watch A* shoot a narrow beam toward the goal while huge swaths of the map stay dark and unexplored. Seeing the f/g/h values update in real-time will cement your understanding of why the heuristic works and when it helps most.
 
 ### The Story: Watching Intuition Work
 
@@ -1882,6 +1902,8 @@ This is the heuristic's pruning power. Every node A* skips is work Dijkstra woul
 
 ### Checkpoint: Stage 21
 
+Your debug mode now cycles through three algorithm visualizations — BFS in cyan, Dijkstra in cost-gradient, A* in purple with f/g/h info. The visual difference is undeniable. One more stage to go — the grand finale where all three algorithms race head-to-head on the same problem.
+
 Your debug mode should now cycle through three views:
 1. `[d]` once → BFS visualization (cyan ripples)
 2. `[d]` twice → Dijkstra visualization (cost gradient)
@@ -1895,6 +1917,8 @@ One more stage to go — the grand finale.
 ## Stage 22: The Algorithm Showdown
 
 **Difficulty:** Medium | **New concepts:** Side-by-side racing, performance benchmarking, algorithm selection
+
+This is the capstone of Act 3 — the moment where theory becomes conviction. Seeing three algorithms solve the same problem simultaneously, watching A* finish while Dijkstra is still expanding and BFS is flooding the entire map, will give you an intuition for algorithm selection that no amount of reading can match. After this stage, you'll *know* which algorithm to reach for and why.
 
 ### The Story: Three Algorithms Enter, One Path Wins
 
@@ -2187,6 +2211,8 @@ Do all edges have equal cost?
 ```
 
 ### Checkpoint: Stage 22
+
+The race is complete. You've seen BFS flood, Dijkstra expand, and A* laser toward the goal. These three algorithms are now tools in your belt — and in Act 4, they become the nervous system of a living castle. Mrs. Norris scouts with BFS, Snape patrols with Dijkstra, and Filch hunts with A*. The corridors won't be empty much longer.
 
 Wire the `[r]` key to start a race:
 

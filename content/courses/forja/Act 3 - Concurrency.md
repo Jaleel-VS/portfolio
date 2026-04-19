@@ -56,6 +56,8 @@ Before we write code, let's understand what we're choosing between. In Python an
 
 **Difficulty: Easy** · *Feel the pain of single-threaded blocking*
 
+Before you can fix a problem, you need to feel it. Your server handles one request at a time — while it's processing a slow request, every other client is frozen, waiting in line. This stage makes that pain visceral: you'll add a slow endpoint and watch fast requests get held hostage. Understanding *why* concurrency matters is the first step to implementing it correctly.
+
 Right now your server handles one request, then the next. Let's make that problem visible.
 
 ### Add a Slow Endpoint
@@ -127,6 +129,8 @@ fn main() {
 
 ### Checkpoint — Stage 16
 
+You've felt the heat of single-threaded blocking — one slow request melts the entire server. The fix is straightforward: don't wait for each connection to finish before accepting the next one. Next, we'll spawn a thread per connection and watch the bottleneck vanish.
+
 Your server should have `/slow` and `/fast` routes, and you should have *felt* the blocking problem. The accept loop processes one connection at a time. Next, we fix it.
 
 ---
@@ -134,6 +138,8 @@ Your server should have `/slow` and `/fast` routes, and you should have *felt* t
 ## Stage 17 — Thread Per Connection
 
 **Difficulty: Medium** · *Spawn a thread per request*
+
+You've seen the problem: one slow request blocks everything. The most intuitive fix is also the simplest — hand each connection to its own OS thread and let the operating system handle the scheduling. This stage solves the blocking problem with one line of code, but it also reveals a new problem: unbounded resource consumption.
 
 The simplest fix: when a connection arrives, hand it to a new thread and immediately go back to accepting.
 
@@ -229,6 +235,8 @@ The compiler catches this: `closure may outlive the current function, but it bor
 
 ### Checkpoint — Stage 17
 
+Concurrent requests work — the blocking problem is solved. But spawning an unbounded number of threads is a ticking time bomb: 10,000 connections means 10,000 threads and ~80GB of stack memory. Next, we'll cap the damage with a thread pool — a fixed number of workers pulling jobs from a queue.
+
 ```rust
 use std::net::TcpListener;
 use std::thread;
@@ -254,6 +262,8 @@ Concurrent requests work. But unbounded thread creation is a ticking time bomb. 
 
 **Difficulty: Hard** · *Build a fixed-size thread pool from scratch*
 
+Thread-per-connection works but doesn't scale — each thread costs ~8MB of stack, and the OS has hard limits on thread count. This stage solves the resource management problem: pre-creating a fixed number of worker threads and feeding them jobs through a channel. No matter how many connections arrive, you never exceed your thread limit. This is the architecture inside Nginx, Tomcat, and every production web server.
+
 A thread pool pre-creates a fixed number of worker threads and feeds them jobs through a queue. No matter how many connections arrive, you never exceed your thread limit. This is what every production web server does.
 
 ### The Architecture
@@ -276,6 +286,8 @@ Main Thread                    Worker Threads (4)
 The main thread sends jobs (closures) through a channel. Worker threads sit in a loop, pulling jobs off the channel and executing them. When all workers are busy, new jobs queue up in the channel.
 
 ### Step 1: Define the Job Type
+
+Right now we have worker threads but no way to send them work. We need a type that represents "a unit of work" — any closure that can be sent across thread boundaries and executed once.
 
 A "job" is any closure that can be sent to another thread and called once:
 
@@ -548,6 +560,8 @@ impl Worker {
 
 ### Checkpoint — Stage 18
 
+You've forged a real thread pool — fixed workers, a job queue, and clean shutdown. This is the same architecture inside every production web server. But with multiple threads comes a new challenge: how do they share data? Your todo API needs a single list that all threads can read and write. That's next.
+
 You have a working thread pool with:
 - Fixed number of worker threads
 - Job queue via `mpsc::channel`
@@ -561,6 +575,8 @@ This is a real, production-quality pattern. The Rust Book's final project builds
 ## Stage 19 — Shared State
 
 **Difficulty: Medium** · *`Arc<Mutex<>>` for shared data across handlers*
+
+Your thread pool can handle concurrent requests, but each thread is isolated — they can't see each other's data. Your todo API needs a single list that all handlers can read and write. This stage solves the shared mutable state problem, which is the central challenge of concurrent programming and the reason Rust's ownership system exists.
 
 Your todo API from Act 2 stored todos in a `Vec` inside the handler. With multiple threads, each thread gets its own copy — changes in one thread are invisible to others. We need shared, mutable state.
 
@@ -735,6 +751,8 @@ let mut todos = db.lock().unwrap_or_else(|poisoned| {
 
 ### Checkpoint — Stage 19
 
+Your server now safely shares data across threads — the `Arc<Mutex<>>` pattern is the foundation of concurrent Rust. But OS threads are heavy: each costs ~8MB of stack and context switches are expensive. For I/O-bound servers handling thousands of connections, we need something lighter. Next, we go async with Tokio.
+
 Your server now has:
 - Thread pool (4 workers)
 - Shared todo store via `Arc<Mutex<Vec<Todo>>>`
@@ -748,6 +766,8 @@ This is a fully functional concurrent web server. But threads have limits. Time 
 ## Stage 20 — Tokio Awakens
 
 **Difficulty: Hard** · *Rewrite the server with async/await*
+
+OS threads solved concurrency but at a steep cost: ~8MB per thread, expensive context switches, and a hard ceiling around 10,000 connections. For a web server that needs to handle thousands of simultaneous connections — WebSockets, long-polling, slow clients — you need something fundamentally lighter. This stage rewrites your server with async/await and Tokio, replacing heavy OS threads with lightweight tasks that cost only a few hundred bytes each.
 
 Threads work, but they're heavy. Each OS thread costs ~8MB of stack and a context switch costs microseconds. For a server handling thousands of concurrent connections (think: WebSocket connections, long-polling, SSE streams), you want something lighter.
 
@@ -1001,6 +1021,8 @@ Error: `` `Rc<i32>` cannot be sent between threads safely ``
 
 ### Checkpoint — Stage 20
 
+Your server is now async — lightweight tasks instead of heavy threads, cooperative scheduling instead of OS preemption. But right now `handle_connection` is one monolithic async function. Next, we'll bring back the router pattern with async handlers and shared state, making the architecture clean and extensible again.
+
 ```rust
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpListener;
@@ -1040,6 +1062,8 @@ Your server is now async. No thread pool to manage, no `Arc<Mutex<>>` on the rec
 
 **Difficulty: Medium** · *Async route handlers with shared state*
 
+Your async server works, but all the logic is crammed into one big `handle_connection` function — the same problem you solved with the Router in Act 2. This stage brings back clean architecture: an async router that dispatches to async handler functions, each with access to shared state. This is the pattern that production frameworks like Axum and Actix-web are built on.
+
 In Stage 20, `handle_connection` is one big async function. Now let's bring back the router pattern from Act 2, but with async handlers and shared state.
 
 ### The Goal
@@ -1051,6 +1075,8 @@ async fn create_todo(body: String, db: Arc<Mutex<Vec<Todo>>>) -> Response { ... 
 ```
 
 ### Challenge: Async Function Traits
+
+Right now our sync router stored handlers as `Box<dyn Fn(Request) -> Response>`. But async functions return *futures*, and each async function produces a different future type. We need a way to store different async handlers in the same collection — which means erasing their concrete types behind a trait object.
 
 In sync Rust, your router stored handlers as `Box<dyn Fn(Request) -> Response>`. In async Rust, this gets harder because async functions return futures, and those futures have different types.
 
@@ -1068,6 +1094,8 @@ type AsyncHandler = Box<dyn Fn(Request) -> BoxFuture<Response> + Send + Sync>;
 **Why `Pin<Box<...>>`?** Futures in Rust can be self-referential (they hold references to their own data). `Pin` prevents them from being moved in memory, which would invalidate those references. `Box` puts the future on the heap so it has a stable address.
 
 ### Your Task: Build the Async Router
+
+Right now we have async connection handling but no way to dispatch requests to different async handlers. We need an async version of the Router from Act 2 — one that can store and call async handler functions with type-erased futures.
 
 Here's the skeleton — fill in the implementation:
 
@@ -1207,6 +1235,8 @@ curl -s http://localhost:7878/todos | python3 -m json.tool | head -30
 
 ### Checkpoint — Stage 21
 
+Your async server now has clean architecture — an async router dispatching to async handlers with shared state. One critical piece remains: what happens when you press Ctrl+C? Right now, in-flight requests get killed mid-response. Next, we add graceful shutdown so your server drains connections before exiting.
+
 You should have:
 - An `AsyncRouter` that stores async handlers
 - Shared state via `Arc<Mutex<>>` passed to handlers
@@ -1220,6 +1250,8 @@ One more stage: shutting down cleanly.
 ## Stage 22 — Graceful Shutdown
 
 **Difficulty: Medium** · *Ctrl+C handling, drain connections, clean exit*
+
+Your server runs forever until you kill it — and when you do, in-flight requests are severed mid-response, database writes may be half-complete, and clients get cryptic connection-reset errors. This stage solves the shutdown problem: catching the termination signal, stopping new connections, letting active requests finish, and exiting cleanly. This is what ECS expects when it sends SIGTERM before stopping a task.
 
 Right now, Ctrl+C kills your server instantly. In-flight requests get dropped mid-response. Database writes might be half-complete. In production, you want graceful shutdown: stop accepting new connections, let in-flight requests finish, then exit.
 
@@ -1412,6 +1444,8 @@ Not all async operations are cancel-safe. If `select!` cancels a branch, any wor
 If you're reading a request body with `read_to_end` inside a `select!`, and the other branch fires, you lose the partially-read body. Use cancel-safe alternatives or restructure your code.
 
 ### Checkpoint — Stage 22
+
+Your server now shuts down like a production service — draining connections, respecting timeouts, and exiting cleanly. This completes the concurrency story. In Act 4, you'll add the production features that turn this into a server that can survive the real internet: keep-alive, compression, TLS, rate limiting, and deployment.
 
 Your server now:
 - Catches Ctrl+C via `tokio::signal::ctrl_c()`

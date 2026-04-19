@@ -103,6 +103,8 @@ The Rust version is structurally identical — `Vec<HashMap<String, Value>>` ins
 
 First, we need the `Value` type that the environment stores. Create `src/value.rs` — this defines the runtime values from spec §6.1:
 
+Right now we have an AST that describes *what* a program looks like, but no way to represent *what it produces*. The evaluator needs a type for runtime results — the actual `100` that `IntLit(100)` evaluates to, the `"hello"` that a string literal produces, the function object that `fn heal(...)` creates.
+
 ```rust
 // src/value.rs
 // Runtime values — the essence of runes.
@@ -191,6 +193,8 @@ impl fmt::Display for Value {
 - `..` in `Function { name, .. }` — ignores the other fields. We only need the name for display.
 
 Now create `src/environment.rs` — the grimoire itself:
+
+Right now we have `Value` types but nowhere to store them. When the evaluator processes `let hp = 100`, it needs a place to record that `hp` maps to `Value::Int(100)` — and when it later encounters `hp + 10`, it needs to find that mapping again, even across nested scopes.
 
 ```rust
 // src/environment.rs
@@ -462,6 +466,8 @@ cargo test
 
 All environment tests should pass. The `value.rs` and `ast.rs` files compile but have no tests yet — they're data types that will be tested through the evaluator.
 
+The grimoire can store and retrieve names across nested scopes. Now we need the spell caster itself — the evaluator that walks the AST, starting with the simplest incantations: literals and arithmetic.
+
 ### Checkpoint
 
 You now have three new files:
@@ -541,6 +547,8 @@ impl fmt::Display for RuneError {
 - We keep the error simple for now — just a message. The spec (§8.1) defines `RuneError` with a `Span`, but we'll add that later. Getting the evaluator working is more important than perfect error messages.
 
 Now create `src/evaluator.rs` — the spell caster:
+
+Right now we have an environment that can store values and an AST that describes programs, but nothing that connects them — no engine that reads a tree node and produces a result. We need the evaluator: the recursive heart that walks each node, evaluates its children, and returns a `Value`.
 
 ```rust
 // src/evaluator.rs
@@ -927,6 +935,8 @@ cargo test
 
 All evaluator tests should pass. You now have a working calculator that handles integers, booleans, strings, nil, arithmetic, comparisons, and equality.
 
+The spell caster can evaluate pure expressions — but every value is ephemeral, computed and forgotten. Next, we give the grimoire its purpose: variables that persist across statements.
+
 ### Checkpoint
 
 New/updated files:
@@ -1184,6 +1194,8 @@ cargo test
 ```
 
 All tests should pass — the 17 from Stage 16 plus 6 new ones.
+
+Variables live in the grimoire and expressions can read them. But the spell caster still walks a straight path — it can't choose between branches or repeat an action. Next, we add truthiness, logical operators, and control flow.
 
 ### Checkpoint
 
@@ -1612,6 +1624,8 @@ cargo test
 
 All tests should pass — 17 from Stage 16, 6 from Stage 17, plus 10 new ones = 33 total.
 
+The spell caster can branch and loop — the dungeon's traps can trigger conditionally, poison can tick over multiple rounds. But all logic lives in one flat scope. Next comes the hardest stage: summoning functions, with parameter binding and the return-unwinding ritual.
+
 ### Checkpoint
 
 Updated `src/evaluator.rs`:
@@ -1700,6 +1714,8 @@ Our Rust version uses `Result<Value, ControlFlow>` instead of exceptions, but th
 ### The Code
 
 First, update `src/error.rs` to add the `ControlFlow` type:
+
+Right now we can call functions and bind parameters, but we have no way to *leave* a function early. When `return 42` executes deep inside a nested `if` inside a `while`, it needs to unwind the entire call stack back to the caller. We need a signal that propagates through `Result`'s `?` operator — not a real error, but a control flow event.
 
 ```rust
 // src/error.rs
@@ -2142,6 +2158,8 @@ cargo test
 ```
 
 All tests should pass. This is the most complex stage — if the return unwinding tests pass, you've nailed it.
+
+Functions are summoned and return values unwind correctly through any depth of nesting. But user-defined functions can only call other user-defined functions — there's no `print`, no `len`, no way to interact with the world outside the script. Next, we forge the cantrips: built-in functions that bridge Rust and Runescript.
 
 ### Checkpoint
 
@@ -2630,6 +2648,8 @@ cargo test
 
 All tests should pass. The builtin tests verify that cantrips are callable from Runescript expressions.
 
+The cantrips are forged — `print` speaks, `len` measures, `random` rolls the dice. But the language still lacks a fundamental data structure: arrays. Next, we add `[1, 2, 3]`, index access, and the `for-in` loop that iterates over them.
+
 ### Checkpoint
 
 New/updated files:
@@ -2963,6 +2983,8 @@ cargo test
 ```
 
 All tests should pass.
+
+Arrays hold collections, indices reach into them, and `for-in` walks them one by one. One final piece of the evaluator remains: string interpolation and objects, so `"HP: {hp}"` resolves to `"HP: 85"` and `hunter.hp` reaches into the hunter's soul.
 
 ### Checkpoint
 

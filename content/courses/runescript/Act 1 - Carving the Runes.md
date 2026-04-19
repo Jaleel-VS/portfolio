@@ -247,6 +247,8 @@ Our first rune: Token { kind: IntLit(42), span: Span { line: 1, col: 1 } }
 
 If you see that, your types are defined correctly and the module system is wired up. The rune has been carved.
 
+The types are defined, but they're inert — we created them by hand. In the next stage, we'll build the `Lexer` struct that *produces* these tokens automatically by scanning source text character by character.
+
 ### Checkpoint
 
 Your project should have these files:
@@ -381,6 +383,8 @@ use crate::token::{Token, TokenKind, Span};
 ```
 
 - `use crate::token::...` — `crate` means "the root of this project." Since `token` is declared as a module in `main.rs`, we access it from the crate root. This is like Python's `from runescript.token import ...`.
+
+Right now we have token *types* but no way to *produce* them from source text. We need a struct that holds the source, tracks where we are in it, and walks through it character by character.
 
 Now the `Lexer` struct:
 
@@ -640,6 +644,8 @@ cargo test
 ```
 
 Expected: all 3 tests pass.
+
+The lexer can now scan single-character tokens and skip whitespace — but it treats `==` as two separate `Eq` tokens. Next, we teach it to peek ahead and recognize two-character runes.
 
 ### Checkpoint
 
@@ -1009,6 +1015,8 @@ cargo run
 
 You should see `EqEq`, `BangEq`, `LtEq`, `GtEq` in the output.
 
+Operators are handled — both single and double-character. But the lexer still skips over digits and letters. Next, we teach it to consume multi-character sequences: numbers.
+
 ### Checkpoint
 
 **`src/lexer.rs`** — only the changed/added parts are shown. The full file is the Stage 2 checkpoint with these modifications:
@@ -1150,6 +1158,8 @@ cargo run
 ```
 
 Expected output includes `IntLit(42)`, `Plus`, `IntLit(7)`, `EqEq`, `IntLit(49)`.
+
+Numbers flow through the carver now, but words are still invisible — `let`, `hp`, `if` all vanish into the `_ => continue` void. Next, we teach the lexer to read identifiers and distinguish them from keywords.
 
 ### Checkpoint
 
@@ -1364,6 +1374,8 @@ Token { kind: Ident("hp"), span: Span { line: 1, col: 5 } }
 Token { kind: Eq, span: Span { line: 1, col: 8 } }
 Token { kind: IntLit(100), span: Span { line: 1, col: 10 } }
 ```
+
+The carver speaks the language's words now — `let hp = 100` produces exactly the token stream the parser will expect. But one token type remains: the spoken word, the string literal. Next, we handle `"hello"` with its escape sequences and interpolation markers.
 
 ### Checkpoint
 
@@ -1638,6 +1650,8 @@ cargo run
 ```
 
 With the `r#"let greeting = "Hello, {name}!""#` source, you should see `Let`, `Ident("greeting")`, `Eq`, `StringLit("Hello, {name}!")`.
+
+Strings are carved, escapes resolved, interpolation markers preserved for the evaluator. One final stage remains: comments, the `Eof` sentinel, and proper error reporting to polish the carver into a production-quality component.
 
 ### Checkpoint
 

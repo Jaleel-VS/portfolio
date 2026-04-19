@@ -18,6 +18,8 @@ These are the tools that separate a toy project from a real security tool. AWS S
 
 ## Stage 20 — The Breach Oracle (Hard)
 
+A strong password is worthless if it appeared in a data breach three years ago and is sitting in every attacker's dictionary. This stage lets you check any password against over 600 million known compromised credentials — without ever sending the password (or even its full hash) over the network. The k-anonymity protocol is one of the most elegant privacy-preserving designs in modern security, and implementing it teaches you how to balance utility against exposure.
+
 > *"The Oracle does not see the future. It sees the past — every breach, every leak, every password that was ever exposed. And it can tell you if yours is among them, without ever learning what your password is."*
 
 This is one of the most elegant security protocols you'll ever implement. The Have I Been Pwned (HIBP) Pwned Passwords API lets you check if a password has appeared in a data breach — and it does this without you ever sending the password, or even its full hash, over the network.
@@ -319,9 +321,9 @@ mod tests {
 }
 ```
 
-### What to Try
+Breach checking tells you if a password has *already* been exposed. But what about passwords that are weak, reused, or aging — problems that haven't caused a breach *yet*? Stage 21 builds the Audit, a comprehensive security scanner for your entire vault.
 
-1. Check the password `"password"` — it should show millions of breach appearances
+### What to Try
 2. Check a long random password from your generator — it should come back clean
 3. Disconnect from the internet and run a breach check — does your error handling work?
 4. Try `iv breach-check --all` with a vault containing both weak and strong passwords
@@ -337,6 +339,8 @@ mod tests {
 ---
 
 ## Stage 21 — The Audit (Hard)
+
+Breach checking is reactive — it tells you about past exposure. An audit is proactive — it identifies weaknesses *before* they're exploited. Short passwords, reused credentials, missing 2FA, and aging secrets are all ticking time bombs. This stage builds a comprehensive scanner that evaluates every relic against multiple security criteria and produces a severity-rated report, just like AWS Security Hub aggregates findings across your cloud infrastructure.
 
 > *"The Watchtower keeper unrolls a scroll and begins reading. 'Relic: GitHub. Password length: 8. Mixed case: no. Reused: yes — same as your Bitbucket relic. Age: 347 days. TOTP: missing.' The keeper looks up. 'This relic is a liability.'"*
 
@@ -529,6 +533,8 @@ After implementing the check functions, test with a vault containing:
 - A relic with `updated_at` set to 6 months ago (should trigger Critical: age)
 - A relic with a strong, unique, recent password and TOTP (should produce zero findings)
 
+The audit reveals weaknesses, but the most critical remediation — changing the master password itself — requires re-encrypting the entire vault atomically. Stage 22 builds the Key Reforging ceremony.
+
 ### What to Try
 
 1. Create a vault with deliberately bad passwords and run `iv audit` — does the report make sense?
@@ -546,6 +552,8 @@ After implementing the check functions, test with a vault containing:
 ---
 
 ## Stage 22 — The Key Reforging (Medium)
+
+Master passwords should be rotated — especially if you suspect exposure, or if your original password was weaker than you'd like. But changing the master password means re-deriving the encryption key and re-encrypting the entire vault. If this process fails halfway through, you could lose access to everything. This stage builds a transactional password change that either completes fully or leaves the vault untouched — the same atomicity guarantee that protects database commits and S3 multipart uploads.
 
 > *"The blacksmith sets the old key on the anvil. 'This key has served you well,' she says, 'but every key wears down with time. The tumblers learn its shape. We forge a new one — and the old one ceases to exist.'"*
 
@@ -653,6 +661,8 @@ Test these scenarios:
 4. Kill the process during step 5 (before the rename) — verify the old vault still works
 5. Change password, then check that `iv get` still returns correct relic data
 
+The vault can be re-keyed safely. But the session management from Act 2 still lacks one critical feature — automatic expiry after inactivity. Stage 23 adds the lock timeout that seals the vault when you walk away.
+
 ### Common Mistakes
 
 **Forgetting to update the session cache.** If you change the password but don't update the cached key in tmpfs, the next command will try to decrypt with the old key and fail. The user will think the password change corrupted their vault.
@@ -664,6 +674,8 @@ Test these scenarios:
 ---
 
 ## Stage 23 — The Lock Timeout (Medium)
+
+An unlocked vault on an unattended terminal is an open invitation. Every minute the session stays active without user interaction is another minute an attacker — or a curious coworker — has full access to every credential. This stage adds an inactivity timer that automatically zeroizes the cached key and re-seals the vault, limiting the blast radius of a forgotten terminal session.
 
 > *"The vault door has a peculiar enchantment. Leave it unattended too long, and it seals itself. The magic doesn't care if you stepped away for coffee or fell asleep at your desk. Fifteen minutes of silence, and the wards re-engage."*
 
@@ -795,9 +807,9 @@ fn ensure_unlocked(config: &Config) -> Result<DerivedKey, IronvaultError> {
 4. Run `iv lock` — should lock immediately
 5. Run `iv list` — should prompt for password
 
-### What to Try
+The vault auto-locks after inactivity. But there's one final operation the Watchtower needs — the ability to completely and securely destroy the vault when it's no longer needed. Stage 24 builds the Sentinel.
 
-- Set the timeout to 0 minutes — every command should prompt for the password (maximum security, minimum convenience)
+### What to Try — every command should prompt for the password (maximum security, minimum convenience)
 - Set the timeout to 1440 minutes (24 hours) — basically never locks (minimum security, maximum convenience)
 - Think about the tradeoff: what timeout would you use for your real password manager?
 
@@ -810,6 +822,8 @@ fn ensure_unlocked(config: &Config) -> Result<DerivedKey, IronvaultError> {
 ---
 
 ## Stage 24 — The Sentinel (Easy)
+
+When you decommission a machine, migrate to a different tool, or simply want a fresh start, the vault must be destroyed completely. But `rm` doesn't actually erase data — it just removes the filename. The bytes remain on disk, recoverable by forensic tools. This stage builds a secure destruction ceremony that overwrites the vault with random data before deletion, and requires an exact confirmation phrase to prevent accidental annihilation.
 
 > *"The Sentinel stands at the gate, torch in hand. 'You wish to destroy the vault?' it asks. 'Speak the words, and I will burn it to ash. Every relic, every chamber, every memory. There is no return from this.' You take a breath. The Sentinel waits."*
 
@@ -922,6 +936,8 @@ For Ironvault's threat model, a single random overwrite is appropriate. If you n
 3. Run `iv destroy` and type `DESTROY MY VAULT` — should succeed
 4. Verify the vault directory is gone
 5. Try `iv list` — should tell you no vault exists
+
+The Watchtower is complete — breach detection, auditing, key rotation, auto-lock, and secure destruction. In Act 5, you'll temper the steel with data portability, backups, secure memory handling, and the final polish that turns Ironvault into a tool you'd trust with real credentials.
 
 ### What to Try
 

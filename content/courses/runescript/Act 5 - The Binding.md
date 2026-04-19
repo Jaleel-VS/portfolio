@@ -89,6 +89,8 @@ In TypeScript, you'd use an `interface`. Rust traits are the same concept with c
 
 **Step 1: Define the trait.**
 
+Right now our game built-ins are hardcoded to print `[GAME] ...` messages. We can't swap that behavior for a real game engine without rewriting the evaluator. We need an abstraction — a contract that says "these methods exist" without dictating what they do.
+
 Create `src/callbacks.rs`:
 
 ```rust
@@ -272,6 +274,8 @@ cargo run -- examples/05_dungeon_trap.rune
 
 Output should be identical to before — `[GAME] show_text(...)`, `[GAME] damage(...)`, etc. The difference is invisible from the outside but fundamental architecturally: the evaluator no longer knows *how* game events are handled.
 
+The bridge is built — game events flow through a trait, and any engine can implement it. But right now we load one script at a time. Next, we build the `ScriptManager` that scans a directory of scrolls, parses them all, and dispatches to the right one when a room is entered.
+
 ### Checkpoint
 
 New files:
@@ -323,6 +327,8 @@ class ScriptManager:
 **Step 1: Create the ScriptManager.**
 
 Create `src/script_manager.rs`:
+
+Right now we can run a single `.rune` file, but a dungeon has many rooms — each with its own script. We need a manager that loads an entire directory of scrolls, parses them once for speed, and evaluates the right one when a hunter enters a room.
 
 ```rust
 // src/script_manager.rs
@@ -556,6 +562,8 @@ Loaded 6 scrolls (0 errors)
   Room: 06_boss_encounter
 ```
 
+Scrolls load from a directory, parse once, and dispatch on demand. But during development, you'd have to restart the interpreter every time you edit a script. Next, we add the watcher — a sentinel that detects file changes and hot-reloads scripts without restarting.
+
 ### Checkpoint
 
 New files:
@@ -606,6 +614,8 @@ In Node.js: `fs.watch("examples/", callback)`.
 ### The Code — Approach A: Manual Polling (Simpler)
 
 If you want to avoid adding another dependency, you can poll for changes using file modification timestamps. This is simpler and perfectly adequate for a learning project.
+
+Right now, editing a `.rune` file means restarting the interpreter to pick up changes. We need a sentinel that periodically checks file timestamps and triggers a re-parse when a scroll has been modified — keeping the old version alive if the new one fails to parse.
 
 ```rust
 // src/watcher.rs
@@ -858,6 +868,8 @@ Scroll changed: 01_hello
 ```
 
 The old version of the script is preserved — the game keeps running.
+
+The watcher stands guard — edit a scroll, save it, and the interpreter picks up the change without missing a beat. One final stage remains: the Grand Ritual, where every scroll runs end-to-end and we measure the interpreter's speed.
 
 ### Checkpoint
 
