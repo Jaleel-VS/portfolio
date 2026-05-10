@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react"
 
 export function ThemeToggle() {
-  const [dark, setDark] = useState(true)
+  const [dark, setDark] = useState(false)
 
   useEffect(() => {
     const stored = localStorage.getItem("theme")
@@ -23,8 +23,21 @@ export function ThemeToggle() {
   return (
     <button
       onClick={toggle}
-      className="text-xs text-tertiary hover:text-foreground transition-colors cursor-pointer"
       aria-label="Toggle theme"
+      style={{
+        fontFamily: "var(--font-mono), monospace",
+        fontSize: 11,
+        letterSpacing: ".06em",
+        textTransform: "uppercase",
+        color: "var(--mute)",
+        background: "none",
+        border: "none",
+        cursor: "pointer",
+        padding: 0,
+        transition: "color .15s",
+      }}
+      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
+      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--mute)")}
     >
       {dark ? "light" : "dark"}
     </button>
