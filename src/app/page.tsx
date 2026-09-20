@@ -31,28 +31,16 @@ export default function Page() {
         <section className="intro" aria-labelledby="intro-title">
           <h1 id="intro-title">JD van Staden</h1>
           <p>
-            Software engineer in Cape Town. I build backend systems, cloud infrastructure,
-            and the occasional product for the internet.
+            I’m JD. I’m a software engineer based in Cape Town, currently working on
+            EC2 at AWS.
           </p>
           <p>
-            By day, I work on <strong>Amazon EC2</strong>. Away from work, I write software,
-            learn languages, and make small things that interest me.
+            I like learning languages and building small tools that help people learn. I also
+            listen to a lot of podcasts, write occasionally, and have recently started
+            experimenting with robotics.
           </p>
         </section>
 
-        <hr />
-
-        <section className="section" aria-labelledby="highlights">
-          <SectionHeading id="highlights">Highlights</SectionHeading>
-          <ul className="arrow-list">
-            <li>Building the systems that underpin compute at AWS</li>
-            <li>Worked across banking, investments, mobile, and cloud infrastructure</li>
-            <li>Built community software used by more than 80,000 people</li>
-            <li>Currently learning Rust and German, at very different speeds</li>
-          </ul>
-        </section>
-
-        <hr />
 
         <section className="section" aria-labelledby="work">
           <SectionHeading id="work">Work</SectionHeading>
@@ -71,10 +59,40 @@ export default function Page() {
 
         <hr />
 
+        <section className="section" aria-labelledby="hablemos">
+          <SectionHeading id="hablemos">Hablemos</SectionHeading>
+          <p>
+            I started programming and learning Spanish around the same time in 2020. Through a
+            Spanish–English Discord community I was part of, I got the opportunity to build a bot
+            for the server.
+          </p>
+          <p>
+            The first version had one basic conversation feature. As the community grew, so did
+            the bot. I added games, moderation tools, and other features based on what people
+            actually needed. It eventually became something thousands of people used every day.
+          </p>
+          <p>
+            It was the first thing I built that real people depended on, and it taught me more
+            than any personal project could have.
+          </p>
+          <p>
+            <a
+              className="text-link"
+              href="https://github.com/Jaleel-VS/hablemos-discordpy-bot"
+              target="_blank"
+              rel="noreferrer"
+            >
+              View Hablemos on GitHub ↗
+            </a>
+          </p>
+        </section>
+
+        <hr />
+
         <section className="section" aria-labelledby="projects">
           <SectionHeading id="projects">Side projects</SectionHeading>
           <div className="project-list">
-            {config.projects.map((project) => (
+            {config.projects.filter((project) => project.name !== "Hablemos").map((project) => (
               <a
                 className="project"
                 href={project.link}
