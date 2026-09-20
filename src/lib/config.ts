@@ -4,7 +4,7 @@ export const config = {
   location: "Cape Town, South Africa",
   summary:
     "Software engineer with 2+ years across backend systems, cloud infrastructure, and mobile development. Currently at AWS working on EC2 internals. Interested in cloud, AI, and educational technologies.",
-  blogUrl: "https://blog.jaleel.co.za",
+  blogUrl: "https://blog.jaleel.me",
   links: {
     github: "https://github.com/Jaleel-VS",
     linkedin: "https://linkedin.com/in/jd-van-staden",

@@ -15,7 +15,7 @@ const jetbrainsMono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
-  metadataBase: new URL("https://jaleel.co.za"),
+  metadataBase: new URL("https://jaleel.me"),
   title: "JD van Staden — Software Development Engineer",
   description:
     "Software engineer at AWS with experience across backend systems, cloud infrastructure, and mobile development. Based in Cape Town, South Africa.",
@@ -39,7 +39,7 @@ const jsonLd = {
   "@context": "https://schema.org",
   "@type": "Person",
   name: "JD van Staden",
-  url: "https://jaleel.co.za",
+  url: "https://jaleel.me",
   jobTitle: "Software Development Engineer",
   worksFor: { "@type": "Organization", name: "Amazon Web Services" },
   sameAs: [
