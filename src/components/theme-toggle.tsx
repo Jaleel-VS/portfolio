@@ -22,24 +22,12 @@ export function ThemeToggle() {
 
   return (
     <button
+      className="theme-toggle"
       onClick={toggle}
-      aria-label="Toggle theme"
-      style={{
-        fontFamily: "var(--font-mono), monospace",
-        fontSize: 11,
-        letterSpacing: ".06em",
-        textTransform: "uppercase",
-        color: "var(--mute)",
-        background: "none",
-        border: "none",
-        cursor: "pointer",
-        padding: 0,
-        transition: "color .15s",
-      }}
-      onMouseEnter={(e) => (e.currentTarget.style.color = "var(--red)")}
-      onMouseLeave={(e) => (e.currentTarget.style.color = "var(--mute)")}
+      aria-label={`Switch to ${dark ? "light" : "dark"} mode`}
+      title={`Switch to ${dark ? "light" : "dark"} mode`}
     >
-      {dark ? "light" : "dark"}
+      {dark ? "○" : "●"}
     </button>
   )
 }
