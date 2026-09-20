@@ -1,5 +1,6 @@
 import { ThemeToggle } from "@/components/theme-toggle"
 import { config } from "@/lib/config"
+import { WorldClock } from "@/components/world-clock"
 
 function SectionHeading({ id, children }: { id: string; children: React.ReactNode }) {
   return (
@@ -26,6 +27,8 @@ export default function Page() {
           <ThemeToggle />
         </nav>
       </header>
+
+      <WorldClock />
 
       <div className="content" id="top">
         <section className="intro" aria-labelledby="intro-title">

@@ -123,6 +123,48 @@ button {
   color: var(--ink);
 }
 
+.world-clock {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  margin-bottom: 56px;
+  padding: 14px 0;
+  border-block: 1px solid var(--rule);
+  font-family: var(--font-mono), monospace;
+}
+
+.world-clock-item {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.world-clock-item time {
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.world-clock-item span {
+  color: var(--faint);
+  font-size: 9px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.world-clock-item:nth-child(2) {
+  align-items: center;
+  text-align: center;
+}
+
+.world-clock-item:last-child {
+  align-items: flex-end;
+  text-align: right;
+}
+
 .content {
   display: flex;
   flex-direction: column;
@@ -335,6 +377,19 @@ footer {
   body {
     font-size: 14px;
     line-height: 1.7;
+  }
+
+  .world-clock {
+    gap: 8px;
+    margin-bottom: 44px;
+  }
+
+  .world-clock-item time {
+    font-size: 9px;
+  }
+
+  .world-clock-item span {
+    font-size: 8px;
   }
 
   .site-shell {
