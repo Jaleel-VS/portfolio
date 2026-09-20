@@ -1,8 +1,8 @@
 @import "tailwindcss";
 
 :root {
-  --page: #f8fafc;
-  --page-edge: #dce3ea;
+  --page: #ffffff;
+  --page-edge: #cbd5e1;
   --ink: #0f172a;
   --muted: #64748b;
   --faint: #94a3b8;
@@ -11,8 +11,8 @@
 }
 
 .dark {
-  --page: #020617;
-  --page-edge: #172033;
+  --page: #000000;
+  --page-edge: #0f172a;
   --ink: #f8fafc;
   --muted: #cbd5e1;
   --faint: #64748b;
@@ -33,8 +33,8 @@ body {
   min-height: 100dvh;
   margin: 0;
   color: var(--muted);
-  background:
-    radial-gradient(140% 100% at 50% 0%, color-mix(in srgb, var(--page) 80%, white), var(--page-edge));
+  background-color: var(--page);
+  background-image: radial-gradient(150% 150% at 0% 20%, var(--page) 20%, var(--page-edge));
   background-attachment: fixed;
   font-family: var(--font-sans), ui-sans-serif, system-ui, sans-serif;
   font-size: 15px;
