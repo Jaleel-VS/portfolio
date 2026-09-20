@@ -24,7 +24,7 @@ export const config = {
       ],
     },
     {
-      company: "Entelect (at First National Bank)",
+      company: "Entelect (First National Bank)",
       role: "Software Engineer",
       period: "Feb 2025 – Dec 2025",
       location: "Cape Town / Remote",
